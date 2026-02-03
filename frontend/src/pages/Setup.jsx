@@ -928,6 +928,173 @@ export default function Setup() {
             </Card>
           </TabsContent>
 
+          {/* Streams Tab */}
+          <TabsContent value="streams" className="space-y-4">
+            <Card className="bg-[#18181B] border-zinc-800">
+              <CardHeader>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>📹 Stream Control Panel</CardTitle>
+                <CardDescription className="text-zinc-400">
+                  Configure audio and video settings for each pilot's stream. Changes apply live to the overlay.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {sortedPilots.filter(p => p.streamUrl).length === 0 ? (
+                  <div className="text-center py-12 text-zinc-500">
+                    No pilots with stream URLs. Add stream URLs in the Pilots tab first.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {sortedPilots.filter(p => p.streamUrl).map((pilot) => {
+                      const config = getStreamConfig(pilot.id);
+                      const category = categories.find(c => c.id === pilot.categoryId);
+                      
+                      return (
+                        <Card 
+                          key={pilot.id} 
+                          className={`bg-[#09090B] border-zinc-700 relative overflow-hidden ${config.solo ? 'ring-2 ring-[#FACC15]' : ''}`}
+                          data-testid={`stream-config-card-${pilot.id}`}
+                        >
+                          {category && (
+                            <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
+                          )}
+                          <CardContent className="pt-4 pl-4">
+                            {/* Stream Preview */}
+                            <div className="w-full aspect-video bg-black rounded overflow-hidden mb-3" style={{ maxHeight: '150px' }}>
+                              <StreamPlayer
+                                pilotId={pilot.id}
+                                streamUrl={pilot.streamUrl}
+                                name={pilot.name}
+                                className="w-full h-full"
+                                showControls={false}
+                              />
+                            </div>
+                            
+                            {/* Pilot Name */}
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="font-bold text-sm uppercase text-white truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                                #{pilot.startOrder || '?'} {pilot.name}
+                              </h3>
+                              <div className="flex items-center gap-1">
+                                {/* Solo Button */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setSoloStream(pilot.id)}
+                                  className={`h-7 w-7 ${config.solo ? 'bg-[#FACC15] text-black hover:bg-[#FACC15]/80' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                                  title="Solo (mute all others)"
+                                  data-testid={`stream-solo-${pilot.id}`}
+                                >
+                                  <Headphones className="w-4 h-4" />
+                                </Button>
+                                {/* Mute Button */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setStreamConfig(pilot.id, { muted: !config.muted })}
+                                  className={`h-7 w-7 ${config.muted ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                                  title="Mute"
+                                  data-testid={`stream-mute-${pilot.id}`}
+                                >
+                                  {config.muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {/* Volume Slider */}
+                            <div className="space-y-3">
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <Label className="text-xs text-zinc-400">🔊 Volume</Label>
+                                  <span className="text-xs text-zinc-500 font-mono">{config.volume}%</span>
+                                </div>
+                                <Slider
+                                  value={[config.volume]}
+                                  onValueChange={([val]) => setStreamConfig(pilot.id, { volume: val })}
+                                  max={100}
+                                  min={0}
+                                  step={5}
+                                  className="w-full"
+                                  data-testid={`stream-volume-${pilot.id}`}
+                                />
+                              </div>
+                              
+                              {/* Video Adjustments */}
+                              <div className="pt-2 border-t border-zinc-700">
+                                <Label className="text-xs text-zinc-400 block mb-2">🎨 Video Adjustments</Label>
+                                
+                                {/* Saturation */}
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-xs text-zinc-500 w-20">Saturation</span>
+                                  <Slider
+                                    value={[config.saturation]}
+                                    onValueChange={([val]) => setStreamConfig(pilot.id, { saturation: val })}
+                                    max={200}
+                                    min={0}
+                                    step={10}
+                                    className="flex-1"
+                                    data-testid={`stream-saturation-${pilot.id}`}
+                                  />
+                                  <span className="text-xs text-zinc-500 font-mono w-10 text-right">{config.saturation}%</span>
+                                </div>
+                                
+                                {/* Contrast */}
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-xs text-zinc-500 w-20">Contrast</span>
+                                  <Slider
+                                    value={[config.contrast]}
+                                    onValueChange={([val]) => setStreamConfig(pilot.id, { contrast: val })}
+                                    max={200}
+                                    min={0}
+                                    step={10}
+                                    className="flex-1"
+                                    data-testid={`stream-contrast-${pilot.id}`}
+                                  />
+                                  <span className="text-xs text-zinc-500 font-mono w-10 text-right">{config.contrast}%</span>
+                                </div>
+                                
+                                {/* Brightness */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-zinc-500 w-20">Brightness</span>
+                                  <Slider
+                                    value={[config.brightness]}
+                                    onValueChange={([val]) => setStreamConfig(pilot.id, { brightness: val })}
+                                    max={200}
+                                    min={0}
+                                    step={10}
+                                    className="flex-1"
+                                    data-testid={`stream-brightness-${pilot.id}`}
+                                  />
+                                  <span className="text-xs text-zinc-500 font-mono w-10 text-right">{config.brightness}%</span>
+                                </div>
+                              </div>
+                              
+                              {/* Reset Button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setStreamConfig(pilot.id, {
+                                  volume: 100,
+                                  muted: false,
+                                  saturation: 100,
+                                  contrast: 100,
+                                  brightness: 100
+                                })}
+                                className="w-full text-xs text-zinc-400 hover:text-white mt-2"
+                                data-testid={`stream-reset-${pilot.id}`}
+                              >
+                                Reset to Defaults
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Config Tab */}
           <TabsContent value="config" className="space-y-4">
             <Card className="bg-[#18181B] border-zinc-800">
