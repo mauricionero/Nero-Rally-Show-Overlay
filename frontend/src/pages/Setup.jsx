@@ -934,9 +934,65 @@ export default function Setup() {
 
           {/* Streams Tab */}
           <TabsContent value="streams" className="space-y-4">
+            {/* Global Audio Control */}
+            <Card className="bg-[#18181B] border-zinc-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="uppercase text-white text-lg" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>🎚️ Master Audio</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-6">
+                  {/* Global Audio Meter */}
+                  <GlobalAudioMeter
+                    streamConfigs={streamConfigs}
+                    globalVolume={globalAudio.volume}
+                    globalMuted={globalAudio.muted}
+                    height={100}
+                    width={16}
+                  />
+                  
+                  <div className="flex-1 space-y-3">
+                    {/* Global Volume */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-sm text-white">Master Volume</Label>
+                        <span className="text-sm text-zinc-400 font-mono">{globalAudio.volume}%</span>
+                      </div>
+                      <Slider
+                        value={[globalAudio.volume]}
+                        onValueChange={([val]) => setGlobalAudio({ ...globalAudio, volume: val })}
+                        max={100}
+                        min={0}
+                        step={5}
+                        className="w-full"
+                        data-testid="global-volume-slider"
+                      />
+                    </div>
+                    
+                    {/* Global Mute */}
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant={globalAudio.muted ? "destructive" : "outline"}
+                        size="sm"
+                        onClick={() => setGlobalAudio({ ...globalAudio, muted: !globalAudio.muted })}
+                        className={globalAudio.muted ? "" : "border-zinc-700 text-white"}
+                        data-testid="global-mute-button"
+                      >
+                        {globalAudio.muted ? <VolumeX className="w-4 h-4 mr-2" /> : <Volume2 className="w-4 h-4 mr-2" />}
+                        {globalAudio.muted ? 'Unmute All' : 'Mute All'}
+                      </Button>
+                      {globalAudio.muted && (
+                        <span className="text-red-500 text-sm font-bold animate-pulse">ALL AUDIO MUTED</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Stream Control Panel */}
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>📹 Stream Control Panel</CardTitle>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>📹 Individual Stream Controls</CardTitle>
                 <CardDescription className="text-zinc-400">
                   Configure audio and video settings for each pilot&apos;s stream. Changes apply live to the overlay.
                 </CardDescription>
@@ -951,6 +1007,8 @@ export default function Setup() {
                     {sortedPilots.filter(p => p.streamUrl).map((pilot) => {
                       const config = getStreamConfig(pilot.id);
                       const category = categories.find(c => c.id === pilot.categoryId);
+                      const hasSoloStream = Object.values(streamConfigs).some(c => c?.solo);
+                      const isEffectivelyMuted = config.muted || globalAudio.muted || (hasSoloStream && !config.solo);
                       
                       return (
                         <Card 
@@ -962,14 +1020,25 @@ export default function Setup() {
                             <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
                           )}
                           <CardContent className="pt-4 pl-4">
-                            {/* Stream Preview */}
-                            <div className="w-full aspect-video bg-black rounded overflow-hidden mb-3" style={{ maxHeight: '150px' }}>
-                              <StreamPlayer
-                                pilotId={pilot.id}
-                                streamUrl={pilot.streamUrl}
-                                name={pilot.name}
-                                className="w-full h-full"
-                                showControls={false}
+                            {/* Stream Preview with Audio Meter */}
+                            <div className="flex gap-2 mb-3">
+                              <div className="flex-1 aspect-video bg-black rounded overflow-hidden" style={{ maxHeight: '150px' }}>
+                                <StreamPlayer
+                                  pilotId={pilot.id}
+                                  streamUrl={pilot.streamUrl}
+                                  name={pilot.name}
+                                  className="w-full h-full"
+                                  showControls={false}
+                                  showMeter={true}
+                                />
+                              </div>
+                              {/* Audio Level Meter */}
+                              <AudioMeter
+                                isActive={pilot.isActive}
+                                isMuted={isEffectivelyMuted}
+                                volume={Math.round((config.volume / 100) * (globalAudio.volume / 100) * 100)}
+                                height={85}
+                                width={10}
                               />
                             </div>
                             
@@ -1097,6 +1166,11 @@ export default function Setup() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Note about audio meters */}
+            <div className="text-xs text-zinc-600 text-center px-4">
+              Note: Audio meters show simulated levels based on volume settings. For real audio monitoring, VDO.Ninja streams include built-in meters via the &amp;meter=1 parameter.
+            </div>
           </TabsContent>
 
           {/* Config Tab */}
