@@ -139,21 +139,6 @@ export default function Scene4PilotFocus() {
 
       {/* Right Side - Pilot Info */}
       <div className="w-1/3 bg-black/95 backdrop-blur-sm p-6 overflow-y-auto">
-        {/* Pilot Selector */}
-        <div className="mb-6">
-          <Select value={selectedPilotId} onValueChange={setSelectedPilotId}>
-            <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {pilots.map((pilot) => (
-                <SelectItem key={pilot.id} value={pilot.id}>
-                  {pilot.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
 
         {/* Pilot Header */}
         <div className="text-center mb-6">
