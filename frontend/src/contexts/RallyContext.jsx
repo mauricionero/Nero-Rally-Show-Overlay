@@ -38,6 +38,14 @@ export const RallyProvider = ({ children }) => {
     return typeof stored === 'number' ? stored : Date.now();
   });
 
+  // WebSocket state
+  const [wsEnabled, setWsEnabled] = useState(() => loadFromStorage('rally_ws_enabled', false));
+  const [wsChannelKey, setWsChannelKey] = useState(() => loadFromStorage('rally_ws_channel_key', ''));
+  const [wsConnectionStatus, setWsConnectionStatus] = useState('disconnected'); // disconnected, connecting, connected, error
+  const [wsError, setWsError] = useState(null);
+  const wsProvider = useRef(null);
+  const isPublishing = useRef(false);
+
   // Reload all data from localStorage
   const reloadData = () => {
     setPilots(loadFromStorage('rally_pilots', []));
