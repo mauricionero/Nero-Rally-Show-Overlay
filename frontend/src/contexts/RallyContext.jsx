@@ -32,6 +32,29 @@ export const RallyProvider = ({ children }) => {
   const [currentScene, setCurrentScene] = useState(1);
   const [dataVersion, setDataVersion] = useState(() => loadFromStorage('rally_data_version', Date.now()));
 
+  // Reload all data from localStorage
+  const reloadData = () => {
+    setPilots(loadFromStorage('rally_pilots', []));
+    setCategories(loadFromStorage('rally_categories', []));
+    setStages(loadFromStorage('rally_stages', []));
+    setTimes(loadFromStorage('rally_times', {}));
+    setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
+    setStartTimes(loadFromStorage('rally_start_times', {}));
+    setCurrentStageId(loadFromStorage('rally_current_stage', null));
+    setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
+    setDataVersion(loadFromStorage('rally_data_version', Date.now()));
+  };
+
+  // Listen for external data updates
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      reloadData();
+    };
+
+    window.addEventListener('rally-reload-data', handleStorageUpdate);
+    return () => window.removeEventListener('rally-reload-data', handleStorageUpdate);
+  }, []);
+
   const updateDataVersion = () => {
     const newVersion = Date.now();
     setDataVersion(newVersion);
