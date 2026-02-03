@@ -164,23 +164,6 @@ export default function Scene4PilotFocus() {
           )}
         </div>
 
-        {/* Stage Selector */}
-        <div className="mb-4">
-          <label className="text-zinc-400 text-xs uppercase mb-2 block">Select Stage</label>
-          <Select value={selectedStageId} onValueChange={setSelectedStageId}>
-            <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {stages.map((stage) => (
-                <SelectItem key={stage.id} value={stage.id}>
-                  {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Stage Times */}
         <div>
           <h3 className="text-xl font-bold uppercase text-[#FF4500] mb-3" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
