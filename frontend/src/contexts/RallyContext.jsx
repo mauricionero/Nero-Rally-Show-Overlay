@@ -315,6 +315,7 @@ export const RallyProvider = ({ children }) => {
       if (data.times) setTimes(data.times);
       if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
       if (data.startTimes) setStartTimes(data.startTimes);
+      if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
       updateDataVersion();
