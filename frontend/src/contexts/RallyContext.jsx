@@ -113,6 +113,11 @@ export const RallyProvider = ({ children }) => {
     updateDataVersion();
   }, [streamConfigs]);
 
+  useEffect(() => {
+    localStorage.setItem('rally_global_audio', JSON.stringify(globalAudio));
+    updateDataVersion();
+  }, [globalAudio]);
+
   const addPilot = (pilot) => {
     const newPilot = {
       id: Date.now().toString(),
