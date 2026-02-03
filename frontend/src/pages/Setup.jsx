@@ -301,9 +301,9 @@ export default function Setup() {
                 <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Add New Pilot</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                   <div>
-                    <Label htmlFor="pilot-name" className="text-white">Pilot Name *</Label>
+                    <Label htmlFor="pilot-name" className="text-white">👤 Pilot Name *</Label>
                     <Input
                       id="pilot-name"
                       value={newPilot.name}
@@ -314,7 +314,33 @@ export default function Setup() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="pilot-picture" className="text-white">Picture URL</Label>
+                    <Label htmlFor="pilot-order" className="text-white">🔢 Start Order</Label>
+                    <Input
+                      id="pilot-order"
+                      type="number"
+                      value={newPilot.startOrder}
+                      onChange={(e) => setNewPilot({ ...newPilot, startOrder: e.target.value })}
+                      placeholder="1"
+                      className="bg-[#09090B] border-zinc-700 text-white"
+                      data-testid="input-pilot-order"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="pilot-category" className="text-white">🏷️ Category</Label>
+                    <Select value={newPilot.categoryId || ''} onValueChange={(val) => setNewPilot({ ...newPilot, categoryId: val || null })}>
+                      <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" id="pilot-category">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="pilot-picture" className="text-white">🖼️ Picture URL</Label>
                     <Input
                       id="pilot-picture"
                       value={newPilot.picture}
@@ -325,7 +351,7 @@ export default function Setup() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="pilot-stream" className="text-white">ninja.vdo Stream URL</Label>
+                    <Label htmlFor="pilot-stream" className="text-white">📹 Stream URL</Label>
                     <Input
                       id="pilot-stream"
                       value={newPilot.streamUrl}
