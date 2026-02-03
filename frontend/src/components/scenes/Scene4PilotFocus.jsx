@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { LeftControls } from '../LeftControls.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Label } from '../ui/label';
 import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 
 export default function Scene4PilotFocus() {
