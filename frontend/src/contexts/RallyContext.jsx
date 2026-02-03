@@ -96,6 +96,83 @@ export const RallyProvider = ({ children }) => {
 
     window.addEventListener('rally-reload-data', handleStorageUpdate);
     return () => window.removeEventListener('rally-reload-data', handleStorageUpdate);
+  }, [reloadData]);
+
+  // Publish to WebSocket when data changes
+  const publishToWebSocket = useCallback(async () => {
+    if (!wsEnabled || !wsProvider.current?.isConnected || isPublishing.current) {
+      return;
+    }
+    
+    const data = {
+      pilots,
+      categories,
+      stages,
+      times,
+      arrivalTimes,
+      startTimes,
+      currentStageId,
+      chromaKey,
+      streamConfigs,
+      globalAudio,
+      timestamp: Date.now()
+    };
+    
+    await wsProvider.current.publish(data);
+  }, [wsEnabled, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, streamConfigs, globalAudio]);
+
+  // WebSocket connection management
+  const connectWebSocket = useCallback(async (channelKey) => {
+    const { valid } = parseChannelKey(channelKey);
+    if (!valid) {
+      setWsError('Invalid channel key format');
+      return false;
+    }
+
+    try {
+      setWsConnectionStatus('connecting');
+      setWsError(null);
+      
+      wsProvider.current = getWebSocketProvider();
+      
+      await wsProvider.current.connect(
+        channelKey,
+        // On message received
+        (data) => {
+          applyWebSocketData(data);
+        },
+        // On status change
+        (status, provider, error) => {
+          setWsConnectionStatus(status);
+          if (error) setWsError(error);
+        }
+      );
+      
+      setWsChannelKey(channelKey);
+      localStorage.setItem('rally_ws_channel_key', JSON.stringify(channelKey));
+      setWsEnabled(true);
+      localStorage.setItem('rally_ws_enabled', JSON.stringify(true));
+      
+      return true;
+    } catch (error) {
+      setWsConnectionStatus('error');
+      setWsError(error.message);
+      return false;
+    }
+  }, [applyWebSocketData]);
+
+  const disconnectWebSocket = useCallback(() => {
+    if (wsProvider.current) {
+      wsProvider.current.disconnect();
+      wsProvider.current = null;
+    }
+    setWsConnectionStatus('disconnected');
+    setWsEnabled(false);
+    localStorage.setItem('rally_ws_enabled', JSON.stringify(false));
+  }, []);
+
+  const generateNewChannelKey = useCallback(() => {
+    return generateChannelKey();
   }, []);
 
   const updateDataVersion = () => {
