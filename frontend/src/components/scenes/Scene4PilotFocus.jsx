@@ -41,8 +41,14 @@ export default function Scene4PilotFocus() {
     );
   }
 
-  // Get pilot's stage times
-  const pilotStageData = stages.map((stage) => {
+  // Get pilot's stage times with sorted stages
+  const sortedStages = [...stages].sort((a, b) => {
+    if (!a.startTime) return 1;
+    if (!b.startTime) return -1;
+    return a.startTime.localeCompare(b.startTime);
+  });
+
+  const pilotStageData = sortedStages.map((stage) => {
     const status = getPilotStatus(focusPilot.id, stage.id, startTimes, times);
     const startTime = startTimes[focusPilot.id]?.[stage.id];
     const finishTime = times[focusPilot.id]?.[stage.id];
