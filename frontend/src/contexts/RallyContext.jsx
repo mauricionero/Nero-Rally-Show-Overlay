@@ -106,6 +106,11 @@ export const RallyProvider = ({ children }) => {
     localStorage.setItem('rally_chroma_key', JSON.stringify(chromaKey));
   }, [chromaKey]);
 
+  useEffect(() => {
+    localStorage.setItem('rally_stream_configs', JSON.stringify(streamConfigs));
+    updateDataVersion();
+  }, [streamConfigs]);
+
   const addPilot = (pilot) => {
     const newPilot = {
       id: Date.now().toString(),
