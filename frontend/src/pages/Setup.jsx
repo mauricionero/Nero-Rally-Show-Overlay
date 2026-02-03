@@ -12,6 +12,7 @@ import { Switch } from '../components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
 import { TimeInput } from '../components/TimeInput.jsx';
 import { StreamThumbnail } from '../components/StreamThumbnail.jsx';
+import { StreamPlayer } from '../components/StreamPlayer.jsx';
 import { CategoryBar } from '../components/CategoryBadge.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../utils/timeConversion';
 import { toast } from 'sonner';
