@@ -305,6 +305,7 @@ export const RallyProvider = ({ children }) => {
       arrivalTimes,
       startTimes,
       streamConfigs,
+      globalAudio,
       currentStageId,
       chromaKey,
       dataVersion,
@@ -323,6 +324,7 @@ export const RallyProvider = ({ children }) => {
       if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
       if (data.startTimes) setStartTimes(data.startTimes);
       if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
+      if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
       updateDataVersion();
@@ -341,6 +343,7 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes({});
     setStartTimes({});
     setStreamConfigs({});
+    setGlobalAudio({ volume: 100, muted: false });
     setCurrentStageId(null);
     setChromaKey('#000000');
     updateDataVersion();
