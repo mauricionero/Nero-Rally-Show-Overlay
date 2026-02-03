@@ -693,7 +693,7 @@ export default function Setup() {
                     <SelectValue placeholder="Select current stage" />
                   </SelectTrigger>
                   <SelectContent>
-                    {stages.map((stage) => (
+                    {sortedStages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
                         {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
                       </SelectItem>
@@ -836,7 +836,7 @@ export default function Setup() {
                       <TableHeader>
                         <TableRow className="border-zinc-700">
                           <TableHead className="bg-[#18181B] text-white uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</TableHead>
-                          {stages.map((stage) => (
+                          {sortedStages.map((stage) => (
                             <TableHead key={stage.id} className="bg-[#18181B] text-white uppercase font-bold text-center" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               <div>{stage.ssNumber ? `SS${stage.ssNumber}` : stage.name}</div>
                               <div className="text-xs text-zinc-400 font-normal">Start / Finish</div>
@@ -850,7 +850,7 @@ export default function Setup() {
                             <TableCell className="font-bold text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               {pilot.name}
                             </TableCell>
-                            {stages.map((stage) => (
+                            {sortedStages.map((stage) => (
                               <TableCell key={stage.id}>
                                 <div className="space-y-1">
                                   <Input
