@@ -185,6 +185,20 @@ export const RallyProvider = ({ children }) => {
     return times[pilotId]?.[stageId] || '';
   };
 
+  const setArrivalTime = (pilotId, stageId, arrivalTime) => {
+    setArrivalTimes(prev => ({
+      ...prev,
+      [pilotId]: {
+        ...(prev[pilotId] || {}),
+        [stageId]: arrivalTime
+      }
+    }));
+  };
+
+  const getArrivalTime = (pilotId, stageId) => {
+    return arrivalTimes[pilotId]?.[stageId] || '';
+  };
+
   const setStartTime = (pilotId, stageId, startTime) => {
     setStartTimes(prev => ({
       ...prev,
