@@ -201,12 +201,12 @@ export default function Scene1LiveStage() {
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9)' }}>
-                      <span className="text-zinc-500 text-base mr-2">#{pilot.startOrder || '?'}</span>
+                    <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1), -1px -1px 2px rgba(0,0,0,1)' }}>
+                      <span className="text-zinc-400 text-base mr-2" style={{ textShadow: '0 0 6px rgba(0,0,0,1)' }}>#{pilot.startOrder || '?'}</span>
                       {pilot.name}
                     </p>
                     {displayTime && (
-                      <p className={`font-mono text-sm font-bold ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace', textShadow: '2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9)' }}>
+                      <p className={`font-mono text-lg font-bold ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace', textShadow: '0 0 10px rgba(0,0,0,1), 2px 2px 6px rgba(0,0,0,1), -1px -1px 3px rgba(0,0,0,1)' }}>
                         {displayTime}
                       </p>
                     )}
