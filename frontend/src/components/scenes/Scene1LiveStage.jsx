@@ -42,6 +42,7 @@ export default function Scene1LiveStage() {
 
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
+  const sortedAllPilots = currentStageId ? sortPilotsByStatus(pilots, currentStageId, startTimes, times) : pilots;
   
   // Auto-select active pilots up to layout slots
   useEffect(() => {
