@@ -6,9 +6,11 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Optional, Any, Dict
 import uuid
 from datetime import datetime, timezone
+import ably
+import pusher
 
 
 ROOT_DIR = Path(__file__).parent
@@ -18,6 +20,35 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+# WebSocket providers
+ably_client = None
+pusher_client = None
+
+def get_ably_client():
+    global ably_client
+    if ably_client is None:
+        ably_key = os.environ.get('ABLY_KEY')
+        if ably_key:
+            ably_client = ably.AblyRest(ably_key)
+    return ably_client
+
+def get_pusher_client():
+    global pusher_client
+    if pusher_client is None:
+        app_id = os.environ.get('PUSHER_APP_ID')
+        key = os.environ.get('PUSHER_KEY')
+        secret = os.environ.get('PUSHER_SECRET')
+        cluster = os.environ.get('PUSHER_CLUSTER')
+        if app_id and key and secret and cluster:
+            pusher_client = pusher.Pusher(
+                app_id=app_id,
+                key=key,
+                secret=secret,
+                cluster=cluster,
+                ssl=True
+            )
+    return pusher_client
 
 # Create the main app without a prefix
 app = FastAPI()
