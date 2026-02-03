@@ -183,9 +183,11 @@ export default function Scene3Leaderboard() {
                   <tr
                     key={pilot.id}
                     className="border-b border-white/10 hover:bg-white/5 transition-colors relative">
-                    {category && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
-                    )}
+                    <td className="p-1 w-1 relative">
+                      {category && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
+                      )}
+                    </td>
                     <td className="p-4">
                       <span className={`text-3xl font-bold ${
                         index === 0 && pilot.hasTime ? 'text-[#FACC15]' :
