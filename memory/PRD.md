@@ -94,6 +94,9 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] Reset to Defaults button
 - [x] Persistence to localStorage
 - [x] Live sync via heartbeat to Overlay
+- [x] **Global Audio Control** - Master volume slider + Mute All button
+- [x] **Audio Level Meters** - Stereo VU meters with green/yellow/red zones (simulated, based on volume settings)
+- [x] **Global Audio Meter** - Combined output level indicator
 
 ### StreamPlayer Component
 - [x] Centralized stream player
