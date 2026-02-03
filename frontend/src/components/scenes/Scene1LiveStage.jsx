@@ -1,53 +1,135 @@
 import React, { useEffect, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
-import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
+import { LeftControls } from '../LeftControls.jsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
+import { getPilotStatus, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+const LAYOUTS = [
+  { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
+  { id: '1x2', name: '1x2 Vertical', cols: 1, rows: 2, slots: 2 },
+  { id: '2x1', name: '2x1 Horizontal', cols: 2, rows: 1, slots: 2 },
+  { id: '2x2', name: '2x2 Grid', cols: 2, rows: 2, slots: 4 },
+  { id: '3x2', name: '3x2 Grid', cols: 3, rows: 2, slots: 6 }
+];
 
 export default function Scene1LiveStage() {
-  const { pilots, stages, currentStageId, startTimes, times } = useRally();
+  const { pilots, stages, currentStageId, startTimes, times, categories } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedLayout, setSelectedLayout] = useState('2x2');
+  const [selectedPilotIds, setSelectedPilotIds] = useState([]);
+  const [bottomScroll, setBottomScroll] = useState(0);
   const currentStage = stages.find(s => s.id === currentStageId);
   
-  // Update current time every 100ms for running timers
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
     return () => clearInterval(interval);
   }, []);
 
-  // Get active pilots with streams
+  const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
+  
+  // Auto-select active pilots up to layout slots
+  useEffect(() => {
+    if (selectedPilotIds.length === 0 && activePilots.length > 0) {
+      setSelectedPilotIds(activePilots.slice(0, layout.slots).map(p => p.id));
+    }
+  }, [activePilots, layout.slots, selectedPilotIds.length]);
+
+  const togglePilot = (pilotId) => {
+    setSelectedPilotIds(prev => {
+      if (prev.includes(pilotId)) {
+        return prev.filter(id => id !== pilotId);
+      } else if (prev.length < layout.slots) {
+        return [...prev, pilotId];
+      }
+      return prev;
+    });
+  };
+
+  const displayPilots = selectedPilotIds.map(id => pilots.find(p => p.id === id)).filter(Boolean);
+  const sortedAllPilots = currentStageId ? sortPilotsByStatus(pilots, currentStageId, startTimes, times) : pilots;
 
   const getGridClass = () => {
-    const count = activePilots.length;
-    if (count === 0) return 'grid-cols-1';
-    if (count === 1) return 'grid-cols-1';
-    if (count === 2) return 'grid-cols-2';
-    if (count === 3) return 'grid-cols-3';
-    return 'grid-cols-2 grid-rows-2';
+    return `grid-cols-${layout.cols} grid-rows-${layout.rows}`;
   };
 
   return (
     <div className="relative w-full h-full p-8" data-testid="scene-1-live-stage">
-      {/* Stream Grid */}
-      <div className={`grid ${getGridClass()} gap-4 h-[calc(100%-180px)]`}>
-        {activePilots.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
+      <LeftControls>
+        <div className="space-y-4">
+          <div>
+            <Label className="text-white text-xs uppercase mb-2 block">Layout</Label>
+            <Select value={selectedLayout} onValueChange={setSelectedLayout}>
+              <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LAYOUTS.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-white text-xs uppercase mb-2 block">Select Pilots ({selectedPilotIds.length}/{layout.slots})</Label>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {activePilots.map((pilot) => (
+                <div key={pilot.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`pilot-${pilot.id}`}
+                    checked={selectedPilotIds.includes(pilot.id)}
+                    onCheckedChange={() => togglePilot(pilot.id)}
+                    disabled={!selectedPilotIds.includes(pilot.id) && selectedPilotIds.length >= layout.slots}
+                  />
+                  <label htmlFor={`pilot-${pilot.id}`} className="text-white text-sm cursor-pointer">
+                    {pilot.name}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </LeftControls>
+
+      <div className={`grid ${getGridClass()} gap-4 h-[calc(100%-200px)]`}>
+        {displayPilots.length === 0 ? (
+          <div className="flex items-center justify-center h-full col-span-full">
             <div className="text-center">
               <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                No Active Streams
+                No Pilots Selected
               </p>
-              <p className="text-zinc-400 mt-2">Enable pilot streams in setup</p>
+              <p className="text-zinc-400 mt-2">Select pilots from the left panel</p>
             </div>
           </div>
         ) : (
-          activePilots.map((pilot) => {
+          displayPilots.map((pilot) => {
             const status = currentStageId ? getPilotStatus(pilot.id, currentStageId, startTimes, times) : 'not_started';
             const startTime = currentStageId ? startTimes[pilot.id]?.[currentStageId] : null;
             const finishTime = currentStageId ? times[pilot.id]?.[currentStageId] : null;
+            const category = categories.find(c => c.id === pilot.categoryId);
+            
+            let displayTime = '';
+            let timeColor = 'text-zinc-400';
+            if (status === 'racing' && startTime) {
+              displayTime = getRunningTime(startTime);
+              timeColor = 'text-[#FF8C00]';
+            } else if (status === 'finished' && finishTime) {
+              displayTime = finishTime;
+              timeColor = 'text-[#1a5f1a]';
+            } else if (startTime) {
+              displayTime = `Start: ${startTime}`;
+              timeColor = 'text-zinc-500';
+            }
             
             return (
-              <div
-                key={pilot.id}
-                className="relative bg-black rounded overflow-hidden border-2 border-[#FF4500]">
+              <div key={pilot.id} className="relative bg-black rounded overflow-hidden border-2 border-[#FF4500]">
+                {category && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ backgroundColor: category.color }} />
+                )}
                 <iframe
                   src={pilot.streamUrl}
                   className="w-full h-full"
@@ -61,14 +143,9 @@ export default function Scene1LiveStage() {
                     <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                       {pilot.name}
                     </p>
-                    {status === 'racing' && startTime && (
-                      <p className="text-[#FACC15] font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {getRunningTime(startTime)}
-                      </p>
-                    )}
-                    {status === 'finished' && finishTime && (
-                      <p className="text-[#22C55E] font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {finishTime}
+                    {displayTime && (
+                      <p className={`font-mono text-sm font-bold ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        {displayTime}
                       </p>
                     )}
                   </div>
@@ -79,51 +156,67 @@ export default function Scene1LiveStage() {
         )}
       </div>
 
-      {/* Lower Third - Current Stage Info with Top 3 */}
       {currentStage && currentStageId && (
         <div className="absolute bottom-8 left-8 right-8">
-          <div className="bg-black/95 backdrop-blur-sm border-l-4 border-[#FF4500] overflow-hidden">
-            <div className="flex items-stretch">
-              {/* Current Stage */}
-              <div className="p-6 flex-1">
-                <p className="text-zinc-400 text-sm uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>Current Stage</p>
-                <p className="text-white text-3xl font-bold uppercase mt-1" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {currentStage.ssNumber ? `SS${currentStage.ssNumber}` : ''} {currentStage.name}
-                </p>
-              </div>
-              
-              {/* Top 3 Times */}
-              <div className="flex gap-2 p-4 bg-black/50">
-                {pilots
-                  .map(p => ({
-                    ...p,
-                    time: times[p.id]?.[currentStageId],
-                    status: getPilotStatus(p.id, currentStageId, startTimes, times)
-                  }))
-                  .filter(p => p.time)
-                  .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-                  .slice(0, 3)
-                  .map((pilot, idx) => (
-                    <div key={pilot.id} className="bg-white/5 border border-white/10 px-4 py-2 min-w-[200px]">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-2xl font-bold ${
-                          idx === 0 ? 'text-[#FACC15]' : idx === 1 ? 'text-zinc-300' : 'text-[#CD7F32]'
-                        }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {idx + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                            {pilot.name}
+          <div className="bg-black/95 backdrop-blur-sm border-l-4 border-[#FF4500] overflow-hidden mb-4">
+            <div className="p-4">
+              <p className="text-zinc-400 text-sm uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>Current Stage</p>
+              <p className="text-white text-3xl font-bold uppercase mt-1" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {currentStage.ssNumber ? `SS${currentStage.ssNumber}` : ''} {currentStage.name}
+              </p>
+            </div>
+          </div>
+
+          <div className="relative bg-black/95 backdrop-blur-sm border-t-2 border-[#FF4500]">
+            <button
+              onClick={() => setBottomScroll(Math.max(0, bottomScroll - 200))}
+              className="absolute left-0 top-0 bottom-0 z-10 bg-black/90 hover:bg-black px-2 text-white"
+              disabled={bottomScroll === 0}
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+
+            <div className="overflow-hidden px-10">
+              <div 
+                className="flex gap-2 py-2 transition-transform duration-300"
+                style={{ transform: `translateX(-${bottomScroll}px)` }}
+              >
+                {sortedAllPilots.map((pilot) => {
+                  const status = currentStageId ? getPilotStatus(pilot.id, currentStageId, startTimes, times) : 'not_started';
+                  const finishTime = currentStageId ? times[pilot.id]?.[currentStageId] : null;
+                  const category = categories.find(c => c.id === pilot.categoryId);
+                  
+                  let borderColor = 'border-zinc-700';
+                  if (status === 'finished') borderColor = 'border-[#1a5f1a]';
+                  else if (status === 'racing') borderColor = 'border-[#FF8C00]';
+                  
+                  return (
+                    <div key={pilot.id} className={`relative flex-shrink-0 bg-white/5 border-2 ${borderColor} px-4 py-2 min-w-[150px]`}>
+                      {category && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
+                      )}
+                      <div className="pl-2">
+                        <p className="text-white text-sm font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {pilot.name}
+                        </p>
+                        {finishTime && (
+                          <p className="text-[#1a5f1a] font-mono text-xs" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {finishTime}
                           </p>
-                          <p className="text-white font-mono text-xs" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {pilot.time}
-                          </p>
-                        </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
               </div>
             </div>
+
+            <button
+              onClick={() => setBottomScroll(bottomScroll + 200)}
+              className="absolute right-0 top-0 bottom-0 z-10 bg-black/90 hover:bg-black px-2 text-white"
+            >
+              <ChevronRight className="w-6 h-4" />
+            </button>
           </div>
         </div>
       )}
