@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useRally } from '../contexts/RallyContext';
+import { useRally } from '../contexts/RallyContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
