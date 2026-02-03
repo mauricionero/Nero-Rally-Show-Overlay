@@ -1,24 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { parseTime } from '../../utils/rallyHelpers';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 export default function Scene5SplitComparison() {
-  const { pilots, stages, times, currentStageId } = useRally();
-  const currentStage = stages.find(s => s.id === currentStageId);
+  const { pilots, stages, times } = useRally();
+  const [selectedStageId, setSelectedStageId] = useState(stages[0]?.id || null);
+  
+  const selectedStage = stages.find(s => s.id === selectedStageId);
 
-  // Get times for current stage and sort
+  // Get times for selected stage and sort
   const comparison = pilots
     .map(pilot => {
-      const time = currentStageId ? times[pilot.id]?.[currentStageId] : null;
-      // Convert time string to seconds for comparison
-      let timeInSeconds = 0;
-      if (time) {
-        const parts = time.split(':');
-        if (parts.length >= 2) {
-          const minutes = parseInt(parts[0]) || 0;
-          const seconds = parseFloat(parts[1]) || 0;
-          timeInSeconds = minutes * 60 + seconds;
-        }
-      }
+      const time = selectedStageId ? times[pilot.id]?.[selectedStageId] : null;
+      const timeInSeconds = time ? parseTime(time) : 0;
       return { ...pilot, time, timeInSeconds };
     })
     .filter(p => p.time && p.timeInSeconds > 0)
@@ -30,19 +25,32 @@ export default function Scene5SplitComparison() {
   return (
     <div className="relative w-full h-full flex items-center justify-center p-8" data-testid="scene-5-split-comparison">
       <div className="w-full max-w-6xl">
-        {/* Header */}
+        {/* Header with Stage Selector */}
         <div className="text-center mb-8">
           <h1 className="text-6xl font-bold uppercase text-[#FF4500]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            Split Comparison
+            SS Time Comparison
           </h1>
-          {currentStage && (
-            <p className="text-zinc-400 text-2xl mt-2">{currentStage.name}</p>
-          )}
+          <div className="flex justify-center mt-4">
+            <Select value={selectedStageId || ''} onValueChange={setSelectedStageId}>
+              <SelectTrigger className="w-[400px] bg-[#18181B] border-zinc-700 text-white">
+                <SelectValue placeholder="Select stage to compare" />
+              </SelectTrigger>
+              <SelectContent>
+                {stages.map((stage) => (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {comparison.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-zinc-500 text-2xl">No times recorded for current stage</p>
+            <p className="text-zinc-500 text-2xl">
+              {selectedStageId ? 'No times recorded for this stage' : 'Select a stage to compare'}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -70,7 +78,7 @@ export default function Scene5SplitComparison() {
                     </div>
 
                     {/* Pilot Info */}
-                    <div className="w-64">
+                    <div className="w-72">
                       <div className="flex items-center gap-3">
                         {pilot.picture ? (
                           <img src={pilot.picture} alt={pilot.name} className="w-10 h-10 rounded object-cover" />
@@ -96,7 +104,7 @@ export default function Scene5SplitComparison() {
                     </div>
 
                     {/* Time */}
-                    <div className="w-32 text-right">
+                    <div className="w-40 text-right">
                       <div className="text-white text-xl font-mono" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         {pilot.time}
                       </div>
@@ -110,6 +118,14 @@ export default function Scene5SplitComparison() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {selectedStage && (
+          <div className="mt-8 text-center">
+            <p className="text-zinc-400 text-sm">
+              Comparing times for {selectedStage.ssNumber ? `SS${selectedStage.ssNumber} - ` : ''}{selectedStage.name}
+            </p>
           </div>
         )}
       </div>
