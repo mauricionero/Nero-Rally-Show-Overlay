@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { StreamPlayer } from '../StreamPlayer.jsx';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
 
 export default function Scene2TimingTower() {
