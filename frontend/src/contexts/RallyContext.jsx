@@ -113,6 +113,26 @@ export const RallyProvider = ({ children }) => {
     setPilots(prev => prev.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
   };
 
+  const addCategory = (category) => {
+    const newCategory = {
+      id: Date.now().toString(),
+      name: category.name,
+      color: category.color || '#FF4500',
+      ...category
+    };
+    setCategories(prev => [...prev, newCategory]);
+  };
+
+  const updateCategory = (id, updates) => {
+    setCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  const deleteCategory = (id) => {
+    setCategories(prev => prev.filter(c => c.id !== id));
+    // Remove category from pilots
+    setPilots(prev => prev.map(p => p.categoryId === id ? { ...p, categoryId: null } : p));
+  };
+
   const addStage = (stage) => {
     const newStage = {
       id: Date.now().toString(),
