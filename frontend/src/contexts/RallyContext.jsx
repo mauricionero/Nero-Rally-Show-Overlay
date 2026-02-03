@@ -83,6 +83,8 @@ export const RallyProvider = ({ children }) => {
       name: pilot.name,
       picture: pilot.picture || '',
       streamUrl: pilot.streamUrl || '',
+      categoryId: pilot.categoryId || null,
+      startOrder: pilot.startOrder || 999,
       isActive: false,
       ...pilot
     };
