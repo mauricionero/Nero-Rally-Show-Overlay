@@ -58,22 +58,37 @@ export default function Scene3Leaderboard() {
         sortTime = parseTime(finishTime);
       }
       
-      // Calculate overall time up to this stage
+      // Calculate overall time: sum of all SS up to and including the selected stage
       let overallTime = 0;
-      let overallStages = 0;
-      sortedSSStages.forEach(stage => {
-        const stageTime = times[pilot.id]?.[stage.id];
-        if (stageTime) {
-          overallTime += parseTime(stageTime);
-          overallStages++;
+      let completedStages = 0;
+      let hasRunningInOverall = false;
+      
+      for (const stage of sortedSSStages) {
+        const stageFinishTime = times[pilot.id]?.[stage.id];
+        
+        if (stageFinishTime) {
+          // Stage is finished
+          overallTime += parseTime(stageFinishTime);
+          completedStages++;
+        } else if (stage.id === selectedStageId) {
+          // This is the selected stage and pilot is racing it
+          const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times);
+          const stageStartTime = startTimes[pilot.id]?.[stage.id];
+          if (stageStatus === 'racing' && stageStartTime) {
+            const runningTime = getRunningTime(stageStartTime);
+            overallTime += parseTime(runningTime) || 0;
+            hasRunningInOverall = true;
+          }
         }
-        // Stop at current selected stage
-        if (stage.id === selectedStageId) return;
-      });
+        
+        // Stop after processing the selected stage
+        if (stage.id === selectedStageId) break;
+      }
       
       const overallMinutes = Math.floor(overallTime / 60);
       const overallSeconds = (overallTime % 60).toFixed(3).padStart(6, '0');
-      const overallDisplay = overallStages > 0 ? `${overallMinutes}:${overallSeconds}` : '-';
+      const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? `${overallMinutes}:${overallSeconds}` : '-';
+      const overallColor = hasRunningInOverall ? 'text-[#FACC15]' : 'text-white';
       
       return {
         ...pilot,
@@ -82,6 +97,7 @@ export default function Scene3Leaderboard() {
         sortTime,
         overallTime,
         overallDisplay,
+        overallColor,
         hasTime: status === 'finished' || status === 'racing',
         status
       };
@@ -244,7 +260,7 @@ export default function Scene3Leaderboard() {
                       </td>
                     )}
                     <td className="p-4 text-right">
-                      <span className={`text-xl font-mono ${!selectedStageId && pilot.timeColor ? pilot.timeColor : 'text-white'}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      <span className={`text-xl font-mono ${selectedStageId ? (pilot.overallColor || 'text-white') : pilot.timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         {pilot.overallDisplay}
                       </span>
                     </td>
