@@ -175,11 +175,18 @@ export const RallyProvider = ({ children }) => {
     return generateChannelKey();
   }, []);
 
-  const updateDataVersion = () => {
+  const updateDataVersion = useCallback(() => {
     const newVersion = Date.now();
     setDataVersion(newVersion);
     localStorage.setItem('rally_data_version', JSON.stringify(newVersion));
-  };
+  }, []);
+
+  // Publish to WebSocket when data version changes
+  useEffect(() => {
+    if (wsEnabled && wsProvider.current?.isConnected) {
+      publishToWebSocket();
+    }
+  }, [dataVersion, wsEnabled, publishToWebSocket]);
 
   useEffect(() => {
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
