@@ -21,6 +21,8 @@ export default function Scene1LiveStage() {
   const [selectedLayout, setSelectedLayout] = useState('2x2');
   const [selectedPilotIds, setSelectedPilotIds] = useState([]);
   const [bottomScroll, setBottomScroll] = useState(0);
+  const [maxScroll, setMaxScroll] = useState(0);
+  const bottomContainerRef = React.useRef(null);
   const currentStage = stages.find(s => s.id === currentStageId);
   
   useEffect(() => {
