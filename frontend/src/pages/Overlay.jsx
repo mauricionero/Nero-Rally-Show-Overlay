@@ -45,7 +45,12 @@ export default function Overlay() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [setCurrentScene]);
 
+  // Only run localStorage heartbeat if WebSocket is not connected
   useEffect(() => {
+    if (wsConnectionStatus === 'connected') {
+      return; // WebSocket handles updates
+    }
+    
     const interval = setInterval(() => {
       setHeartbeatStatus('checking');
       
@@ -68,7 +73,16 @@ export default function Overlay() {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [lastVersion]);
+  }, [lastVersion, wsConnectionStatus]);
+
+  const handleWsConnect = async () => {
+    if (!wsKeyInput.trim()) return;
+    const success = await connectWebSocket(wsKeyInput.trim());
+    if (success) {
+      setShowWsPanel(false);
+      setWsKeyInput('');
+    }
+  };
 
   const renderScene = () => {
     switch (currentScene) {
