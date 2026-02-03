@@ -385,7 +385,7 @@ export default function Setup() {
                         streamUrl={pilot.streamUrl}
                         name={pilot.name}
                         showAlways={true}
-                        className="w-16 h-16 rounded"
+                        className="w-20 h-20 rounded flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -401,6 +401,7 @@ export default function Setup() {
                           <Switch
                             checked={pilot.isActive}
                             onCheckedChange={() => togglePilotActive(pilot.id)}
+                            className="data-[state=checked]:bg-[#22C55E]"
                             data-testid={`switch-pilot-active-${pilot.id}`}
                           />
                           <span className="text-sm text-white">📹 {pilot.isActive ? 'Stream Active' : 'Stream Inactive'}</span>
