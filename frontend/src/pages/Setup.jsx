@@ -429,7 +429,7 @@ export default function Setup() {
                             {editingPilot && (
                               <div className="space-y-4">
                                 <div>
-                                  <Label className="text-white">Pilot Name *</Label>
+                                  <Label className="text-white">👤 Pilot Name *</Label>
                                   <Input
                                     value={editingPilot.name}
                                     onChange={(e) => setEditingPilot({ ...editingPilot, name: e.target.value })}
@@ -437,7 +437,30 @@ export default function Setup() {
                                   />
                                 </div>
                                 <div>
-                                  <Label className="text-white">Picture URL</Label>
+                                  <Label className="text-white">🔢 Start Order</Label>
+                                  <Input
+                                    type="number"
+                                    value={editingPilot.startOrder || ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, startOrder: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">🏷️ Category</Label>
+                                  <Select value={editingPilot.categoryId || 'none'} onValueChange={(val) => setEditingPilot({ ...editingPilot, categoryId: val === 'none' ? null : val })}>
+                                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                      <SelectValue placeholder="Select category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">None</SelectItem>
+                                      {categories.map((cat) => (
+                                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-white">🖼️ Picture URL</Label>
                                   <Input
                                     value={editingPilot.picture}
                                     onChange={(e) => setEditingPilot({ ...editingPilot, picture: e.target.value })}
@@ -445,7 +468,7 @@ export default function Setup() {
                                   />
                                 </div>
                                 <div>
-                                  <Label className="text-white">Stream URL</Label>
+                                  <Label className="text-white">📹 Stream URL</Label>
                                   <Input
                                     value={editingPilot.streamUrl}
                                     onChange={(e) => setEditingPilot({ ...editingPilot, streamUrl: e.target.value })}
