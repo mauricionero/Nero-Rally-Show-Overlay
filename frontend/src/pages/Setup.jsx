@@ -674,7 +674,7 @@ export default function Setup() {
                     <span className="text-zinc-500">SS Comparison</span>
                   </div>
                 </div>
-              </CardHeader>
+              </CardContent>
             </Card>
 
             <Card className="bg-[#18181B] border-zinc-800">
