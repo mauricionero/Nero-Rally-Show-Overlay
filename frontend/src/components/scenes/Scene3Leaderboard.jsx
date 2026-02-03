@@ -3,7 +3,7 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
-import { StreamThumbnail } from '../StreamThumbnail.jsx';
+import { StreamPlayer } from '../StreamPlayer.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { parseTime, getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 
