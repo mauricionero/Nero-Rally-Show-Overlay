@@ -109,6 +109,15 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] Global audio integration (master volume multiplier)
 - [x] VDO.Ninja `&meter=1` parameter support for built-in meters
 
+### WebSocket Live Sync (NEW - December 2025)
+- [x] **Ably integration** - Fully frontend, no backend required
+- [x] **Key generation** - Format: `1-{randomId}` for easy sharing
+- [x] **Setup page** - Generate key, view key, copy to clipboard, disconnect
+- [x] **Overlay page** - Paste key input, connect button, status indicator
+- [x] **Auto-detection** - Overlay page auto-switches from localStorage polling to WebSocket when connected
+- [x] **Fallback** - localStorage backup always maintained
+- [x] Persists WebSocket settings in localStorage
+
 ---
 
 ## Pending/Future Tasks
