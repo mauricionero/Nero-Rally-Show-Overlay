@@ -327,12 +327,12 @@ export default function Setup() {
                   </div>
                   <div>
                     <Label htmlFor="pilot-category" className="text-white">🏷️ Category</Label>
-                    <Select value={newPilot.categoryId || ''} onValueChange={(val) => setNewPilot({ ...newPilot, categoryId: val || null })}>
+                    <Select value={newPilot.categoryId || 'none'} onValueChange={(val) => setNewPilot({ ...newPilot, categoryId: val === 'none' ? null : val })}>
                       <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" id="pilot-category">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {categories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                         ))}
