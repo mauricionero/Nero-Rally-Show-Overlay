@@ -934,7 +934,7 @@ export default function Setup() {
               <CardHeader>
                 <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>📹 Stream Control Panel</CardTitle>
                 <CardDescription className="text-zinc-400">
-                  Configure audio and video settings for each pilot's stream. Changes apply live to the overlay.
+                  Configure audio and video settings for each pilot&apos;s stream. Changes apply live to the overlay.
                 </CardDescription>
               </CardHeader>
               <CardContent>
