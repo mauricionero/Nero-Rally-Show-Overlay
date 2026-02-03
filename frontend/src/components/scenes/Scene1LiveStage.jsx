@@ -127,6 +127,33 @@ export default function Scene1LiveStage() {
               ))}
             </div>
           </div>
+
+          {selectedPilotIds.length > 0 && (
+            <div>
+              <Label className="text-white text-xs uppercase mb-2 block">Reorder (Drag & Drop)</Label>
+              <div className="space-y-1">
+                {selectedPilotIds.map((pilotId, index) => {
+                  const pilot = pilots.find(p => p.id === pilotId);
+                  if (!pilot) return null;
+                  return (
+                    <div
+                      key={pilotId}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, index)}
+                      className="bg-[#18181B] border border-zinc-700 p-2 rounded cursor-move hover:bg-zinc-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-zinc-500 text-xs">{index + 1}.</span>
+                        <span className="text-white text-sm">{pilot.name}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </LeftControls>
 
