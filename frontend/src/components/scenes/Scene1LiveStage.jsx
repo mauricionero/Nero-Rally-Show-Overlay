@@ -30,6 +30,16 @@ export default function Scene1LiveStage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Calculate max scroll based on content width
+  useEffect(() => {
+    if (bottomContainerRef.current) {
+      const container = bottomContainerRef.current;
+      const scrollWidth = container.scrollWidth;
+      const clientWidth = container.clientWidth;
+      setMaxScroll(Math.max(0, scrollWidth - clientWidth));
+    }
+  }, [sortedAllPilots]);
+
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
   
