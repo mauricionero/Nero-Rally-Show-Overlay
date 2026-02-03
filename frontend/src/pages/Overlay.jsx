@@ -31,7 +31,8 @@ export default function Overlay() {
       if (storedVersion && storedVersion !== lastVersion) {
         setHeartbeatStatus('changed');
         setLastVersion(storedVersion);
-        forceUpdate({});
+        // Trigger context to reload data
+        window.dispatchEvent(new Event('rally-reload-data'));
         setTimeout(() => setHeartbeatStatus('normal'), 1000);
       } else {
         setTimeout(() => setHeartbeatStatus('normal'), 300);
