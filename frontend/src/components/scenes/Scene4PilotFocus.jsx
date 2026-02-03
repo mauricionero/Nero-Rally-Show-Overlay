@@ -105,7 +105,7 @@ export default function Scene4PilotFocus() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {stages.map((stage) => (
+                {sortedStages.map((stage) => (
                   <SelectItem key={stage.id} value={stage.id}>
                     {stage.ssNumber ? `SS${stage.ssNumber}` : stage.name}
                   </SelectItem>
