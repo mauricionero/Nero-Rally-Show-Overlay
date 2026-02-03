@@ -231,13 +231,11 @@ export default function Scene3Leaderboard() {
                         {/* 16:9 Stream thumbnail or avatar fallback */}
                         {pilot.streamUrl && pilot.isActive ? (
                           <div className="w-32 h-18 rounded overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
-                            <iframe
-                              src={pilot.streamUrl}
+                            <StreamPlayer
+                              pilotId={pilot.id}
+                              streamUrl={pilot.streamUrl}
+                              name={pilot.name}
                               className="w-full h-full"
-                              frameBorder="0"
-                              allow="autoplay"
-                              title={`${pilot.name}-thumb`}
-                              style={{ pointerEvents: 'none' }}
                             />
                           </div>
                         ) : pilot.picture ? (
