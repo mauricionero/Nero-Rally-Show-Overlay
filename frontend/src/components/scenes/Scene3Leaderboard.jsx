@@ -29,10 +29,10 @@ export default function Scene3Leaderboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-select first SS stage if none selected
+  // Auto-select overall if none selected (not first SS)
   useEffect(() => {
-    if (!selectedStageId && sortedSSStages.length > 0) {
-      setSelectedStageId(sortedSSStages[0].id);
+    if (selectedStageId === null && sortedSSStages.length > 0) {
+      // Keep it as overall (null), don't auto-select first stage
     }
   }, [sortedSSStages, selectedStageId]);
 
