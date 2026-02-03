@@ -180,27 +180,42 @@ export default function Scene1LiveStage() {
           </div>
 
           <div className="relative bg-black/95 backdrop-blur-sm border-t-2 border-[#FF4500]">
-            <button
-              onClick={() => setBottomScroll(Math.max(0, bottomScroll - 200))}
-              className="absolute left-0 top-0 bottom-0 z-10 bg-black/90 hover:bg-black px-2 text-white"
-              disabled={bottomScroll === 0}
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
+            {bottomScroll > 0 && (
+              <button
+                onClick={() => setBottomScroll(Math.max(0, bottomScroll - 200))}
+                className="absolute left-0 top-0 bottom-0 z-10 bg-black/90 hover:bg-black px-2 text-white"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+            )}
 
-            <div className="overflow-hidden px-10">
+            <div className="overflow-hidden px-10" ref={bottomContainerRef}>
               <div 
                 className="flex gap-2 py-2 transition-transform duration-300"
                 style={{ transform: `translateX(-${bottomScroll}px)` }}
               >
                 {sortedAllPilots.map((pilot) => {
                   const status = currentStageId ? getPilotStatus(pilot.id, currentStageId, startTimes, times) : 'not_started';
+                  const startTime = currentStageId ? startTimes[pilot.id]?.[currentStageId] : null;
                   const finishTime = currentStageId ? times[pilot.id]?.[currentStageId] : null;
                   const category = categories.find(c => c.id === pilot.categoryId);
                   
                   let borderColor = 'border-zinc-700';
-                  if (status === 'finished') borderColor = 'border-[#1a5f1a]';
-                  else if (status === 'racing') borderColor = 'border-[#FF8C00]';
+                  let timeDisplay = '';
+                  let timeColor = 'text-zinc-500';
+                  
+                  if (status === 'finished' && finishTime) {
+                    borderColor = 'border-[#1a5f1a]';
+                    timeDisplay = finishTime;
+                    timeColor = 'text-[#1a5f1a]';
+                  } else if (status === 'racing' && startTime) {
+                    borderColor = 'border-[#FF8C00]';
+                    timeDisplay = getRunningTime(startTime);
+                    timeColor = 'text-[#FF8C00]';
+                  } else if (startTime) {
+                    timeDisplay = `Start: ${startTime}`;
+                    timeColor = 'text-zinc-500';
+                  }
                   
                   return (
                     <div key={pilot.id} className={`relative flex-shrink-0 bg-white/5 border-2 ${borderColor} px-4 py-2 min-w-[150px]`}>
@@ -211,9 +226,9 @@ export default function Scene1LiveStage() {
                         <p className="text-white text-sm font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                           {pilot.name}
                         </p>
-                        {finishTime && (
-                          <p className="text-[#1a5f1a] font-mono text-xs" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {finishTime}
+                        {timeDisplay && (
+                          <p className={`font-mono text-xs ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {timeDisplay}
                           </p>
                         )}
                       </div>
@@ -223,12 +238,14 @@ export default function Scene1LiveStage() {
               </div>
             </div>
 
-            <button
-              onClick={() => setBottomScroll(bottomScroll + 200)}
-              className="absolute right-0 top-0 bottom-0 z-10 bg-black/90 hover:bg-black px-2 text-white"
-            >
-              <ChevronRight className="w-6 h-4" />
-            </button>
+            {bottomScroll < maxScroll && maxScroll > 0 && (
+              <button
+                onClick={() => setBottomScroll(Math.min(maxScroll, bottomScroll + 200))}
+                className="absolute right-0 top-0 bottom-0 z-10 bg-black/90 hover:bg-black px-2 text-white"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            )}
           </div>
         </div>
       )}
