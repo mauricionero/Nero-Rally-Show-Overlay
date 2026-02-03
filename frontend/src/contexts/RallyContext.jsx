@@ -22,13 +22,15 @@ const loadFromStorage = (key, defaultValue) => {
 
 export const RallyProvider = ({ children }) => {
   const [pilots, setPilots] = useState(() => loadFromStorage('rally_pilots', []));
+  const [categories, setCategories] = useState(() => loadFromStorage('rally_categories', []));
   const [stages, setStages] = useState(() => loadFromStorage('rally_stages', []));
   const [times, setTimes] = useState(() => loadFromStorage('rally_times', {}));
+  const [arrivalTimes, setArrivalTimes] = useState(() => loadFromStorage('rally_arrival_times', {}));
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
-  const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#00B140'));
+  const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
   const [currentScene, setCurrentScene] = useState(1);
-  const [lastUpdate, setLastUpdate] = useState(Date.now());
+  const [dataVersion, setDataVersion] = useState(() => loadFromStorage('rally_data_version', Date.now()));
 
   useEffect(() => {
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
