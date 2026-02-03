@@ -17,10 +17,12 @@ export default function Scene4PilotFocus() {
   }
 
   // Get pilot's stage times
-  const pilotTimes = stages.map(stage => ({
-    stage,
-    time: times[focusPilot.id]?.[stage.id] || '-'
-  }));
+  const pilotTimes = stages.map((stage) => {
+    return {
+      stage: stage,
+      time: times[focusPilot.id]?.[stage.id] || '-'
+    };
+  });
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-4-pilot-focus">
