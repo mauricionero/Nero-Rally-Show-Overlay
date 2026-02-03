@@ -24,24 +24,35 @@ export const RallyProvider = ({ children }) => {
   const [pilots, setPilots] = useState(() => loadFromStorage('rally_pilots', []));
   const [stages, setStages] = useState(() => loadFromStorage('rally_stages', []));
   const [times, setTimes] = useState(() => loadFromStorage('rally_times', {}));
+  const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#00B140'));
   const [currentScene, setCurrentScene] = useState(1);
+  const [lastUpdate, setLastUpdate] = useState(Date.now());
 
   useEffect(() => {
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
+    setLastUpdate(Date.now());
   }, [pilots]);
 
   useEffect(() => {
     localStorage.setItem('rally_stages', JSON.stringify(stages));
+    setLastUpdate(Date.now());
   }, [stages]);
 
   useEffect(() => {
     localStorage.setItem('rally_times', JSON.stringify(times));
+    setLastUpdate(Date.now());
   }, [times]);
 
   useEffect(() => {
+    localStorage.setItem('rally_start_times', JSON.stringify(startTimes));
+    setLastUpdate(Date.now());
+  }, [startTimes]);
+
+  useEffect(() => {
     localStorage.setItem('rally_current_stage', JSON.stringify(currentStageId));
+    setLastUpdate(Date.now());
   }, [currentStageId]);
 
   useEffect(() => {
@@ -66,11 +77,15 @@ export const RallyProvider = ({ children }) => {
 
   const deletePilot = (id) => {
     setPilots(prev => prev.filter(p => p.id !== id));
-    // Also delete times for this pilot
     setTimes(prev => {
       const newTimes = { ...prev };
       delete newTimes[id];
       return newTimes;
+    });
+    setStartTimes(prev => {
+      const newStartTimes = { ...prev };
+      delete newStartTimes[id];
+      return newStartTimes;
     });
   };
 
@@ -82,6 +97,9 @@ export const RallyProvider = ({ children }) => {
     const newStage = {
       id: Date.now().toString(),
       name: stage.name,
+      type: stage.type || 'SS',
+      ssNumber: stage.ssNumber || '',
+      startTime: stage.startTime || '',
       ...stage
     };
     setStages(prev => [...prev, newStage]);
@@ -93,7 +111,6 @@ export const RallyProvider = ({ children }) => {
 
   const deleteStage = (id) => {
     setStages(prev => prev.filter(s => s.id !== id));
-    // Also delete times for this stage
     setTimes(prev => {
       const newTimes = { ...prev };
       Object.keys(newTimes).forEach(pilotId => {
@@ -102,6 +119,15 @@ export const RallyProvider = ({ children }) => {
         }
       });
       return newTimes;
+    });
+    setStartTimes(prev => {
+      const newStartTimes = { ...prev };
+      Object.keys(newStartTimes).forEach(pilotId => {
+        if (newStartTimes[pilotId]) {
+          delete newStartTimes[pilotId][id];
+        }
+      });
+      return newStartTimes;
     });
   };
 
@@ -119,11 +145,26 @@ export const RallyProvider = ({ children }) => {
     return times[pilotId]?.[stageId] || '';
   };
 
+  const setStartTime = (pilotId, stageId, startTime) => {
+    setStartTimes(prev => ({
+      ...prev,
+      [pilotId]: {
+        ...(prev[pilotId] || {}),
+        [stageId]: startTime
+      }
+    }));
+  };
+
+  const getStartTime = (pilotId, stageId) => {
+    return startTimes[pilotId]?.[stageId] || '';
+  };
+
   const exportData = () => {
     const data = {
       pilots,
       stages,
       times,
+      startTimes,
       currentStageId,
       chromaKey,
       exportDate: new Date().toISOString()
@@ -137,6 +178,7 @@ export const RallyProvider = ({ children }) => {
       if (data.pilots) setPilots(data.pilots);
       if (data.stages) setStages(data.stages);
       if (data.times) setTimes(data.times);
+      if (data.startTimes) setStartTimes(data.startTimes);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
       return true;
@@ -150,6 +192,7 @@ export const RallyProvider = ({ children }) => {
     setPilots([]);
     setStages([]);
     setTimes({});
+    setStartTimes({});
     setCurrentStageId(null);
     setChromaKey('#00B140');
   };
@@ -158,9 +201,11 @@ export const RallyProvider = ({ children }) => {
     pilots,
     stages,
     times,
+    startTimes,
     currentStageId,
     chromaKey,
     currentScene,
+    lastUpdate,
     setCurrentScene,
     setChromaKey,
     setCurrentStageId,
@@ -173,6 +218,8 @@ export const RallyProvider = ({ children }) => {
     deleteStage,
     setTime,
     getTime,
+    setStartTime,
+    getStartTime,
     exportData,
     importData,
     clearAllData
