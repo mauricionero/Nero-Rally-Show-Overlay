@@ -74,8 +74,8 @@ export default function Scene2TimingTower() {
         style={{ borderLeftColor: category?.color || '#3f3f46' }}
       >
         <div className="flex items-center gap-3">
-          {/* Small embedded stream */}
-          {pilot.streamUrl && (
+          {/* Small embedded stream or avatar/initials */}
+          {pilot.streamUrl ? (
             <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0 border border-zinc-700">
               <iframe
                 src={pilot.streamUrl}
@@ -85,6 +85,12 @@ export default function Scene2TimingTower() {
                 title={`${pilot.name}-small`}
                 style={{ pointerEvents: 'none' }}
               />
+            </div>
+          ) : pilot.picture ? (
+            <img src={pilot.picture} alt={pilot.name} className="w-12 h-12 rounded object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
+              <span className="text-lg font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
             </div>
           )}
           
