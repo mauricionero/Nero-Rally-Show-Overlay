@@ -56,6 +56,7 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] Setup page with tabs: Pilots, Categories, Stages, Times, Streams, Config
 - [x] Overlay page with 4 scenes and keyboard shortcuts
 - [x] Heartbeat sync system between Setup and Overlay pages
+- [x] **WebSocket Live Sync** - Real-time sync using Ably (fully frontend)
 - [x] JSON import/export functionality
 - [x] Chroma key background selection
 
