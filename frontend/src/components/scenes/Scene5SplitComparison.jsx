@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRally } from '../../contexts/RallyContext';
+import { useRally } from '../../contexts/RallyContext.jsx';
 
 export default function Scene5SplitComparison() {
   const { pilots, stages, times, currentStageId } = useRally();
