@@ -1298,6 +1298,107 @@ export default function Setup() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* WebSocket Live Sync */}
+            <Card className="bg-[#18181B] border-zinc-800">
+              <CardHeader>
+                <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {wsConnectionStatus === 'connected' ? (
+                    <Wifi className="w-5 h-5 text-[#22C55E]" />
+                  ) : (
+                    <WifiOff className="w-5 h-5 text-zinc-500" />
+                  )}
+                  Live Sync (WebSocket)
+                </CardTitle>
+                <CardDescription className="text-zinc-400">
+                  Share changes in real-time with remote Live pages. Generate a key and share it with anyone who needs to receive live updates.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Connection Status */}
+                <div className="flex items-center justify-between p-3 bg-[#09090B] rounded">
+                  <span className="text-zinc-400">Status</span>
+                  <span className={`font-mono text-sm ${
+                    wsConnectionStatus === 'connected' ? 'text-[#22C55E]' :
+                    wsConnectionStatus === 'connecting' ? 'text-[#FACC15]' :
+                    wsConnectionStatus === 'error' ? 'text-red-500' :
+                    'text-zinc-500'
+                  }`}>
+                    {wsConnectionStatus === 'connected' ? '● Connected' :
+                     wsConnectionStatus === 'connecting' ? '○ Connecting...' :
+                     wsConnectionStatus === 'error' ? '✕ Error' :
+                     '○ Disconnected'}
+                  </span>
+                </div>
+
+                {wsError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm">
+                    {wsError}
+                  </div>
+                )}
+
+                {/* Generate/Show Key */}
+                {wsChannelKey && wsConnectionStatus === 'connected' ? (
+                  <div className="space-y-2">
+                    <Label className="text-zinc-400">Share this key with the Live page:</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={wsChannelKey}
+                        readOnly
+                        className="bg-[#09090B] border-zinc-700 text-white font-mono"
+                        data-testid="ws-channel-key-display"
+                      />
+                      <Button
+                        variant="outline"
+                        className="border-zinc-700 text-white"
+                        onClick={() => {
+                          navigator.clipboard.writeText(wsChannelKey);
+                          toast.success('Key copied to clipboard');
+                        }}
+                        data-testid="ws-copy-key"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      className="w-full mt-2"
+                      onClick={() => {
+                        disconnectWebSocket();
+                        toast.info('WebSocket disconnected');
+                      }}
+                      data-testid="ws-disconnect"
+                    >
+                      <WifiOff className="w-4 h-4 mr-2" />
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Button
+                      className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
+                      onClick={async () => {
+                        const newKey = generateNewChannelKey();
+                        const success = await connectWebSocket(newKey);
+                        if (success) {
+                          toast.success('WebSocket connected! Share the key with the Live page.');
+                        } else {
+                          toast.error('Failed to connect');
+                        }
+                      }}
+                      disabled={wsConnectionStatus === 'connecting'}
+                      data-testid="ws-generate-connect"
+                    >
+                      <Wifi className="w-4 h-4 mr-2" />
+                      {wsConnectionStatus === 'connecting' ? 'Connecting...' : 'Generate Key & Connect'}
+                    </Button>
+                    <p className="text-xs text-zinc-600 text-center">
+                      This will create a unique channel for real-time sync using Ably (free tier).
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
