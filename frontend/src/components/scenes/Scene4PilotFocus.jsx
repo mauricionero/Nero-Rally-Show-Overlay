@@ -81,14 +81,14 @@ export default function Scene4PilotFocus() {
             {pilotTimes.length === 0 ? (
               <p className="text-zinc-500 text-center py-8">No stages registered</p>
             ) : (
-              pilotTimes.map(({ stage, time }) => (
-                <div key={stage.id} className="bg-white/5 border border-white/10 p-4">
+              pilotTimes.map((item) => (
+                <div key={item.stage.id} className="bg-white/5 border border-white/10 p-4">
                   <div className="flex justify-between items-center">
                     <span className="text-zinc-400 uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      {stage.name}
+                      {item.stage.name}
                     </span>
                     <span className="text-white text-xl font-mono" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                      {time}
+                      {item.time}
                     </span>
                   </div>
                 </div>
