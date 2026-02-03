@@ -121,13 +121,11 @@ export default function Scene4PilotFocus() {
       <div className="flex-1 p-8">
         {focusPilot.streamUrl ? (
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-            <iframe
-              src={focusPilot.streamUrl}
+            <StreamPlayer
+              pilotId={focusPilot.id}
+              streamUrl={focusPilot.streamUrl}
+              name={focusPilot.name}
               className="w-full h-full"
-              frameBorder="0"
-              allow="autoplay; fullscreen"
-              allowFullScreen
-              title={focusPilot.name}
             />
             {selectedStageData && (
               <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
