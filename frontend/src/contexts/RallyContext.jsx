@@ -297,6 +297,7 @@ export const RallyProvider = ({ children }) => {
       times,
       arrivalTimes,
       startTimes,
+      streamConfigs,
       currentStageId,
       chromaKey,
       dataVersion,
