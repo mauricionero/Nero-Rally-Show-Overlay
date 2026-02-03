@@ -333,6 +333,7 @@ export const RallyProvider = ({ children }) => {
     setTimes({});
     setArrivalTimes({});
     setStartTimes({});
+    setStreamConfigs({});
     setCurrentStageId(null);
     setChromaKey('#000000');
     updateDataVersion();
