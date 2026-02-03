@@ -193,13 +193,11 @@ export default function Scene1LiveStage() {
                 {category && (
                   <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ backgroundColor: category.color }} />
                 )}
-                <iframe
-                  src={pilot.streamUrl}
+                <StreamPlayer
+                  pilotId={pilot.id}
+                  streamUrl={pilot.streamUrl}
+                  name={pilot.name}
                   className="w-full h-full"
-                  frameBorder="0"
-                  allow="autoplay; fullscreen"
-                  allowFullScreen
-                  title={pilot.name}
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">
