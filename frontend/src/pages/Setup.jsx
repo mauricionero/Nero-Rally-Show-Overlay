@@ -15,9 +15,9 @@ import { toast } from 'sonner';
 import { Trash2, Plus, Play, Upload, Download, Palette, Edit } from 'lucide-react';
 
 const CHROMA_PRESETS = [
+  { name: 'Black', value: '#000000', label: 'K' },
   { name: 'Green Screen', value: '#00B140', label: 'G' },
-  { name: 'Blue Screen', value: '#0047BB', label: 'B' },
-  { name: 'Black', value: '#000000', label: 'K' }
+  { name: 'Blue Screen', value: '#0047BB', label: 'B' }
 ];
 
 const STAGE_TYPES = ['SS', 'Liaison', 'Service Park', 'Other'];
