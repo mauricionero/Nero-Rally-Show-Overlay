@@ -9,8 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Switch } from '../components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
+import { TimeInput } from '../components/TimeInput.jsx';
 import { toast } from 'sonner';
-import { Trash2, Plus, Eye, Upload, Download, Palette, Play } from 'lucide-react';
+import { Trash2, Plus, Play, Upload, Download, Palette, Edit } from 'lucide-react';
 
 const CHROMA_PRESETS = [
   { name: 'Green Screen', value: '#00B140', label: 'G' },
@@ -18,12 +20,15 @@ const CHROMA_PRESETS = [
   { name: 'Black', value: '#000000', label: 'K' }
 ];
 
+const STAGE_TYPES = ['SS', 'Liaison', 'Service Park', 'Other'];
+
 export default function Setup() {
   const navigate = useNavigate();
   const {
     pilots,
     stages,
     times,
+    startTimes,
     currentStageId,
     chromaKey,
     setChromaKey,
@@ -37,14 +42,20 @@ export default function Setup() {
     deleteStage,
     setTime,
     getTime,
+    setStartTime,
+    getStartTime,
     exportData,
     importData,
     clearAllData
   } = useRally();
 
   const [newPilot, setNewPilot] = useState({ name: '', picture: '', streamUrl: '' });
-  const [newStage, setNewStage] = useState({ name: '' });
+  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', startTime: '' });
   const [customChroma, setCustomChroma] = useState('#00B140');
+  const [editingPilot, setEditingPilot] = useState(null);
+  const [editingStage, setEditingStage] = useState(null);
+  const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
+  const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleAddPilot = () => {
@@ -57,14 +68,36 @@ export default function Setup() {
     toast.success('Pilot added successfully');
   };
 
+  const handleUpdatePilot = () => {
+    if (!editingPilot.name.trim()) {
+      toast.error('Pilot name is required');
+      return;
+    }
+    updatePilot(editingPilot.id, editingPilot);
+    setEditingPilot(null);
+    setPilotDialogOpen(false);
+    toast.success('Pilot updated successfully');
+  };
+
   const handleAddStage = () => {
     if (!newStage.name.trim()) {
       toast.error('Stage name is required');
       return;
     }
     addStage(newStage);
-    setNewStage({ name: '' });
+    setNewStage({ name: '', type: 'SS', ssNumber: '', startTime: '' });
     toast.success('Stage added successfully');
+  };
+
+  const handleUpdateStage = () => {
+    if (!editingStage.name.trim()) {
+      toast.error('Stage name is required');
+      return;
+    }
+    updateStage(editingStage.id, editingStage);
+    setEditingStage(null);
+    setStageDialogOpen(false);
+    toast.success('Stage updated successfully');
   };
 
   const handleExport = () => {
@@ -95,8 +128,9 @@ export default function Setup() {
     reader.readAsText(file);
   };
 
-  const handleTimeChange = (pilotId, stageId, value) => {
-    setTime(pilotId, stageId, value);
+  const handleGoLive = () => {
+    window.open('/overlay', '_blank');
+    toast.success('Overlay page opened in new tab');
   };
 
   const activePilots = pilots.filter(p => p.isActive);
@@ -108,7 +142,7 @@ export default function Setup() {
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-5xl font-bold uppercase tracking-tighter" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
               Rally Dashboard
             </h1>
             <p className="text-zinc-400 mt-2">Setup & Configuration</p>
@@ -116,7 +150,7 @@ export default function Setup() {
           
           <div className="flex gap-3">
             <Button
-              onClick={() => navigate('/overlay')}
+              onClick={handleGoLive}
               className="bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
               data-testid="go-to-overlay-button"
             >
@@ -129,11 +163,11 @@ export default function Setup() {
         {/* Chroma Key Selector */}
         <Card className="mb-6 bg-[#18181B] border-zinc-800">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
               <Palette className="w-5 h-5" />
               Background Color (Chroma Key)
             </CardTitle>
-            <CardDescription>Select background color for video overlay</CardDescription>
+            <CardDescription className="text-zinc-400">Select background color for video overlay</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
@@ -163,7 +197,7 @@ export default function Setup() {
                 <Button
                   onClick={() => setChromaKey(customChroma)}
                   variant="outline"
-                  className="border-zinc-700"
+                  className="border-zinc-700 text-white"
                   data-testid="apply-custom-chroma-button"
                 >
                   Apply Custom
@@ -175,50 +209,50 @@ export default function Setup() {
 
         <Tabs defaultValue="pilots" className="space-y-6">
           <TabsList className="bg-[#18181B] border border-zinc-800">
-            <TabsTrigger value="pilots" data-testid="tab-pilots">P<span className="underline">i</span>lots</TabsTrigger>
-            <TabsTrigger value="stages" data-testid="tab-stages">S<span className="underline">t</span>ages</TabsTrigger>
-            <TabsTrigger value="times" data-testid="tab-times">Ti<span className="underline">m</span>es</TabsTrigger>
-            <TabsTrigger value="config" data-testid="tab-config">Con<span className="underline">f</span>ig</TabsTrigger>
+            <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">Pilots</TabsTrigger>
+            <TabsTrigger value="stages" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-stages">Stages</TabsTrigger>
+            <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">Times</TabsTrigger>
+            <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">Config</TabsTrigger>
           </TabsList>
 
           {/* Pilots Tab */}
           <TabsContent value="pilots" className="space-y-4">
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Add New Pilot</CardTitle>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Add New Pilot</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <Label htmlFor="pilot-name">Pilot Name *</Label>
+                    <Label htmlFor="pilot-name" className="text-white">Pilot Name *</Label>
                     <Input
                       id="pilot-name"
                       value={newPilot.name}
                       onChange={(e) => setNewPilot({ ...newPilot, name: e.target.value })}
                       placeholder="John Doe"
-                      className="bg-[#09090B] border-zinc-700"
+                      className="bg-[#09090B] border-zinc-700 text-white"
                       data-testid="input-pilot-name"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="pilot-picture">Picture URL</Label>
+                    <Label htmlFor="pilot-picture" className="text-white">Picture URL</Label>
                     <Input
                       id="pilot-picture"
                       value={newPilot.picture}
                       onChange={(e) => setNewPilot({ ...newPilot, picture: e.target.value })}
                       placeholder="https://..."
-                      className="bg-[#09090B] border-zinc-700"
+                      className="bg-[#09090B] border-zinc-700 text-white"
                       data-testid="input-pilot-picture"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="pilot-stream">ninja.vdo Stream URL</Label>
+                    <Label htmlFor="pilot-stream" className="text-white">ninja.vdo Stream URL</Label>
                     <Input
                       id="pilot-stream"
                       value={newPilot.streamUrl}
                       onChange={(e) => setNewPilot({ ...newPilot, streamUrl: e.target.value })}
                       placeholder="https://ninja.vdo/..."
-                      className="bg-[#09090B] border-zinc-700"
+                      className="bg-[#09090B] border-zinc-700 text-white"
                       data-testid="input-pilot-stream"
                     />
                   </div>
@@ -251,7 +285,7 @@ export default function Setup() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-lg uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        <h3 className="font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                           {pilot.name}
                         </h3>
                         {pilot.streamUrl && (
@@ -263,18 +297,79 @@ export default function Setup() {
                             onCheckedChange={() => togglePilotActive(pilot.id)}
                             data-testid={`switch-pilot-active-${pilot.id}`}
                           />
-                          <span className="text-sm">{pilot.isActive ? 'Active' : 'Inactive'}</span>
+                          <span className="text-sm text-white">{pilot.isActive ? 'Active Stream' : 'Inactive Stream'}</span>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deletePilot(pilot.id)}
-                        className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                        data-testid={`button-delete-pilot-${pilot.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Dialog open={pilotDialogOpen && editingPilot?.id === pilot.id} onOpenChange={(open) => {
+                          setPilotDialogOpen(open);
+                          if (!open) setEditingPilot(null);
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditingPilot({ ...pilot })}
+                              className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
+                              data-testid={`button-edit-pilot-${pilot.id}`}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
+                            <DialogHeader>
+                              <DialogTitle className="text-white">Edit Pilot</DialogTitle>
+                            </DialogHeader>
+                            {editingPilot && (
+                              <div className="space-y-4">
+                                <div>
+                                  <Label className="text-white">Pilot Name *</Label>
+                                  <Input
+                                    value={editingPilot.name}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, name: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">Picture URL</Label>
+                                  <Input
+                                    value={editingPilot.picture}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, picture: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">Stream URL</Label>
+                                  <Input
+                                    value={editingPilot.streamUrl}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, streamUrl: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            <DialogFooter>
+                              <Button onClick={handleUpdatePilot} className="bg-[#FF4500] hover:bg-[#FF4500]/90">
+                                Update Pilot
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (window.confirm('Delete this pilot?')) {
+                              deletePilot(pilot.id);
+                              toast.success('Pilot deleted');
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                          data-testid={`button-delete-pilot-${pilot.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -292,52 +387,86 @@ export default function Setup() {
           <TabsContent value="stages" className="space-y-4">
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Add New Stage</CardTitle>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Add New Stage</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-4">
-                  <div className="flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                  <div className="md:col-span-2">
+                    <Label className="text-white">Stage Name *</Label>
                     <Input
                       value={newStage.name}
-                      onChange={(e) => setNewStage({ name: e.target.value })}
+                      onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
                       placeholder="SS1 - Mountain Pass"
-                      className="bg-[#09090B] border-zinc-700"
+                      className="bg-[#09090B] border-zinc-700 text-white"
                       data-testid="input-stage-name"
                     />
                   </div>
-                  <Button
-                    onClick={handleAddStage}
-                    className="bg-[#FF4500] hover:bg-[#FF4500]/90"
-                    data-testid="button-add-stage"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Stage
-                  </Button>
+                  <div>
+                    <Label className="text-white">Type</Label>
+                    <Select value={newStage.type} onValueChange={(val) => setNewStage({ ...newStage, type: val })}>
+                      <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STAGE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-white">SS Number</Label>
+                    <Input
+                      value={newStage.ssNumber}
+                      onChange={(e) => setNewStage({ ...newStage, ssNumber: e.target.value })}
+                      placeholder="1"
+                      className="bg-[#09090B] border-zinc-700 text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-white">Start Time (HH:MM)</Label>
+                    <Input
+                      value={newStage.startTime}
+                      onChange={(e) => setNewStage({ ...newStage, startTime: e.target.value })}
+                      placeholder="09:00"
+                      className="bg-[#09090B] border-zinc-700 text-white"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      onClick={handleAddStage}
+                      className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
+                      data-testid="button-add-stage"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Current Stage</CardTitle>
-                <CardDescription>Select the stage currently being raced</CardDescription>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Current Stage</CardTitle>
+                <CardDescription className="text-zinc-400">Select the stage currently being raced</CardDescription>
               </CardHeader>
               <CardContent>
                 <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
-                  <SelectTrigger className="bg-[#09090B] border-zinc-700" data-testid="select-current-stage">
+                  <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" data-testid="select-current-stage">
                     <SelectValue placeholder="Select current stage" />
                   </SelectTrigger>
                   <SelectContent>
                     {stages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
-                        {stage.name}
+                        {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {currentStage && (
                   <p className="mt-2 text-[#FACC15] font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    LIVE: {currentStage.name}
+                    LIVE: {currentStage.ssNumber ? `SS${currentStage.ssNumber} - ` : ''}{currentStage.name}
                   </p>
                 )}
               </CardContent>
@@ -348,18 +477,98 @@ export default function Setup() {
                 <Card key={stage.id} className="bg-[#18181B] border-zinc-800" data-testid={`stage-card-${stage.id}`}>
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-xl uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {stage.name}
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteStage(stage.id)}
-                        className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                        data-testid={`button-delete-stage-${stage.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-xl uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {stage.ssNumber && <span className="text-[#FF4500]">SS{stage.ssNumber}</span>} {stage.name}
+                        </h3>
+                        <div className="flex gap-4 mt-1 text-sm text-zinc-400">
+                          <span>Type: {stage.type}</span>
+                          {stage.startTime && <span>Start: {stage.startTime}</span>}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Dialog open={stageDialogOpen && editingStage?.id === stage.id} onOpenChange={(open) => {
+                          setStageDialogOpen(open);
+                          if (!open) setEditingStage(null);
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditingStage({ ...stage })}
+                              className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
+                              data-testid={`button-edit-stage-${stage.id}`}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
+                            <DialogHeader>
+                              <DialogTitle className="text-white">Edit Stage</DialogTitle>
+                            </DialogHeader>
+                            {editingStage && (
+                              <div className="space-y-4">
+                                <div>
+                                  <Label className="text-white">Stage Name *</Label>
+                                  <Input
+                                    value={editingStage.name}
+                                    onChange={(e) => setEditingStage({ ...editingStage, name: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">Type</Label>
+                                  <Select value={editingStage.type} onValueChange={(val) => setEditingStage({ ...editingStage, type: val })}>
+                                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {STAGE_TYPES.map((type) => (
+                                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-white">SS Number</Label>
+                                  <Input
+                                    value={editingStage.ssNumber}
+                                    onChange={(e) => setEditingStage({ ...editingStage, ssNumber: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">Start Time (HH:MM)</Label>
+                                  <Input
+                                    value={editingStage.startTime}
+                                    onChange={(e) => setEditingStage({ ...editingStage, startTime: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            <DialogFooter>
+                              <Button onClick={handleUpdateStage} className="bg-[#FF4500] hover:bg-[#FF4500]/90">
+                                Update Stage
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (window.confirm('Delete this stage?')) {
+                              deleteStage(stage.id);
+                              toast.success('Stage deleted');
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                          data-testid={`button-delete-stage-${stage.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -377,8 +586,8 @@ export default function Setup() {
           <TabsContent value="times">
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Time Matrix</CardTitle>
-                <CardDescription>Register times for each pilot in each stage</CardDescription>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Time Matrix</CardTitle>
+                <CardDescription className="text-zinc-400">Register start times and finish times for each pilot in each stage</CardDescription>
               </CardHeader>
               <CardContent>
                 {pilots.length === 0 || stages.length === 0 ? (
@@ -393,7 +602,8 @@ export default function Setup() {
                           <TableHead className="bg-[#18181B] text-white uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</TableHead>
                           {stages.map((stage) => (
                             <TableHead key={stage.id} className="bg-[#18181B] text-white uppercase font-bold text-center" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                              {stage.name}
+                              <div>{stage.ssNumber ? `SS${stage.ssNumber}` : stage.name}</div>
+                              <div className="text-xs text-zinc-400 font-normal">Start / Finish</div>
                             </TableHead>
                           ))}
                         </TableRow>
@@ -401,18 +611,27 @@ export default function Setup() {
                       <TableBody>
                         {pilots.map((pilot) => (
                           <TableRow key={pilot.id} className="border-zinc-700 hover:bg-white/5">
-                            <TableCell className="font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                            <TableCell className="font-bold text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               {pilot.name}
                             </TableCell>
                             {stages.map((stage) => (
                               <TableCell key={stage.id}>
-                                <Input
-                                  value={getTime(pilot.id, stage.id)}
-                                  onChange={(e) => handleTimeChange(pilot.id, stage.id, e.target.value)}
-                                  placeholder="00:00.000"
-                                  className="bg-[#09090B] border-zinc-700 text-center font-mono"
-                                  data-testid={`input-time-${pilot.id}-${stage.id}`}
-                                />
+                                <div className="space-y-1">
+                                  <Input
+                                    value={getStartTime(pilot.id, stage.id)}
+                                    onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
+                                    placeholder="HH:MM"
+                                    className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-8"
+                                    data-testid={`input-start-${pilot.id}-${stage.id}`}
+                                  />
+                                  <TimeInput
+                                    value={getTime(pilot.id, stage.id)}
+                                    onChange={(val) => setTime(pilot.id, stage.id, val)}
+                                    placeholder="MM:SS.000"
+                                    className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-8"
+                                    data-testid={`input-time-${pilot.id}-${stage.id}`}
+                                  />
+                                </div>
                               </TableCell>
                             ))}
                           </TableRow>
@@ -429,46 +648,46 @@ export default function Setup() {
           <TabsContent value="config" className="space-y-4">
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Keyboard Shortcuts</CardTitle>
-                <CardDescription>Quick access to scenes on overlay page</CardDescription>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Keyboard Shortcuts</CardTitle>
+                <CardDescription className="text-zinc-400">Quick access to scenes on overlay page</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  <div className="flex justify-between p-2 bg-[#09090B] rounded">
+                  <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
                     <span><kbd className="px-2 py-1 bg-zinc-800 rounded">1</kbd> Scene 1</span>
                     <span className="text-zinc-500">Live Stage + Streams</span>
                   </div>
-                  <div className="flex justify-between p-2 bg-[#09090B] rounded">
+                  <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
                     <span><kbd className="px-2 py-1 bg-zinc-800 rounded">2</kbd> Scene 2</span>
                     <span className="text-zinc-500">Timing Tower</span>
                   </div>
-                  <div className="flex justify-between p-2 bg-[#09090B] rounded">
+                  <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
                     <span><kbd className="px-2 py-1 bg-zinc-800 rounded">3</kbd> Scene 3</span>
                     <span className="text-zinc-500">Leaderboard</span>
                   </div>
-                  <div className="flex justify-between p-2 bg-[#09090B] rounded">
+                  <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
                     <span><kbd className="px-2 py-1 bg-zinc-800 rounded">4</kbd> Scene 4</span>
                     <span className="text-zinc-500">Pilot Focus</span>
                   </div>
-                  <div className="flex justify-between p-2 bg-[#09090B] rounded">
+                  <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
                     <span><kbd className="px-2 py-1 bg-zinc-800 rounded">5</kbd> Scene 5</span>
-                    <span className="text-zinc-500">Split Comparison</span>
+                    <span className="text-zinc-500">SS Comparison</span>
                   </div>
                 </div>
-              </CardContent>
+              </CardHeader>
             </Card>
 
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Data Management</CardTitle>
-                <CardDescription>Export or import your configuration</CardDescription>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Data Management</CardTitle>
+                <CardDescription className="text-zinc-400">Export or import your configuration</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex gap-4">
                   <Button
                     onClick={handleExport}
                     variant="outline"
-                    className="flex-1 border-zinc-700"
+                    className="flex-1 border-zinc-700 text-white"
                     data-testid="button-export-config"
                   >
                     <Download className="w-4 h-4 mr-2" />
@@ -477,7 +696,7 @@ export default function Setup() {
                   <Button
                     onClick={() => fileInputRef.current?.click()}
                     variant="outline"
-                    className="flex-1 border-zinc-700"
+                    className="flex-1 border-zinc-700 text-white"
                     data-testid="button-import-config"
                   >
                     <Upload className="w-4 h-4 mr-2" />
@@ -511,7 +730,7 @@ export default function Setup() {
 
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
-                <CardTitle className="uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Current Summary</CardTitle>
+                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Current Summary</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -525,7 +744,7 @@ export default function Setup() {
                     <div className="text-3xl font-bold text-[#FACC15]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       {activePilots.length}
                     </div>
-                    <div className="text-sm text-zinc-500 mt-1">Active Pilots</div>
+                    <div className="text-sm text-zinc-500 mt-1">Active Streams</div>
                   </div>
                   <div className="p-4 bg-[#09090B] rounded">
                     <div className="text-3xl font-bold text-[#22C55E]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
