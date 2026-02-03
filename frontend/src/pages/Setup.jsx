@@ -1339,7 +1339,7 @@ export default function Setup() {
 
                 {/* Generate/Show Key */}
                 {wsChannelKey && wsConnectionStatus === 'connected' ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <Label className="text-zinc-400">Share this key with the Live page:</Label>
                     <div className="flex gap-2">
                       <Input
@@ -1360,9 +1360,26 @@ export default function Setup() {
                         <Copy className="w-4 h-4" />
                       </Button>
                     </div>
+                    
+                    {/* Share Live URL Button */}
+                    <Button
+                      variant="outline"
+                      className="w-full border-[#22C55E] text-[#22C55E] hover:bg-[#22C55E]/10"
+                      onClick={() => {
+                        const baseUrl = window.location.origin;
+                        const liveUrl = `${baseUrl}/overlay?ws=${wsChannelKey}`;
+                        navigator.clipboard.writeText(liveUrl);
+                        toast.success('Live URL copied! Share this link for instant connection.');
+                      }}
+                      data-testid="ws-share-url"
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Live URL (auto-connects)
+                    </Button>
+                    
                     <Button
                       variant="destructive"
-                      className="w-full mt-2"
+                      className="w-full"
                       onClick={() => {
                         disconnectWebSocket();
                         toast.info('WebSocket disconnected');
