@@ -628,7 +628,7 @@ export default function Setup() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                   <div className="md:col-span-2">
-                    <Label className="text-white">Stage Name *</Label>
+                    <Label className="text-white">📍 Stage Name *</Label>
                     <Input
                       value={newStage.name}
                       onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
@@ -638,7 +638,7 @@ export default function Setup() {
                     />
                   </div>
                   <div>
-                    <Label className="text-white">Type</Label>
+                    <Label className="text-white">🏁 Type</Label>
                     <Select value={newStage.type} onValueChange={(val) => setNewStage({ ...newStage, type: val })}>
                       <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
                         <SelectValue />
@@ -651,7 +651,7 @@ export default function Setup() {
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-white">SS Number</Label>
+                    <Label className="text-white">🔢 SS Number</Label>
                     <Input
                       value={newStage.ssNumber}
                       onChange={(e) => setNewStage({ ...newStage, ssNumber: e.target.value })}
@@ -660,7 +660,7 @@ export default function Setup() {
                     />
                   </div>
                   <div>
-                    <Label className="text-white">Start Time (HH:MM)</Label>
+                    <Label className="text-white">⏰ Start Time (HH:MM)</Label>
                     <Input
                       value={newStage.startTime}
                       onChange={(e) => setNewStage({ ...newStage, startTime: e.target.value })}
