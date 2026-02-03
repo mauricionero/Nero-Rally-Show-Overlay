@@ -709,7 +709,7 @@ export default function Setup() {
             </Card>
 
             <div className="space-y-2">
-              {stages.map((stage) => (
+              {sortedStages.map((stage) => (
                 <Card key={stage.id} className="bg-[#18181B] border-zinc-800" data-testid={`stage-card-${stage.id}`}>
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
