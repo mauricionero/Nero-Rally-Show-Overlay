@@ -1,8 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { RallyProvider } from './contexts/RallyContext';
-import Setup from './pages/Setup';
-import Overlay from './pages/Overlay';
+import { RallyProvider } from './contexts/RallyContext.jsx';
+import Setup from './pages/Setup.jsx';
+import Overlay from './pages/Overlay.jsx';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
