@@ -22,6 +22,15 @@ export default function Overlay() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [setCurrentScene]);
 
+  // Poll for changes every 500ms
+  useEffect(() => {
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const renderScene = () => {
     switch (currentScene) {
       case 1:
