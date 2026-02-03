@@ -47,7 +47,7 @@ export const RallyProvider = ({ children }) => {
   const isPublishing = useRef(false);
 
   // Reload all data from localStorage
-  const reloadData = () => {
+  const reloadData = useCallback(() => {
     setPilots(loadFromStorage('rally_pilots', []));
     setCategories(loadFromStorage('rally_categories', []));
     setStages(loadFromStorage('rally_stages', []));
@@ -60,7 +60,33 @@ export const RallyProvider = ({ children }) => {
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
     const newVersion = loadFromStorage('rally_data_version', Date.now());
     setDataVersion(typeof newVersion === 'number' ? newVersion : Date.now());
-  };
+  }, []);
+
+  // Apply data from WebSocket message
+  const applyWebSocketData = useCallback((data) => {
+    if (!data) return;
+    
+    console.log('[RallyContext] Applying WebSocket data');
+    
+    // Prevent re-publishing when applying received data
+    isPublishing.current = true;
+    
+    if (data.pilots) setPilots(data.pilots);
+    if (data.categories) setCategories(data.categories);
+    if (data.stages) setStages(data.stages);
+    if (data.times) setTimes(data.times);
+    if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
+    if (data.startTimes) setStartTimes(data.startTimes);
+    if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
+    if (data.chromaKey) setChromaKey(data.chromaKey);
+    if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
+    if (data.globalAudio) setGlobalAudio(data.globalAudio);
+    
+    // Re-enable publishing after a short delay
+    setTimeout(() => {
+      isPublishing.current = false;
+    }, 100);
+  }, []);
 
   // Listen for external data updates
   useEffect(() => {
