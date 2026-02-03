@@ -97,6 +97,91 @@ async def get_status_checks():
     
     return status_checks
 
+
+# WebSocket Publishing Models
+class WebSocketPublishRequest(BaseModel):
+    provider: str  # "1" for Ably, "2" for Pusher
+    channel_id: str
+    data: Dict[str, Any]
+
+class WebSocketPublishResponse(BaseModel):
+    success: bool
+    message: str
+    provider: str
+
+# WebSocket Publishing Endpoints
+@api_router.post("/ws/publish", response_model=WebSocketPublishResponse)
+async def publish_to_websocket(request: WebSocketPublishRequest):
+    """
+    Publish data to a WebSocket channel.
+    Provider: "1" = Ably, "2" = Pusher
+    """
+    channel_name = f"rally-{request.channel_id}"
+    
+    try:
+        if request.provider == "1":
+            # Ably
+            client = get_ably_client()
+            if not client:
+                return WebSocketPublishResponse(
+                    success=False,
+                    message="Ably not configured",
+                    provider="Ably"
+                )
+            channel = client.channels.get(channel_name)
+            channel.publish("update", request.data)
+            return WebSocketPublishResponse(
+                success=True,
+                message="Published to Ably",
+                provider="Ably"
+            )
+        
+        elif request.provider == "2":
+            # Pusher
+            client = get_pusher_client()
+            if not client:
+                return WebSocketPublishResponse(
+                    success=False,
+                    message="Pusher not configured",
+                    provider="Pusher"
+                )
+            client.trigger(channel_name, "update", request.data)
+            return WebSocketPublishResponse(
+                success=True,
+                message="Published to Pusher",
+                provider="Pusher"
+            )
+        
+        else:
+            return WebSocketPublishResponse(
+                success=False,
+                message=f"Unknown provider: {request.provider}",
+                provider="Unknown"
+            )
+    
+    except Exception as e:
+        logger.error(f"WebSocket publish error: {str(e)}")
+        return WebSocketPublishResponse(
+            success=False,
+            message=str(e),
+            provider=request.provider
+        )
+
+@api_router.get("/ws/status")
+async def websocket_status():
+    """Check WebSocket providers status"""
+    return {
+        "ably": {
+            "configured": get_ably_client() is not None,
+            "key_present": bool(os.environ.get('ABLY_KEY'))
+        },
+        "pusher": {
+            "configured": get_pusher_client() is not None,
+            "key_present": bool(os.environ.get('PUSHER_KEY'))
+        }
+    }
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
