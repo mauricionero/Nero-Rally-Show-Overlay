@@ -481,10 +481,17 @@ export const RallyProvider = ({ children }) => {
     chromaKey,
     currentScene,
     dataVersion,
+    // WebSocket state
+    wsEnabled,
+    wsChannelKey,
+    wsConnectionStatus,
+    wsError,
+    // Setters
     setCurrentScene,
     setChromaKey,
     setCurrentStageId,
     setGlobalAudio,
+    // CRUD operations
     addPilot,
     updatePilot,
     deletePilot,
@@ -504,9 +511,15 @@ export const RallyProvider = ({ children }) => {
     getStreamConfig,
     setStreamConfig,
     setSoloStream,
+    // Data management
     exportData,
     importData,
-    clearAllData
+    clearAllData,
+    reloadData,
+    // WebSocket functions
+    connectWebSocket,
+    disconnectWebSocket,
+    generateNewChannelKey
   };
 
   return <RallyContext.Provider value={value}>{children}</RallyContext.Provider>;
