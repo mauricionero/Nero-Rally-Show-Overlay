@@ -48,6 +48,7 @@ export const RallyProvider = ({ children }) => {
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
+    setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
     const newVersion = loadFromStorage('rally_data_version', Date.now());
     setDataVersion(typeof newVersion === 'number' ? newVersion : Date.now());
   };
