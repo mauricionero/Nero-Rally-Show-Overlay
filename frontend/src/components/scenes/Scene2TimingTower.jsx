@@ -59,19 +59,35 @@ export default function Scene2TimingTower() {
       displayTime = 'Start: ' + startTime;
     }
 
-    const statusColor = status === 'racing' ? 'border-[#FF8C00]' : status === 'finished' ? 'border-[#1a5f1a]' : 'border-zinc-700';
+    // Status border color (top, right, bottom)
+    let statusBorder = 'border-zinc-700';
+    if (status === 'racing') statusBorder = 'border-t-[#FF8C00] border-r-[#FF8C00] border-b-[#FF8C00]';
+    else if (status === 'finished') statusBorder = 'border-t-[#1a5f1a] border-r-[#1a5f1a] border-b-[#1a5f1a]';
 
     return (
       <div
         key={pilot.id}
         onClick={() => pilot.streamUrl && setSelectedPilotId(pilot.id)}
-        className={`relative bg-white/5 border-2 ${statusColor} p-3 transition-all ${
+        className={`relative bg-white/5 border-2 border-l-4 ${statusBorder} p-2 transition-all ${
           pilot.streamUrl ? 'cursor-pointer hover:bg-white/10' : ''
-        } ${isSelected ? 'ml-4 border-[#FF4500] bg-white/15' : ''}`}>
-        {category && (
-          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
-        )}
-        <div className="flex items-center gap-3 pl-2">
+        } ${isSelected ? 'translate-x-4 border-r-[#FF4500]' : ''}`}
+        style={{ borderLeftColor: category?.color || '#3f3f46' }}
+      >
+        <div className="flex items-center gap-3">
+          {/* Small embedded stream */}
+          {pilot.streamUrl && (
+            <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0 border border-zinc-700">
+              <iframe
+                src={pilot.streamUrl}
+                className="w-full h-full"
+                frameBorder="0"
+                allow="autoplay"
+                title={`${pilot.name}-small`}
+                style={{ pointerEvents: 'none' }}
+              />
+            </div>
+          )}
+          
           <div className="w-8 text-center">
             <span className={`text-xl font-bold ${
               status === 'racing' ? 'text-[#FACC15]' : 
