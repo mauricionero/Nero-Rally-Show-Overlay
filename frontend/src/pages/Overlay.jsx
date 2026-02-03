@@ -34,15 +34,21 @@ export default function Overlay() {
     const interval = setInterval(() => {
       setHeartbeatStatus('checking');
       
-      const storedVersion = JSON.parse(localStorage.getItem('rally_data_version') || 'null');
-      if (storedVersion && storedVersion !== lastVersion) {
-        setHeartbeatStatus('changed');
-        setLastVersion(storedVersion);
-        // Trigger context to reload data
-        window.dispatchEvent(new Event('rally-reload-data'));
-        setTimeout(() => setHeartbeatStatus('normal'), 1000);
-      } else {
-        setTimeout(() => setHeartbeatStatus('normal'), 300);
+      try {
+        const storedVersionStr = localStorage.getItem('rally_data_version');
+        const storedVersion = storedVersionStr ? JSON.parse(storedVersionStr) : null;
+        
+        if (storedVersion && typeof storedVersion === 'number' && lastVersion && storedVersion !== lastVersion) {
+          setHeartbeatStatus('changed');
+          setLastVersion(storedVersion);
+          window.dispatchEvent(new Event('rally-reload-data'));
+          setTimeout(() => setHeartbeatStatus('normal'), 1000);
+        } else {
+          setTimeout(() => setHeartbeatStatus('normal'), 300);
+        }
+      } catch (e) {
+        console.error('Heartbeat error:', e);
+        setHeartbeatStatus('normal');
       }
     }, 2000);
 
