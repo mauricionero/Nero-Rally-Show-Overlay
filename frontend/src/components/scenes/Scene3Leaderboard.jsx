@@ -86,31 +86,43 @@ export default function Scene3Leaderboard() {
         status
       };
     } else {
-      // Overall leaderboard
+      // Overall leaderboard - includes running times
       let totalTime = 0;
       let completedStages = 0;
+      let hasRunningStage = false;
       
       sortedSSStages.forEach(stage => {
-        const time = times[pilot.id]?.[stage.id];
-        if (time) {
-          totalTime += parseTime(time);
+        const finishTime = times[pilot.id]?.[stage.id];
+        if (finishTime) {
+          // Finished stage
+          totalTime += parseTime(finishTime);
           completedStages++;
+        } else {
+          // Check if racing this stage
+          const status = getPilotStatus(pilot.id, stage.id, startTimes, times);
+          const startTime = startTimes[pilot.id]?.[stage.id];
+          if (status === 'racing' && startTime && !hasRunningStage) {
+            // Add running time from current stage
+            const runningTime = getRunningTime(startTime);
+            totalTime += parseTime(runningTime);
+            hasRunningStage = true;
+          }
         }
       });
 
       const totalMinutes = Math.floor(totalTime / 60);
       const totalSeconds = (totalTime % 60).toFixed(3).padStart(6, '0');
-      const displayTime = completedStages > 0 ? `${totalMinutes}:${totalSeconds}` : '-';
+      const displayTime = (completedStages > 0 || hasRunningStage) ? `${totalMinutes}:${totalSeconds}` : '-';
 
       return {
         ...pilot,
         totalTime,
         completedStages,
         displayTime,
-        timeColor: 'text-white',
-        sortTime: completedStages > 0 ? totalTime : Infinity,
+        timeColor: hasRunningStage ? 'text-[#FACC15]' : 'text-white',
+        sortTime: (completedStages > 0 || hasRunningStage) ? totalTime : Infinity,
         overallDisplay: displayTime,
-        hasTime: completedStages > 0
+        hasTime: completedStages > 0 || hasRunningStage
       };
     }
   }).sort((a, b) => {
