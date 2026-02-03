@@ -62,6 +62,29 @@ export default function Scene1LiveStage() {
     });
   };
 
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
+    if (dragIndex === dropIndex) return;
+
+    setSelectedPilotIds(prev => {
+      const newOrder = [...prev];
+      const [removed] = newOrder.splice(dragIndex, 1);
+      newOrder.splice(dropIndex, 0, removed);
+      return newOrder;
+    });
+  };
+
   const displayPilots = selectedPilotIds.map(id => pilots.find(p => p.id === id)).filter(Boolean);
 
   const getGridClass = () => {
