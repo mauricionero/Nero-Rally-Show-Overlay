@@ -56,6 +56,9 @@ export default function Setup() {
     getArrivalTime,
     setStartTime,
     getStartTime,
+    getStreamConfig,
+    setStreamConfig,
+    setSoloStream,
     exportData,
     importData,
     clearAllData
