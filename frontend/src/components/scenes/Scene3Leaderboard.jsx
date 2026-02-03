@@ -161,6 +161,7 @@ export default function Scene3Leaderboard() {
           <table className="w-full">
             <thead>
               <tr className="bg-[#18181B] text-white border-b border-white/10">
+                <th className="p-1 w-1"></th>
                 <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pos</th>
                 <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</th>
                 {selectedStageId && (
