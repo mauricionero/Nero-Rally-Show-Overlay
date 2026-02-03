@@ -247,6 +247,48 @@ export const RallyProvider = ({ children }) => {
     return startTimes[pilotId]?.[stageId] || '';
   };
 
+  // Stream configuration functions
+  const getStreamConfig = (pilotId) => {
+    return streamConfigs[pilotId] || {
+      volume: 100,
+      muted: false,
+      solo: false,
+      saturation: 100,
+      contrast: 100,
+      brightness: 100
+    };
+  };
+
+  const setStreamConfig = (pilotId, config) => {
+    setStreamConfigs(prev => ({
+      ...prev,
+      [pilotId]: { ...getStreamConfig(pilotId), ...config }
+    }));
+  };
+
+  const setSoloStream = (pilotId) => {
+    // If pilot is already solo, unsolo them
+    const currentConfig = getStreamConfig(pilotId);
+    if (currentConfig.solo) {
+      setStreamConfigs(prev => ({
+        ...prev,
+        [pilotId]: { ...currentConfig, solo: false }
+      }));
+    } else {
+      // Set this pilot as solo, remove solo from others
+      setStreamConfigs(prev => {
+        const newConfigs = { ...prev };
+        Object.keys(newConfigs).forEach(id => {
+          if (newConfigs[id]) {
+            newConfigs[id] = { ...newConfigs[id], solo: false };
+          }
+        });
+        newConfigs[pilotId] = { ...getStreamConfig(pilotId), solo: true };
+        return newConfigs;
+      });
+    }
+  };
+
   const exportData = () => {
     const data = {
       pilots,
