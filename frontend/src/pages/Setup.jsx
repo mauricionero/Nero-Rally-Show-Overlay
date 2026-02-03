@@ -881,7 +881,7 @@ export default function Setup() {
                               <TableCell key={stage.id}>
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-1">
-                                    <span className="text-xs">🏁</span>
+                                    <span className="text-xs">🟢</span>
                                     <Input
                                       value={getStartTime(pilot.id, stage.id)}
                                       onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
@@ -892,23 +892,22 @@ export default function Setup() {
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <span className="text-xs">🏁</span>
-                                    <TimeInput
-                                      value={getArrivalTime(pilot.id, stage.id)}
-                                      onChange={(val) => handleArrivalTimeChange(pilot.id, stage.id, val)}
-                                      placeholder="HH:MM:SS.000"
-                                      className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7"
-                                      data-testid={`input-arrival-${pilot.id}-${stage.id}`}
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs">🏆</span>
-                                    <TimeInput
-                                      value={getTime(pilot.id, stage.id)}
-                                      onChange={(val) => handleTotalTimeChange(pilot.id, stage.id, val)}
-                                      placeholder="MM:SS.000"
-                                      className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7"
-                                      data-testid={`input-time-${pilot.id}-${stage.id}`}
-                                    />
+                                    <div className="flex gap-1 flex-1">
+                                      <TimeInput
+                                        value={getArrivalTime(pilot.id, stage.id)}
+                                        onChange={(val) => handleArrivalTimeChange(pilot.id, stage.id, val)}
+                                        placeholder="HH:MM:SS.000"
+                                        className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                                        data-testid={`input-arrival-${pilot.id}-${stage.id}`}
+                                      />
+                                      <TimeInput
+                                        value={getTime(pilot.id, stage.id)}
+                                        onChange={(val) => handleTotalTimeChange(pilot.id, stage.id, val)}
+                                        placeholder="MM:SS.000"
+                                        className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                                        data-testid={`input-time-${pilot.id}-${stage.id}`}
+                                      />
+                                    </div>
                                   </div>
                                 </div>
                               </TableCell>
