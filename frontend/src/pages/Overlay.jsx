@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
 import Scene1LiveStage from '../components/scenes/Scene1LiveStage.jsx';
 import Scene2TimingTower from '../components/scenes/Scene2TimingTower.jsx';
@@ -7,7 +7,8 @@ import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
 import Scene5SplitComparison from '../components/scenes/Scene5SplitComparison.jsx';
 
 export default function Overlay() {
-  const { chromaKey, currentScene, setCurrentScene } = useRally();
+  const { chromaKey, currentScene, setCurrentScene, lastUpdate } = useRally();
+  const [, forceUpdate] = useState();
 
   useEffect(() => {
     const handleKeyPress = (e) => {
