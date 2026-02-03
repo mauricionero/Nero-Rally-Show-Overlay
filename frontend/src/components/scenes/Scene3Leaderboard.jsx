@@ -244,7 +244,7 @@ export default function Scene3Leaderboard() {
                       </td>
                     )}
                     <td className="p-4 text-right">
-                      <span className="text-white text-xl font-mono" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      <span className={`text-xl font-mono ${!selectedStageId && pilot.timeColor ? pilot.timeColor : 'text-white'}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         {pilot.overallDisplay}
                       </span>
                     </td>
