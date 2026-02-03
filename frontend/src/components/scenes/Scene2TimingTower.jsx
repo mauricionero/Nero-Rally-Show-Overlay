@@ -3,15 +3,23 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
 
 export default function Scene2TimingTower() {
-  const { pilots, stages, times, startTimes, currentStageId } = useRally();
+  const { pilots, categories, stages, times, startTimes, currentStageId } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedPilotId, setSelectedPilotId] = useState(null);
   const currentStage = stages.find(s => s.id === currentStageId);
-  const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-select first active pilot
+  useEffect(() => {
+    if (!selectedPilotId) {
+      const activePilot = pilots.find(p => p.isActive && p.streamUrl);
+      if (activePilot) setSelectedPilotId(activePilot.id);
+    }
+  }, [pilots, selectedPilotId]);
 
   if (!currentStageId) {
     return (
