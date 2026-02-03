@@ -26,6 +26,19 @@ export default function Overlay() {
   const [showWsPanel, setShowWsPanel] = useState(false);
   const [wsKeyInput, setWsKeyInput] = useState('');
 
+  // Hide Emergent badge on Overlay page (for clean screen capture)
+  useEffect(() => {
+    const badge = document.getElementById('emergent-badge');
+    if (badge) {
+      badge.style.display = 'none';
+    }
+    return () => {
+      if (badge) {
+        badge.style.display = 'inline-flex';
+      }
+    };
+  }, []);
+
   // Initialize lastVersion
   useEffect(() => {
     if (lastVersion === null) {
