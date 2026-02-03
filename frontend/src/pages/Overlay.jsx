@@ -53,13 +53,44 @@ export default function Overlay() {
     }
   };
 
+  const scenes = [
+    { num: 1, name: 'Live Stage' },
+    { num: 2, name: 'Timing Tower' },
+    { num: 3, name: 'Leaderboard' },
+    { num: 4, name: 'Pilot Focus' },
+    { num: 5, name: 'SS Comparison' }
+  ];
+
   return (
     <div
       className="fixed inset-0 overflow-hidden"
       style={{ backgroundColor: chromaKey }}
       data-testid="overlay-container"
     >
-      {renderScene()}
+      {/* High Contrast Navigation Bar */}
+      <div className="absolute top-0 left-0 right-0 z-50 bg-black/95 border-b-2 border-[#FF4500] backdrop-blur-sm">
+        <div className="flex items-center justify-center gap-2 px-4 py-2">
+          {scenes.map((scene) => (
+            <button
+              key={scene.num}
+              onClick={() => setCurrentScene(scene.num)}
+              className={`px-4 py-1 rounded text-sm font-bold transition-all ${
+                currentScene === scene.num
+                  ? 'bg-[#FF4500] text-white'
+                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              }`}
+              style={{ fontFamily: 'Barlow Condensed, sans-serif' }}
+            >
+              <span className="text-[#FACC15]">{scene.num}</span> {scene.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Scene Content with top padding for nav bar */}
+      <div className="pt-12 h-full">
+        {renderScene()}
+      </div>
     </div>
   );
 }
