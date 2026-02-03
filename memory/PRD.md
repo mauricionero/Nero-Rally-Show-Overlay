@@ -104,6 +104,8 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] URL params for volume/mute (VDO.Ninja)
 - [x] Solo mode support
 - [x] Muted indicator overlay
+- [x] Global audio integration (master volume multiplier)
+- [x] VDO.Ninja `&meter=1` parameter support for built-in meters
 
 ---
 
