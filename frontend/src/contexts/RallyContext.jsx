@@ -346,6 +346,7 @@ export const RallyProvider = ({ children }) => {
     times,
     arrivalTimes,
     startTimes,
+    streamConfigs,
     currentStageId,
     chromaKey,
     currentScene,
@@ -369,6 +370,9 @@ export const RallyProvider = ({ children }) => {
     getArrivalTime,
     setStartTime,
     getStartTime,
+    getStreamConfig,
+    setStreamConfig,
+    setSoloStream,
     exportData,
     importData,
     clearAllData
