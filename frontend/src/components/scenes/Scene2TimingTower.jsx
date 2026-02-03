@@ -189,13 +189,11 @@ export default function Scene2TimingTower() {
           </div>
         ) : (
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-            <iframe
-              src={selectedPilot.streamUrl}
+            <StreamPlayer
+              pilotId={selectedPilot.id}
+              streamUrl={selectedPilot.streamUrl}
+              name={selectedPilot.name}
               className="w-full h-full"
-              frameBorder="0"
-              allow="autoplay; fullscreen"
-              allowFullScreen
-              title={selectedPilot.name}
             />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-4">
               <p className="text-white font-bold text-2xl uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
