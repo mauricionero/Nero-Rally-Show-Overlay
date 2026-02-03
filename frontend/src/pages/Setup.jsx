@@ -76,8 +76,12 @@ export default function Setup() {
       toast.error('Pilot name is required');
       return;
     }
-    addPilot(newPilot);
-    setNewPilot({ name: '', picture: '', streamUrl: '' });
+    const pilotData = {
+      ...newPilot,
+      startOrder: parseInt(newPilot.startOrder) || 999
+    };
+    addPilot(pilotData);
+    setNewPilot({ name: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
     toast.success('Pilot added successfully');
   };
 
@@ -86,10 +90,35 @@ export default function Setup() {
       toast.error('Pilot name is required');
       return;
     }
-    updatePilot(editingPilot.id, editingPilot);
+    const pilotData = {
+      ...editingPilot,
+      startOrder: parseInt(editingPilot.startOrder) || 999
+    };
+    updatePilot(editingPilot.id, pilotData);
     setEditingPilot(null);
     setPilotDialogOpen(false);
     toast.success('Pilot updated successfully');
+  };
+
+  const handleAddCategory = () => {
+    if (!newCategory.name.trim()) {
+      toast.error('Category name is required');
+      return;
+    }
+    addCategory(newCategory);
+    setNewCategory({ name: '', color: '#FF4500' });
+    toast.success('Category added successfully');
+  };
+
+  const handleUpdateCategory = () => {
+    if (!editingCategory.name.trim()) {
+      toast.error('Category name is required');
+      return;
+    }
+    updateCategory(editingCategory.id, editingCategory);
+    setEditingCategory(null);
+    setCategoryDialogOpen(false);
+    toast.success('Category updated successfully');
   };
 
   const handleAddStage = () => {
