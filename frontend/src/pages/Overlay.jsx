@@ -4,12 +4,27 @@ import Scene1LiveStage from '../components/scenes/Scene1LiveStage.jsx';
 import Scene2TimingTower from '../components/scenes/Scene2TimingTower.jsx';
 import Scene3Leaderboard from '../components/scenes/Scene3Leaderboard.jsx';
 import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Wifi, WifiOff, X } from 'lucide-react';
 
 export default function Overlay() {
-  const { chromaKey, currentScene, setCurrentScene, dataVersion } = useRally();
+  const { 
+    chromaKey, 
+    currentScene, 
+    setCurrentScene, 
+    dataVersion,
+    wsEnabled,
+    wsConnectionStatus,
+    wsError,
+    connectWebSocket,
+    disconnectWebSocket
+  } = useRally();
   const [lastVersion, setLastVersion] = useState(null);
   const [heartbeatStatus, setHeartbeatStatus] = useState('normal');
   const [leftZoneWidth, setLeftZoneWidth] = useState(256);
+  const [showWsPanel, setShowWsPanel] = useState(false);
+  const [wsKeyInput, setWsKeyInput] = useState('');
 
   // Initialize lastVersion
   useEffect(() => {
