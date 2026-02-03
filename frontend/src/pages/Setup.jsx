@@ -11,6 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Switch } from '../components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
 import { TimeInput } from '../components/TimeInput.jsx';
+import { StreamThumbnail } from '../components/StreamThumbnail.jsx';
+import { CategoryBar } from '../components/CategoryBadge.jsx';
+import { arrivalTimeToTotal, totalTimeToArrival } from '../utils/timeConversion';
 import { toast } from 'sonner';
 import { Trash2, Plus, Play, Upload, Download, Palette, Edit } from 'lucide-react';
 
