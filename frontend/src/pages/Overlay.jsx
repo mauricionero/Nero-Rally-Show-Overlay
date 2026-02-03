@@ -117,11 +117,15 @@ export default function Overlay() {
         </div>
       </div>
 
-      <div className="absolute left-0 top-12 bottom-0 w-64 bg-black/95 border-r-2 border-[#FF4500] backdrop-blur-sm z-40 p-4 overflow-y-auto" id="left-controls">
+      <div 
+        className="absolute left-0 top-12 bottom-0 bg-black/95 border-r-2 border-[#FF4500] backdrop-blur-sm z-40 p-4 overflow-y-auto resize-x"
+        style={{ width: `${leftZoneWidth}px`, minWidth: '200px', maxWidth: '400px' }}
+        id="left-controls"
+      >
         {/* Controls will be injected here by individual scenes */}
       </div>
 
-      <div className="pt-12 pl-64 h-full">
+      <div className="pt-12 h-full transition-all" style={{ paddingLeft: `${leftZoneWidth}px` }}>
         {renderScene()}
       </div>
     </div>
