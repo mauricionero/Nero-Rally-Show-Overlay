@@ -65,7 +65,15 @@ export default function Setup() {
     setSoloStream,
     exportData,
     importData,
-    clearAllData
+    clearAllData,
+    // WebSocket
+    wsEnabled,
+    wsChannelKey,
+    wsConnectionStatus,
+    wsError,
+    connectWebSocket,
+    disconnectWebSocket,
+    generateNewChannelKey
   } = useRally();
 
   const [newPilot, setNewPilot] = useState({ name: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
