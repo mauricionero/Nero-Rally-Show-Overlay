@@ -32,29 +32,45 @@ export const RallyProvider = ({ children }) => {
   const [currentScene, setCurrentScene] = useState(1);
   const [dataVersion, setDataVersion] = useState(() => loadFromStorage('rally_data_version', Date.now()));
 
+  const updateDataVersion = () => {
+    const newVersion = Date.now();
+    setDataVersion(newVersion);
+    localStorage.setItem('rally_data_version', JSON.stringify(newVersion));
+  };
+
   useEffect(() => {
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
-    setLastUpdate(Date.now());
+    updateDataVersion();
   }, [pilots]);
 
   useEffect(() => {
+    localStorage.setItem('rally_categories', JSON.stringify(categories));
+    updateDataVersion();
+  }, [categories]);
+
+  useEffect(() => {
     localStorage.setItem('rally_stages', JSON.stringify(stages));
-    setLastUpdate(Date.now());
+    updateDataVersion();
   }, [stages]);
 
   useEffect(() => {
     localStorage.setItem('rally_times', JSON.stringify(times));
-    setLastUpdate(Date.now());
+    updateDataVersion();
   }, [times]);
 
   useEffect(() => {
+    localStorage.setItem('rally_arrival_times', JSON.stringify(arrivalTimes));
+    updateDataVersion();
+  }, [arrivalTimes]);
+
+  useEffect(() => {
     localStorage.setItem('rally_start_times', JSON.stringify(startTimes));
-    setLastUpdate(Date.now());
+    updateDataVersion();
   }, [startTimes]);
 
   useEffect(() => {
     localStorage.setItem('rally_current_stage', JSON.stringify(currentStageId));
-    setLastUpdate(Date.now());
+    updateDataVersion();
   }, [currentStageId]);
 
   useEffect(() => {
