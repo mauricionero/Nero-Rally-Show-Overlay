@@ -22,13 +22,17 @@ export default function Scene1LiveStage() {
   const [selectedPilotIds, setSelectedPilotIds] = useState([]);
   const [bottomScroll, setBottomScroll] = useState(0);
   const [maxScroll, setMaxScroll] = useState(0);
-  const bottomContainerRef = React.useRef(null);
+  const bottomContainerRef = useRef(null);
   const currentStage = stages.find(s => s.id === currentStageId);
   
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
     return () => clearInterval(interval);
   }, []);
+
+  const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
+  const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
+  const sortedAllPilots = currentStageId ? sortPilotsByStatus(pilots, currentStageId, startTimes, times) : pilots;
 
   // Calculate max scroll based on content width
   useEffect(() => {
@@ -39,10 +43,6 @@ export default function Scene1LiveStage() {
       setMaxScroll(Math.max(0, scrollWidth - clientWidth));
     }
   }, [sortedAllPilots]);
-
-  const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
-  const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
-  const sortedAllPilots = currentStageId ? sortPilotsByStatus(pilots, currentStageId, startTimes, times) : pilots;
   
   // Auto-select active pilots up to layout slots
   useEffect(() => {
