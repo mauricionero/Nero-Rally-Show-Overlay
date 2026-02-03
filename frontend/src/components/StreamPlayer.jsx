@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
 
 export const StreamPlayer = ({ 
@@ -7,9 +7,10 @@ export const StreamPlayer = ({
   name, 
   className = '', 
   showControls = false,
+  showMeter = false, // Show VDO.Ninja built-in audio meter
   size = 'normal' // 'small', 'normal', 'large'
 }) => {
-  const { getStreamConfig, streamConfigs } = useRally();
+  const { getStreamConfig, streamConfigs, globalAudio } = useRally();
   const iframeRef = useRef(null);
   
   // Get the current stream config
@@ -17,7 +18,10 @@ export const StreamPlayer = ({
   
   // Check if any other stream is solo'd
   const hasSoloStream = Object.values(streamConfigs).some(c => c?.solo);
-  const isEffectivelyMuted = config.muted || (hasSoloStream && !config.solo);
+  const isEffectivelyMuted = config.muted || globalAudio.muted || (hasSoloStream && !config.solo);
+  
+  // Calculate effective volume (individual * global)
+  const effectiveVolume = Math.round((config.volume / 100) * (globalAudio.volume / 100) * 100);
   
   // Build CSS filter string for video adjustments
   const filterStyle = {
@@ -35,13 +39,24 @@ export const StreamPlayer = ({
   }
 
   // VDO.Ninja URL params for audio control
-  const urlWithParams = new URL(streamUrl);
+  let urlWithParams;
+  try {
+    urlWithParams = new URL(streamUrl);
+  } catch {
+    // If URL is invalid, use as-is
+    urlWithParams = { toString: () => streamUrl, searchParams: { set: () => {} } };
+  }
+  
   if (isEffectivelyMuted) {
     urlWithParams.searchParams.set('muted', '1');
+  } else {
+    // Volume: VDO.Ninja uses 'volume' param (0-100)
+    urlWithParams.searchParams.set('volume', effectiveVolume.toString());
   }
-  // Volume: VDO.Ninja uses 'volume' param (0-100)
-  if (!isEffectivelyMuted) {
-    urlWithParams.searchParams.set('volume', config.volume.toString());
+  
+  // Add meter parameter for audio visualization (VDO.Ninja feature)
+  if (showMeter) {
+    urlWithParams.searchParams.set('meter', '1');
   }
 
   return (
