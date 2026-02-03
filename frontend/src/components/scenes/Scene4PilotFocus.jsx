@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRally } from '../../contexts/RallyContext';
+import { useRally } from '../../contexts/RallyContext.jsx';
 
 export default function Scene4PilotFocus() {
   const { pilots, stages, times } = useRally();
