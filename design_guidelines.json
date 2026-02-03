@@ -1,0 +1,187 @@
+{
+  "identity": {
+    "name": "E1",
+    "archetype": "The Performance Pro",
+    "mission": "Create a high-octane, broadcast-grade rally interface that balances raw data density with TV-ready aesthetics.",
+    "core_principles": [
+      "Speed is Clarity: Data must be readable at 200km/h.",
+      "Contrast is King: UI must pop against unpredictable video feeds and chroma backgrounds.",
+      "Monospace for Metrics: All timing data must use tabular figures for perfect vertical alignment.",
+      "The Grid is Sacred: Every element aligns to a strict broadcast safe-zone grid."
+    ]
+  },
+  "typography": {
+    "headings": {
+      "family": "Barlow Condensed",
+      "weights": ["700", "800"],
+      "usage": "Stage names, Driver names, Scene titles",
+      "letter_spacing": "tracking-tighter",
+      "transform": "uppercase"
+    },
+    "body": {
+      "family": "Inter",
+      "weights": ["400", "500"],
+      "usage": "UI labels, settings text, instructions"
+    },
+    "data": {
+      "family": "JetBrains Mono",
+      "weights": ["500", "700"],
+      "usage": "Lap times, Split times, Leaderboard positions, Stream URLs",
+      "features": "tabular-nums"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": "#FF4500",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#18181B",
+      "secondary_foreground": "#FFFFFF",
+      "accent": "#FACC15",
+      "background": "#09090B",
+      "surface": "#18181B",
+      "border": "#27272A",
+      "success": "#22C55E",
+      "danger": "#EF4444"
+    },
+    "chroma_keys": {
+      "green": "#00B140",
+      "blue": "#0047BB",
+      "black": "#000000",
+      "custom": "user-defined"
+    },
+    "overlay_ui": {
+      "bg_panel": "rgba(9, 9, 11, 0.95)",
+      "text_high": "#FFFFFF",
+      "text_muted": "#A1A1AA",
+      "border_highlight": "#FF4500"
+    }
+  },
+  "visual_enhancers": {
+    "borders": "1px solid rgba(255, 255, 255, 0.1)",
+    "shadows": "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
+    "corners": "rounded-none",
+    "textures": "Subtle carbon fiber pattern or diagonal scanlines on dark surfaces (optional)",
+    "gradients": "None. Flat, solid colors for maximum readability."
+  },
+  "layout_strategy": {
+    "setup_page": {
+      "type": "Bento Grid (Dense)",
+      "grid_cols": "12",
+      "gap": "4",
+      "container": "max-w-[1600px] mx-auto p-6",
+      "sections": {
+        "sidebar": "col-span-2 h-full sticky top-0",
+        "main_content": "col-span-10 space-y-6"
+      }
+    },
+    "overlay_page": {
+      "type": "Broadcast HUD",
+      "positioning": "absolute",
+      "safe_zone": "inset-8",
+      "z_index": {
+        "background": "0",
+        "streams": "10",
+        "graphics": "20",
+        "alerts": "30"
+      }
+    }
+  },
+  "components": {
+    "StreamContainer": {
+      "style": "aspect-video bg-black relative overflow-hidden border-2 border-transparent data-[active=true]:border-primary",
+      "features": "iframe-full-size, absolute-label-bottom-left"
+    },
+    "TimingTable": {
+      "style": "w-full text-sm border-collapse",
+      "header": "bg-secondary text-secondary-foreground uppercase tracking-wider font-bold",
+      "row": "even:bg-white/5 odd:bg-transparent hover:bg-white/10 transition-colors",
+      "cell": "p-2 border-b border-white/10 font-mono"
+    },
+    "SceneSelector": {
+      "style": "flex gap-2 p-2 bg-secondary/50 backdrop-blur-sm rounded-lg border border-white/10",
+      "item": "px-4 py-2 text-sm font-bold uppercase hover:bg-primary hover:text-white transition-all data-[state=active]:bg-primary data-[state=active]:text-white"
+    },
+    "ChromaBackground": {
+      "style": "fixed inset-0 -z-10 transition-colors duration-300"
+    }
+  },
+  "scenes": {
+    "Scene 1 (Live Stage)": {
+      "layout": "Grid of active streams (1x1, 2x2, or custom grid)",
+      "overlay": "Lower third showing Current SS Name + Stage Distance"
+    },
+    "Scene 2 (Timing Tower)": {
+      "layout": "Split Screen: Left 25% Timing Tower (Vertical List), Right 75% Main Stream or Grid",
+      "data": "Rank, Driver Name, Split Time, Gap to Leader"
+    },
+    "Scene 3 (Leaderboard)": {
+      "layout": "Full Screen Table (centered)",
+      "style": "High density, showing all registered times for current SS"
+    },
+    "Scene 4 (Pilot Focus)": {
+      "layout": "Single large stream + Stats Panel (Right side)",
+      "stats": "Driver Photo, Car Model, Team, Current Stage Time"
+    },
+    "Scene 5 (Split Comparison)": {
+      "layout": "Horizontal Bar Chart comparison of top drivers"
+    }
+  },
+  "motion": {
+    "type": "Broadcast Snap",
+    "duration": "200ms",
+    "easing": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "transitions": {
+      "scene_switch": "No fade. Instant cut or fast slide.",
+      "data_update": "Flash highlight (bg-white/20) on value change."
+    }
+  },
+  "assets": {
+    "fonts": [
+      "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap"
+    ],
+    "icons": "lucide-react",
+    "images": {
+      "drivers": [
+        "https://images.unsplash.com/photo-1762013525647-2be10267dbf8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxyYWxseSUyMGRyaXZlciUyMHBvcnRyYWl0JTIwaGVsbWV0fGVufDB8fHx8MTc3MDExOTQ2OHww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1719895040575-c195ecb7b729?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwyfHxyYWxseSUyMGRyaXZlciUyMHBvcnRyYWl0JTIwaGVsbWV0fGVufDB8fHx8MTc3MDExOTQ2OHww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1590093105704-fddd246ab64f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwzfHxyYWxseSUyMGRyaXZlciUyMHBvcnRyYWl0JTIwaGVsbWV0fGVufDB8fHx8MTc3MDExOTQ2OHww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1711356026974-d233a588e365?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHw0fHxyYWxseSUyMGRyaXZlciUyMHBvcnRyYWl0JTIwaGVsbWV0fGVufDB8fHx8MTc3MDExOTQ2OHww&ixlib=rb-4.1.0&q=85"
+      ],
+      "cars": [
+        "https://images.unsplash.com/photo-1769348900282-f3b652f7db50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxyYWxseSUyMGNhciUyMGFjdGlvbiUyMGRpcnR8ZW58MHx8fHwxNzcwMTE5NDcyfDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1769970100816-087ec8179cc2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwyfHxyYWxseSUyMGNhciUyMGFjdGlvbiUyMGRpcnR8ZW58MHx8fHwxNzcwMTE5NDcyfDA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1764506358856-5d2057bb8f49?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwzfHxyYWxseSUyMGNhciUyMGFjdGlvbiUyMGRpcnR8ZW58MHx8fHwxNzcwMTE5NDcyfDA&ixlib=rb-4.1.0&q=85"
+      ]
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP PAGE: Build a dense, data-heavy dashboard. Use Shadcn Tables for the Time Matrix. Use Shadcn Forms for Pilot/SS registration.",
+    "2. OVERLAY PAGE: This is a separate route (e.g., /overlay). It must have NO padding, NO margins on the body. It must be full viewport.",
+    "3. CHROMA KEY: The background of the /overlay route must be dynamically set by the user's choice (Green/Blue/Black).",
+    "4. STREAMS: Use <iframe> for ninja.vdo URLs. Ensure they are muted by default if multiple are active.",
+    "5. KEYBOARD SHORTCUTS: Implement a global listener for scene switching (Keys 1-5).",
+    "6. DATA PERSISTENCE: Use localStorage to save the entire state (pilots, stages, times, settings). Implement 'Export JSON' and 'Import JSON' buttons.",
+    "7. STYLE: Use 'Barlow Condensed' for all headers. It gives the WRC look immediately.",
+    "8. TESTING: Add data-testid to all inputs and scene selectors."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯📚🎭🎬🎪🎉🎊🎁🎀🎂🍰🎈🎨🎰💰💵💳🏦💎🪙💸🤑📊📈📉💹🔢🏆🥇 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Create new components that match the style and conventions of existing components when needed",
+    "Examine existing components to understand the project's component patterns before creating new ones",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use sonner for toasts. Sonner component are located in /app/src/components/ui/sonner.tsx"
+  ]
+}
