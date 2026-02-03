@@ -376,25 +376,26 @@ export default function Setup() {
             </Card>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pilots.map((pilot) => (
-                <Card key={pilot.id} className="bg-[#18181B] border-zinc-800" data-testid={`pilot-card-${pilot.id}`}>
+              {sortedPilots.map((pilot) => (
+                <Card key={pilot.id} className="bg-[#18181B] border-zinc-800 relative" data-testid={`pilot-card-${pilot.id}`}>
+                  <CategoryBar categoryId={pilot.categoryId} />
                   <CardContent className="pt-6">
                     <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 rounded bg-zinc-900 overflow-hidden flex-shrink-0">
-                        {pilot.picture ? (
-                          <img src={pilot.picture} alt={pilot.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-zinc-600">
-                            {pilot.name.charAt(0)}
-                          </div>
-                        )}
-                      </div>
+                      <StreamThumbnail
+                        streamUrl={pilot.streamUrl}
+                        name={pilot.name}
+                        showAlways={true}
+                        className="w-16 h-16 rounded"
+                      />
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          {pilot.name}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-zinc-500 text-sm">#{pilot.startOrder || '?'}</span>
+                          <h3 className="font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                            {pilot.name}
+                          </h3>
+                        </div>
                         {pilot.streamUrl && (
-                          <p className="text-xs text-zinc-500 truncate font-mono">{pilot.streamUrl}</p>
+                          <p className="text-xs text-zinc-500 truncate font-mono mt-1">{pilot.streamUrl}</p>
                         )}
                         <div className="flex items-center gap-2 mt-2">
                           <Switch
@@ -402,7 +403,7 @@ export default function Setup() {
                             onCheckedChange={() => togglePilotActive(pilot.id)}
                             data-testid={`switch-pilot-active-${pilot.id}`}
                           />
-                          <span className="text-sm text-white">{pilot.isActive ? 'Active Stream' : 'Inactive Stream'}</span>
+                          <span className="text-sm text-white">📹 {pilot.isActive ? 'Stream Active' : 'Stream Inactive'}</span>
                         </div>
                       </div>
                       <div className="flex gap-1">
