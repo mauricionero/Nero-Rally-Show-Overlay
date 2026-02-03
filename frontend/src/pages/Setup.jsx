@@ -287,10 +287,11 @@ export default function Setup() {
 
         <Tabs defaultValue="pilots" className="space-y-6">
           <TabsList className="bg-[#18181B] border border-zinc-800">
-            <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">Pilots</TabsTrigger>
-            <TabsTrigger value="stages" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-stages">Stages</TabsTrigger>
-            <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">Times</TabsTrigger>
-            <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">Config</TabsTrigger>
+            <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">👤 Pilots</TabsTrigger>
+            <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">🏷️ Categories</TabsTrigger>
+            <TabsTrigger value="stages" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-stages">📍 Stages</TabsTrigger>
+            <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">⏱️ Times</TabsTrigger>
+            <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">⚙️ Config</TabsTrigger>
           </TabsList>
 
           {/* Pilots Tab */}
