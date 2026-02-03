@@ -160,25 +160,25 @@ export default function Scene2TimingTower() {
 
       {/* Right Side - Stream */}
       <div className="flex-1 p-8">
-        {activePilots.length === 0 ? (
+        {!selectedPilot || !selectedPilot.streamUrl ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              No Active Streams
+              {selectedPilot ? 'No Stream Available' : 'Select a Pilot'}
             </p>
           </div>
         ) : (
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
             <iframe
-              src={activePilots[0].streamUrl}
+              src={selectedPilot.streamUrl}
               className="w-full h-full"
               frameBorder="0"
               allow="autoplay; fullscreen"
               allowFullScreen
-              title={activePilots[0].name}
+              title={selectedPilot.name}
             />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-4">
               <p className="text-white font-bold text-2xl uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                {activePilots[0].name}
+                {selectedPilot.name}
               </p>
             </div>
           </div>
