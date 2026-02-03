@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
+import { useSearchParams } from 'react-router-dom';
 import Scene1LiveStage from '../components/scenes/Scene1LiveStage.jsx';
 import Scene2TimingTower from '../components/scenes/Scene2TimingTower.jsx';
 import Scene3Leaderboard from '../components/scenes/Scene3Leaderboard.jsx';
@@ -9,6 +10,7 @@ import { Button } from '../components/ui/button';
 import { Wifi, WifiOff, X } from 'lucide-react';
 
 export default function Overlay() {
+  const [searchParams] = useSearchParams();
   const { 
     chromaKey, 
     currentScene, 
@@ -25,6 +27,19 @@ export default function Overlay() {
   const [leftZoneWidth, setLeftZoneWidth] = useState(256);
   const [showWsPanel, setShowWsPanel] = useState(false);
   const [wsKeyInput, setWsKeyInput] = useState('');
+  const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
+
+  // Auto-connect if WebSocket key is in URL
+  useEffect(() => {
+    if (autoConnectAttempted) return;
+    
+    const wsKey = searchParams.get('ws');
+    if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
+      setAutoConnectAttempted(true);
+      console.log('[Overlay] Auto-connecting with URL key:', wsKey);
+      connectWebSocket(wsKey);
+    }
+  }, [searchParams, wsConnectionStatus, connectWebSocket, autoConnectAttempted]);
 
   // Hide Emergent badge on Overlay page (for clean screen capture)
   useEffect(() => {
