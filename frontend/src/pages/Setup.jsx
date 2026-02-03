@@ -863,7 +863,7 @@ export default function Setup() {
                           {sortedStages.map((stage) => (
                             <TableHead key={stage.id} className="bg-[#18181B] text-white uppercase font-bold text-center" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               <div>{stage.ssNumber ? `📍 SS${stage.ssNumber}` : stage.name}</div>
-                              <div className="text-xs text-zinc-400 font-normal">🏁 Start / 🏁 Arrival / 🏆 Total</div>
+                              <div className="text-xs text-zinc-400 font-normal">🟢 Start / 🏁 Arrival  / 🏁 Total</div>
                             </TableHead>
                           ))}
                         </TableRow>
