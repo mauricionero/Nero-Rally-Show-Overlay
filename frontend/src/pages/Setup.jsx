@@ -17,7 +17,7 @@ import { CategoryBar } from '../components/CategoryBadge.jsx';
 import { AudioMeter, GlobalAudioMeter } from '../components/AudioMeter.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../utils/timeConversion';
 import { toast } from 'sonner';
-import { Trash2, Plus, Play, Upload, Download, Palette, Edit, Volume2, VolumeX, Headphones } from 'lucide-react';
+import { Trash2, Plus, Play, Upload, Download, Palette, Edit, Volume2, VolumeX, Headphones, Wifi, WifiOff, Copy, Check } from 'lucide-react';
 import { Slider } from '../components/ui/slider';
 
 const CHROMA_PRESETS = [
