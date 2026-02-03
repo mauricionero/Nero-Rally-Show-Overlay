@@ -216,11 +216,14 @@ export const RallyProvider = ({ children }) => {
   const exportData = () => {
     const data = {
       pilots,
+      categories,
       stages,
       times,
+      arrivalTimes,
       startTimes,
       currentStageId,
       chromaKey,
+      dataVersion,
       exportDate: new Date().toISOString()
     };
     return JSON.stringify(data, null, 2);
@@ -230,11 +233,14 @@ export const RallyProvider = ({ children }) => {
     try {
       const data = JSON.parse(jsonString);
       if (data.pilots) setPilots(data.pilots);
+      if (data.categories) setCategories(data.categories);
       if (data.stages) setStages(data.stages);
       if (data.times) setTimes(data.times);
+      if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
       if (data.startTimes) setStartTimes(data.startTimes);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
+      updateDataVersion();
       return true;
     } catch (error) {
       console.error('Error importing data:', error);
@@ -244,11 +250,14 @@ export const RallyProvider = ({ children }) => {
 
   const clearAllData = () => {
     setPilots([]);
+    setCategories([]);
     setStages([]);
     setTimes({});
+    setArrivalTimes({});
     setStartTimes({});
     setCurrentStageId(null);
-    setChromaKey('#00B140');
+    setChromaKey('#000000');
+    updateDataVersion();
   };
 
   const value = {
