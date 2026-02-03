@@ -67,7 +67,43 @@ export default function Scene4PilotFocus() {
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-4-pilot-focus">
-      {/* Left Side - Stream */}
+      <LeftControls>
+        <div className="space-y-4">
+          <div>
+            <Label className="text-white text-xs uppercase mb-2 block">Select Pilot</Label>
+            <Select value={selectedPilotId} onValueChange={setSelectedPilotId}>
+              <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pilots.map((pilot) => (
+                  <SelectItem key={pilot.id} value={pilot.id}>
+                    {pilot.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-white text-xs uppercase mb-2 block">Select Stage</Label>
+            <Select value={selectedStageId} onValueChange={setSelectedStageId}>
+              <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {stages.map((stage) => (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    {stage.ssNumber ? `SS${stage.ssNumber}` : stage.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </LeftControls>
+
+      {/* Stream Display */}
       <div className="flex-1 p-8">
         {focusPilot.streamUrl ? (
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
