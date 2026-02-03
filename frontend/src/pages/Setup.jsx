@@ -175,6 +175,42 @@ export default function Setup() {
     toast.success('Overlay page opened in new tab');
   };
 
+  const handleArrivalTimeChange = (pilotId, stageId, value) => {
+    setArrivalTime(pilotId, stageId, value);
+    const startTime = getStartTime(pilotId, stageId);
+    if (startTime && value) {
+      const totalTime = arrivalTimeToTotal(value, startTime);
+      if (totalTime) {
+        setTime(pilotId, stageId, totalTime);
+      }
+    }
+  };
+
+  const handleTotalTimeChange = (pilotId, stageId, value) => {
+    setTime(pilotId, stageId, value);
+    const startTime = getStartTime(pilotId, stageId);
+    if (startTime && value) {
+      const arrivalTime = totalTimeToArrival(value, startTime);
+      if (arrivalTime) {
+        setArrivalTime(pilotId, stageId, arrivalTime);
+      }
+    }
+  };
+
+  // Sort pilots by start order
+  const sortedPilots = [...pilots].sort((a, b) => {
+    const orderA = a.startOrder || 999;
+    const orderB = b.startOrder || 999;
+    return orderA - orderB;
+  });
+
+  // Sort stages by start time
+  const sortedStages = [...stages].sort((a, b) => {
+    if (!a.startTime) return 1;
+    if (!b.startTime) return -1;
+    return a.startTime.localeCompare(b.startTime);
+  });
+
   const activePilots = pilots.filter(p => p.isActive);
   const currentStage = stages.find(s => s.id === currentStageId);
 
