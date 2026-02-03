@@ -63,7 +63,6 @@ export default function Scene1LiveStage() {
   };
 
   const displayPilots = selectedPilotIds.map(id => pilots.find(p => p.id === id)).filter(Boolean);
-  const sortedAllPilots = currentStageId ? sortPilotsByStatus(pilots, currentStageId, startTimes, times) : pilots;
 
   const getGridClass = () => {
     return `grid-cols-${layout.cols} grid-rows-${layout.rows}`;
