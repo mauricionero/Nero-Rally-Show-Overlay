@@ -40,6 +40,9 @@ export default function Scene2TimingTower() {
   const renderPilotRow = (pilot, index, status) => {
     const startTime = startTimes[pilot.id]?.[currentStageId];
     const finishTime = times[pilot.id]?.[currentStageId];
+    const category = categories.find(c => c.id === pilot.categoryId);
+    const isSelected = pilot.id === selectedPilotId;
+    
     let displayTime = '-';
     let gap = '';
 
@@ -56,11 +59,19 @@ export default function Scene2TimingTower() {
       displayTime = 'Start: ' + startTime;
     }
 
+    const statusColor = status === 'racing' ? 'border-[#FF8C00]' : status === 'finished' ? 'border-[#1a5f1a]' : 'border-zinc-700';
+
     return (
       <div
         key={pilot.id}
-        className="bg-white/5 border border-white/10 p-3 hover:bg-white/10 transition-colors">
-        <div className="flex items-center gap-3">
+        onClick={() => pilot.streamUrl && setSelectedPilotId(pilot.id)}
+        className={`relative bg-white/5 border-2 ${statusColor} p-3 transition-all ${
+          pilot.streamUrl ? 'cursor-pointer hover:bg-white/10' : ''
+        } ${isSelected ? 'ml-4 border-[#FF4500] bg-white/15' : ''}`}>
+        {category && (
+          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
+        )}
+        <div className="flex items-center gap-3 pl-2">
           <div className="w-8 text-center">
             <span className={`text-xl font-bold ${
               status === 'racing' ? 'text-[#FACC15]' : 
@@ -93,6 +104,8 @@ export default function Scene2TimingTower() {
       </div>
     );
   };
+
+  const selectedPilot = pilots.find(p => p.id === selectedPilotId);
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-2-timing-tower">
