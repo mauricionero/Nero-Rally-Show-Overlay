@@ -78,13 +78,11 @@ export default function Scene2TimingTower() {
           {/* Small embedded stream or avatar/initials */}
           {pilot.streamUrl ? (
             <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0 border border-zinc-700">
-              <iframe
-                src={pilot.streamUrl}
+              <StreamPlayer
+                pilotId={pilot.id}
+                streamUrl={pilot.streamUrl}
+                name={pilot.name}
                 className="w-full h-full"
-                frameBorder="0"
-                allow="autoplay"
-                title={`${pilot.name}-small`}
-                style={{ pointerEvents: 'none' }}
               />
             </div>
           ) : pilot.picture ? (
