@@ -7,9 +7,16 @@ import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
 
 export default function Overlay() {
   const { chromaKey, currentScene, setCurrentScene, dataVersion } = useRally();
-  const [lastVersion, setLastVersion] = useState(dataVersion);
+  const [lastVersion, setLastVersion] = useState(null);
   const [heartbeatStatus, setHeartbeatStatus] = useState('normal');
-  const [, forceUpdate] = useState({});
+  const [leftZoneWidth, setLeftZoneWidth] = useState(256);
+
+  // Initialize lastVersion
+  useEffect(() => {
+    if (lastVersion === null) {
+      setLastVersion(dataVersion);
+    }
+  }, [dataVersion, lastVersion]);
 
   useEffect(() => {
     const handleKeyPress = (e) => {
