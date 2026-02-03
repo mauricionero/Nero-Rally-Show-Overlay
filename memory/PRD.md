@@ -45,6 +45,7 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - `rally_times` - Object mapping pilotId -> stageId -> time
 - `rally_start_times` - Object mapping pilotId -> stageId -> start time
 - `rally_stream_configs` - Object mapping pilotId -> stream config (volume, mute, solo, saturation, contrast, brightness)
+- `rally_global_audio` - Object with global audio settings { volume, muted }
 - `rally_data_version` - Timestamp for heartbeat sync
 
 ---
