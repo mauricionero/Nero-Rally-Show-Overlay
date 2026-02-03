@@ -132,18 +132,101 @@ export default function Overlay() {
           </div>
           
           <div className="flex items-center gap-2">
+            {/* WebSocket Status/Button */}
+            <button
+              onClick={() => setShowWsPanel(!showWsPanel)}
+              className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all ${
+                wsConnectionStatus === 'connected'
+                  ? 'bg-[#22C55E]/20 text-[#22C55E] border border-[#22C55E]/50'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
+              data-testid="ws-status-button"
+            >
+              {wsConnectionStatus === 'connected' ? (
+                <>
+                  <Wifi className="w-3 h-3" />
+                  <span>Live</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3 h-3" />
+                  <span>Connect</span>
+                </>
+              )}
+            </button>
+            
+            {/* Heartbeat indicator */}
             <div 
               className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                wsConnectionStatus === 'connected' ? 'bg-[#22C55E]' :
                 heartbeatStatus === 'checking' ? 'bg-[#22C55E] animate-pulse' :
                 heartbeatStatus === 'changed' ? 'bg-[#FF4500] animate-pulse' :
                 'bg-zinc-700'
               }`}
             />
             <span className="text-xs text-zinc-500">
-              {heartbeatStatus === 'changed' ? 'Updated' : 'Live'}
+              {wsConnectionStatus === 'connected' ? 'WebSocket' :
+               heartbeatStatus === 'changed' ? 'Updated' : 'Local'}
             </span>
           </div>
         </div>
+        
+        {/* WebSocket Connection Panel */}
+        {showWsPanel && (
+          <div className="absolute top-full right-4 mt-2 p-4 bg-[#18181B] border border-zinc-700 rounded-lg shadow-xl z-50 w-80">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-bold text-sm">WebSocket Connection</h3>
+              <button onClick={() => setShowWsPanel(false)} className="text-zinc-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            {wsConnectionStatus === 'connected' ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-[#22C55E] text-sm">
+                  <Wifi className="w-4 h-4" />
+                  <span>Connected to live sync</span>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    disconnectWebSocket();
+                    setShowWsPanel(false);
+                  }}
+                >
+                  Disconnect
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-zinc-400 text-xs">
+                  Paste the key from the Setup page to receive live updates:
+                </p>
+                <Input
+                  value={wsKeyInput}
+                  onChange={(e) => setWsKeyInput(e.target.value)}
+                  placeholder="1-XXXXXXXX"
+                  className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
+                  data-testid="ws-key-input"
+                />
+                {wsError && (
+                  <p className="text-red-400 text-xs">{wsError}</p>
+                )}
+                <Button
+                  className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
+                  size="sm"
+                  onClick={handleWsConnect}
+                  disabled={wsConnectionStatus === 'connecting' || !wsKeyInput.trim()}
+                  data-testid="ws-connect-button"
+                >
+                  {wsConnectionStatus === 'connecting' ? 'Connecting...' : 'Connect'}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div 
