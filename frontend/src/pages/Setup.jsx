@@ -29,8 +29,10 @@ export default function Setup() {
   const navigate = useNavigate();
   const {
     pilots,
+    categories,
     stages,
     times,
+    arrivalTimes,
     startTimes,
     currentStageId,
     chromaKey,
@@ -40,11 +42,16 @@ export default function Setup() {
     updatePilot,
     deletePilot,
     togglePilotActive,
+    addCategory,
+    updateCategory,
+    deleteCategory,
     addStage,
     updateStage,
     deleteStage,
     setTime,
     getTime,
+    setArrivalTime,
+    getArrivalTime,
     setStartTime,
     getStartTime,
     exportData,
@@ -52,12 +59,15 @@ export default function Setup() {
     clearAllData
   } = useRally();
 
-  const [newPilot, setNewPilot] = useState({ name: '', picture: '', streamUrl: '' });
+  const [newPilot, setNewPilot] = useState({ name: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
+  const [newCategory, setNewCategory] = useState({ name: '', color: '#FF4500' });
   const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', startTime: '' });
-  const [customChroma, setCustomChroma] = useState('#00B140');
+  const [customChroma, setCustomChroma] = useState('#000000');
   const [editingPilot, setEditingPilot] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [editingStage, setEditingStage] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const fileInputRef = useRef(null);
 
