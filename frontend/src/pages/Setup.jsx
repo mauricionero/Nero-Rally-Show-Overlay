@@ -296,6 +296,7 @@ export default function Setup() {
             <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">🏷️ Categories</TabsTrigger>
             <TabsTrigger value="stages" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-stages">📍 Stages</TabsTrigger>
             <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">⏱️ Times</TabsTrigger>
+            <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">📹 Streams</TabsTrigger>
             <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">⚙️ Config</TabsTrigger>
           </TabsList>
 
