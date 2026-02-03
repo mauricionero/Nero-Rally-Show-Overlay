@@ -7,8 +7,8 @@ import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
 import Scene5SplitComparison from '../components/scenes/Scene5SplitComparison.jsx';
 
 export default function Overlay() {
-  const { chromaKey, currentScene, setCurrentScene, lastUpdate } = useRally();
-  const [, forceUpdate] = useState();
+  const { chromaKey, currentScene, setCurrentScene, dataVersion } = useRally();
+  const [lastVersion, setLastVersion] = useState(dataVersion);
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -22,14 +22,19 @@ export default function Overlay() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [setCurrentScene]);
 
-  // Poll for changes every 500ms
+  // Heartbeat: Check for data changes every 2 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      forceUpdate({});
-    }, 500);
+      const storedVersion = JSON.parse(localStorage.getItem('rally_data_version') || 'null');
+      if (storedVersion && storedVersion !== lastVersion) {
+        setLastVersion(storedVersion);
+        // Force re-render by updating a dummy state
+        window.dispatchEvent(new Event('storage'));
+      }
+    }, 2000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [lastVersion]);
 
   const renderScene = () => {
     switch (currentScene) {
