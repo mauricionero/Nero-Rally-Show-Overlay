@@ -28,6 +28,13 @@ export default function Scene4PilotFocus() {
     }
   }, [stages, selectedStageId]);
 
+  // Update to current stage if it changes
+  useEffect(() => {
+    if (currentStageId && currentStageId !== selectedStageId) {
+      setSelectedStageId(currentStageId);
+    }
+  }, [currentStageId]);
+
   const focusPilot = pilots.find(p => p.id === selectedPilotId);
   const selectedStage = stages.find(s => s.id === selectedStageId);
 
