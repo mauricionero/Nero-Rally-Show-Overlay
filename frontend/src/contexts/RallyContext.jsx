@@ -436,6 +436,7 @@ export const RallyProvider = ({ children }) => {
       globalAudio,
       currentStageId,
       chromaKey,
+      mapUrl,
       dataVersion,
       exportDate: new Date().toISOString()
     };
@@ -455,6 +456,7 @@ export const RallyProvider = ({ children }) => {
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
+      if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
       updateDataVersion();
       return true;
     } catch (error) {
@@ -474,6 +476,7 @@ export const RallyProvider = ({ children }) => {
     setGlobalAudio({ volume: 100, muted: false });
     setCurrentStageId(null);
     setChromaKey('#000000');
+    setMapUrl('');
     updateDataVersion();
   };
 
