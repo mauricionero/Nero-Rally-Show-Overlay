@@ -93,7 +93,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         key={pilot.id}
         className={`relative bg-white/5 border-2 border-l-4 ${statusBorder} transition-all duration-300 ${
           pilot.streamUrl ? 'cursor-pointer hover:bg-white/10' : ''
-        } ${isSelectedForMain ? 'border-r-[#FF4500]' : ''}`}
+        } ${isSelectedForMain ? 'translate-x-3 border-r-[#FF4500]' : ''}`}
         style={{ borderLeftColor: category?.color || '#3f3f46' }}
       >
         {/* Main row content */}
@@ -101,14 +101,26 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           className="flex items-center gap-3 p-2"
           onClick={() => handleRowClick(pilot.id)}
         >
-          {/* Avatar/Initials (always show avatar in list, streams are muted/hidden) */}
-          {pilot.picture ? (
-            <img src={pilot.picture} alt={pilot.name} className="w-12 h-12 rounded object-cover flex-shrink-0" />
-          ) : (
-            <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
-              <span className="text-lg font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
-            </div>
-          )}
+          {/* Small stream thumbnail or avatar - muted by default */}
+          <div className={`relative flex-shrink-0 transition-all duration-300 ${isExpanded ? 'opacity-30 scale-90' : 'opacity-100'}`}>
+            {pilot.streamUrl && !hideStreams ? (
+              <div className="w-16 h-10 rounded overflow-hidden bg-black border border-zinc-700">
+                <StreamPlayer
+                  pilotId={pilot.id}
+                  streamUrl={pilot.streamUrl}
+                  name={pilot.name}
+                  className="w-full h-full"
+                  forceMute={true}
+                />
+              </div>
+            ) : pilot.picture ? (
+              <img src={pilot.picture} alt={pilot.name} className="w-12 h-12 rounded object-cover" />
+            ) : (
+              <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center">
+                <span className="text-lg font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
+              </div>
+            )}
+          </div>
           
           <div className="w-8 text-center">
             <span className={`text-xl font-bold ${
@@ -119,8 +131,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               {index + 1}
             </span>
           </div>
-          <div className="flex-1">
-            <p className="text-white font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
               {pilot.name}
             </p>
             <div className="flex justify-between items-center mt-1">
@@ -143,37 +155,36 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           {pilot.streamUrl && (
             <button
               onClick={(e) => handleArrowClick(e, pilot.id)}
-              className={`w-8 h-full flex items-center justify-center transition-all duration-200 rounded ${
+              className={`w-8 h-12 flex items-center justify-center transition-all duration-200 rounded-r ${
                 isSelectedForMain 
-                  ? 'text-[#FF4500] bg-[#FF4500]/20 shadow-[0_0_10px_rgba(255,69,0,0.5)]' 
+                  ? 'text-[#FF4500] bg-[#FF4500]/20 shadow-[0_0_12px_rgba(255,69,0,0.6)]' 
                   : 'text-zinc-500 hover:text-white hover:bg-white/10'
               }`}
               title="Show in main display"
             >
-              <ChevronRight className={`w-5 h-5 transition-transform ${isSelectedForMain ? 'scale-125' : ''}`} />
+              <ChevronRight className={`w-5 h-5 transition-transform duration-200 ${isSelectedForMain ? 'scale-125' : ''}`} />
             </button>
           )}
         </div>
 
-        {/* Expanded inline stream */}
-        {isExpanded && pilot.streamUrl && !hideStreams && (
-          <div 
-            className="overflow-hidden transition-all duration-300 ease-in-out"
-            style={{ height: '180px' }}
-          >
-            <div className="p-3 pt-0">
-              <div className="w-full h-[160px] rounded overflow-hidden border-2 border-[#FF4500] bg-black">
+        {/* Expanded inline stream area */}
+        <div 
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[200px] opacity-100' : 'max-h-0 opacity-0'}`}
+        >
+          {pilot.streamUrl && !hideStreams && (
+            <div className="px-3 pb-3">
+              <div className="w-full h-[160px] rounded-lg overflow-hidden border-2 border-[#FF4500] bg-black shadow-[0_0_20px_rgba(255,69,0,0.3)]">
                 <StreamPlayer
                   pilotId={pilot.id}
                   streamUrl={pilot.streamUrl}
                   name={pilot.name}
                   className="w-full h-full"
-                  forceUnmute={true}
+                  forceUnmute={isExpanded}
                 />
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   };
