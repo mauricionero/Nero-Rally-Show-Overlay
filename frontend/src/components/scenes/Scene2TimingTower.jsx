@@ -138,7 +138,6 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                   </div>
                 )}
               </div>
-            )}
 
             {/* Pilot info */}
             <div className="flex-1 min-w-0">
