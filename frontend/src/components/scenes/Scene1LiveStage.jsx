@@ -189,16 +189,18 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             }
             
             return (
-              <div key={pilot.id} className="relative bg-black rounded overflow-hidden border-2 border-[#FF4500]">
+              <div key={pilot.id} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: hideStreams ? chromaKey : 'black' }}>
                 {category && (
                   <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ backgroundColor: category.color }} />
                 )}
-                <StreamPlayer
-                  pilotId={pilot.id}
-                  streamUrl={pilot.streamUrl}
-                  name={pilot.name}
-                  className="w-full h-full"
-                />
+                {!hideStreams && (
+                  <StreamPlayer
+                    pilotId={pilot.id}
+                    streamUrl={pilot.streamUrl}
+                    name={pilot.name}
+                    className="w-full h-full"
+                  />
+                )}
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">
                     <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1), -1px -1px 2px rgba(0,0,0,1)' }}>
