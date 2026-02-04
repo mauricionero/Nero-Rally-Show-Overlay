@@ -76,7 +76,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       >
         <div className="flex items-center gap-3">
           {/* Small embedded stream or avatar/initials */}
-          {pilot.streamUrl ? (
+          {pilot.streamUrl && !hideStreams ? (
             <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0 border border-zinc-700">
               <StreamPlayer
                 pilotId={pilot.id}
@@ -91,7 +91,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
             <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
               <span className="text-lg font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
             </div>
-          )}
+          )}}
           
           <div className="w-8 text-center">
             <span className={`text-xl font-bold ${
