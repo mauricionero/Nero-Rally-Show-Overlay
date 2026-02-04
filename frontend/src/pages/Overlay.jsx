@@ -200,18 +200,20 @@ export default function Overlay() {
             </button>
             
             {/* Heartbeat indicator */}
-            <div 
-              className={`w-3 h-3 rounded-full transition-all duration-200 ${
-                wsConnectionStatus === 'connected' ? 'bg-[#22C55E]' :
-                heartbeatStatus === 'checking' ? 'bg-[#22C55E] animate-pulse' :
-                heartbeatStatus === 'changed' ? 'bg-[#FF4500] animate-pulse' :
-                'bg-zinc-700'
-              }`}
-            />
-            <span className="text-xs text-zinc-500">
-              {wsConnectionStatus === 'connected' ? 'WebSocket' :
-               heartbeatStatus === 'changed' ? 'Updated' : 'Local'}
-            </span>
+            <div className="flex items-center gap-2 min-w-[85px]">
+              <div 
+                className={`w-3 h-3 rounded-full transition-all duration-200 flex-shrink-0 ${
+                  wsConnectionStatus === 'connected' ? 'bg-[#22C55E]' :
+                  heartbeatStatus === 'checking' ? 'bg-[#22C55E] animate-pulse' :
+                  heartbeatStatus === 'changed' ? 'bg-[#FF4500] animate-pulse' :
+                  'bg-zinc-700'
+                }`}
+              />
+              <span className="text-xs text-zinc-500 whitespace-nowrap">
+                {wsConnectionStatus === 'connected' ? 'WebSocket' :
+                 heartbeatStatus === 'changed' ? 'Updated' : 'Local'}
+              </span>
+            </div>
           </div>
         </div>
         
