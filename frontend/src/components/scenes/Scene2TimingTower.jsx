@@ -187,6 +187,14 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               {selectedPilot ? 'No Stream Available' : 'Select a Pilot'}
             </p>
           </div>
+        ) : hideStreams ? (
+          <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-4">
+              <p className="text-white font-bold text-2xl uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {selectedPilot.name}
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
             <StreamPlayer
