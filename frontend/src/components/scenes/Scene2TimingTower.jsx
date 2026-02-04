@@ -117,17 +117,17 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               {position}
             </div>
 
-            {/* Small stream thumbnail - only render if not expanded */}
-            {!isExpanded && (
-              <div className="relative flex-shrink-0">
-                {pilot.streamUrl && !hideStreams ? (
-                  <div className="w-14 h-9 rounded overflow-hidden bg-black border border-zinc-700">
-                    <StreamPlayer
-                      pilotId={pilot.id}
-                      streamUrl={pilot.streamUrl}
-                      name={pilot.name}
-                      className="w-full h-full"
-                      forceMute={true}
+            {/* Small stream thumbnail or avatar - always visible */}
+            <div className="relative flex-shrink-0">
+              {pilot.streamUrl && !hideStreams ? (
+                <div className="w-14 h-9 rounded overflow-hidden bg-black border border-zinc-700">
+                  <StreamPlayer
+                    pilotId={pilot.id}
+                    streamUrl={pilot.streamUrl}
+                    name={pilot.name}
+                    className="w-full h-full"
+                    forceMute={true}
+                    showMuteIndicator={false}
                     />
                   </div>
                 ) : pilot.picture ? (
