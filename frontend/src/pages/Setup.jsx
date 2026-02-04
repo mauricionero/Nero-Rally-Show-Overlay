@@ -1368,8 +1368,9 @@ export default function Setup() {
                       variant="outline"
                       className="w-full border-[#22C55E] text-[#22C55E] hover:bg-[#22C55E]/10"
                       onClick={() => {
+                        const basePath = process.env.PUBLIC_URL || '';
                         const baseUrl = window.location.origin;
-                        const liveUrl = `${baseUrl}/overlay?ws=${wsChannelKey}`;
+                        const liveUrl = `${baseUrl}${basePath}/overlay?ws=${wsChannelKey}`;
                         navigator.clipboard.writeText(liveUrl);
                         toast.success('Live URL copied! Share this link for instant connection.');
                       }}
