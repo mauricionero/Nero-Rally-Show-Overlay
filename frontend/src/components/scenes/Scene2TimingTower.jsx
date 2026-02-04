@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
+import { ChevronRight } from 'lucide-react';
 
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { pilots, categories, stages, times, startTimes, currentStageId, chromaKey } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedPilotId, setSelectedPilotId] = useState(null);
+  const [selectedPilotId, setSelectedPilotId] = useState(null); // For main stream display
+  const [expandedPilotId, setExpandedPilotId] = useState(null); // For inline expanded stream
   const currentStage = stages.find(s => s.id === currentStageId);
 
   useEffect(() => {
@@ -14,7 +16,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-select first active pilot
+  // Auto-select first active pilot for main display
   useEffect(() => {
     if (!selectedPilotId) {
       const activePilot = pilots.find(p => p.isActive && p.streamUrl);
@@ -38,11 +40,32 @@ export default function Scene2TimingTower({ hideStreams = false }) {
 
   const leader = finished[0];
 
+  const handleArrowClick = (e, pilotId) => {
+    e.stopPropagation();
+    if (expandedPilotId === pilotId) {
+      setExpandedPilotId(null);
+    }
+    setSelectedPilotId(pilotId);
+  };
+
+  const handleRowClick = (pilotId) => {
+    if (!pilots.find(p => p.id === pilotId)?.streamUrl) return;
+    
+    if (expandedPilotId === pilotId) {
+      // Collapse
+      setExpandedPilotId(null);
+    } else {
+      // Expand inline
+      setExpandedPilotId(pilotId);
+    }
+  };
+
   const renderPilotRow = (pilot, index, status) => {
     const startTime = startTimes[pilot.id]?.[currentStageId];
     const finishTime = times[pilot.id]?.[currentStageId];
     const category = categories.find(c => c.id === pilot.categoryId);
-    const isSelected = pilot.id === selectedPilotId;
+    const isSelectedForMain = pilot.id === selectedPilotId;
+    const isExpanded = pilot.id === expandedPilotId;
     
     let displayTime = '-';
     let gap = '';
@@ -60,7 +83,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       displayTime = 'Start: ' + startTime;
     }
 
-    // Status border color (top, right, bottom)
+    // Status border color
     let statusBorder = 'border-zinc-700';
     if (status === 'racing') statusBorder = 'border-t-[#FF8C00] border-r-[#FF8C00] border-b-[#FF8C00]';
     else if (status === 'finished') statusBorder = 'border-t-[#1a5f1a] border-r-[#1a5f1a] border-b-[#1a5f1a]';
@@ -68,30 +91,24 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     return (
       <div
         key={pilot.id}
-        onClick={() => pilot.streamUrl && setSelectedPilotId(pilot.id)}
-        className={`relative bg-white/5 border-2 border-l-4 ${statusBorder} p-2 transition-all ${
+        className={`relative bg-white/5 border-2 border-l-4 ${statusBorder} transition-all duration-300 ${
           pilot.streamUrl ? 'cursor-pointer hover:bg-white/10' : ''
-        } ${isSelected ? 'translate-x-4 border-r-[#FF4500]' : ''}`}
+        } ${isSelectedForMain ? 'border-r-[#FF4500]' : ''}`}
         style={{ borderLeftColor: category?.color || '#3f3f46' }}
       >
-        <div className="flex items-center gap-3">
-          {/* Small embedded stream or avatar/initials */}
-          {pilot.streamUrl && !hideStreams ? (
-            <div className="w-20 h-12 bg-black rounded overflow-hidden flex-shrink-0 border border-zinc-700">
-              <StreamPlayer
-                pilotId={pilot.id}
-                streamUrl={pilot.streamUrl}
-                name={pilot.name}
-                className="w-full h-full"
-              />
-            </div>
-          ) : pilot.picture ? (
+        {/* Main row content */}
+        <div 
+          className="flex items-center gap-3 p-2"
+          onClick={() => handleRowClick(pilot.id)}
+        >
+          {/* Avatar/Initials (always show avatar in list, streams are muted/hidden) */}
+          {pilot.picture ? (
             <img src={pilot.picture} alt={pilot.name} className="w-12 h-12 rounded object-cover flex-shrink-0" />
           ) : (
             <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
               <span className="text-lg font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
             </div>
-          )}}
+          )}
           
           <div className="w-8 text-center">
             <span className={`text-xl font-bold ${
@@ -121,7 +138,42 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               )}
             </div>
           </div>
+
+          {/* Arrow button to send to main display */}
+          {pilot.streamUrl && (
+            <button
+              onClick={(e) => handleArrowClick(e, pilot.id)}
+              className={`w-8 h-full flex items-center justify-center transition-all duration-200 rounded ${
+                isSelectedForMain 
+                  ? 'text-[#FF4500] bg-[#FF4500]/20 shadow-[0_0_10px_rgba(255,69,0,0.5)]' 
+                  : 'text-zinc-500 hover:text-white hover:bg-white/10'
+              }`}
+              title="Show in main display"
+            >
+              <ChevronRight className={`w-5 h-5 transition-transform ${isSelectedForMain ? 'scale-125' : ''}`} />
+            </button>
+          )}
         </div>
+
+        {/* Expanded inline stream */}
+        {isExpanded && pilot.streamUrl && !hideStreams && (
+          <div 
+            className="overflow-hidden transition-all duration-300 ease-in-out"
+            style={{ height: '180px' }}
+          >
+            <div className="p-3 pt-0">
+              <div className="w-full h-[160px] rounded overflow-hidden border-2 border-[#FF4500] bg-black">
+                <StreamPlayer
+                  pilotId={pilot.id}
+                  streamUrl={pilot.streamUrl}
+                  name={pilot.name}
+                  className="w-full h-full"
+                  forceUnmute={true}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -179,7 +231,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         </div>
       </div>
 
-      {/* Right Side - Stream */}
+      {/* Right Side - Main Stream */}
       <div className="flex-1 p-8">
         {!selectedPilot || !selectedPilot.streamUrl ? (
           <div className="flex items-center justify-center h-full">
