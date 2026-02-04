@@ -16,8 +16,8 @@ const LAYOUTS = [
   { id: '3x2', name: '3x2 Grid', cols: 3, rows: 2, slots: 6 }
 ];
 
-export default function Scene1LiveStage() {
-  const { pilots, stages, currentStageId, startTimes, times, categories } = useRally();
+export default function Scene1LiveStage({ hideStreams = false }) {
+  const { pilots, stages, currentStageId, startTimes, times, categories, chromaKey } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedLayout, setSelectedLayout] = useState('2x2');
   const [selectedPilotIds, setSelectedPilotIds] = useState([]);
