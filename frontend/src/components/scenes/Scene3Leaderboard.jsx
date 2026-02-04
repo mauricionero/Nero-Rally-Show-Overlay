@@ -7,7 +7,7 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { parseTime, getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 
-export default function Scene3Leaderboard() {
+export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, categories } = useRally();
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -229,7 +229,7 @@ export default function Scene3Leaderboard() {
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {/* 16:9 Stream thumbnail or avatar fallback */}
-                        {pilot.streamUrl && pilot.isActive ? (
+                        {pilot.streamUrl && pilot.isActive && !hideStreams ? (
                           <div className="w-32 h-18 rounded overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
                             <StreamPlayer
                               pilotId={pilot.id}

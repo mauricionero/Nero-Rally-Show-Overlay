@@ -30,6 +30,7 @@ export const RallyProvider = ({ children }) => {
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
+  const [mapUrl, setMapUrl] = useState(() => loadFromStorage('rally_map_url', ''));
   const [streamConfigs, setStreamConfigs] = useState(() => loadFromStorage('rally_stream_configs', {}));
   const [globalAudio, setGlobalAudio] = useState(() => loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
   const [currentScene, setCurrentScene] = useState(1);
@@ -56,6 +57,7 @@ export const RallyProvider = ({ children }) => {
     setStartTimes(loadFromStorage('rally_start_times', {}));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
+    setMapUrl(loadFromStorage('rally_map_url', ''));
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
     const newVersion = loadFromStorage('rally_data_version', Date.now());
@@ -79,6 +81,7 @@ export const RallyProvider = ({ children }) => {
     if (data.startTimes) setStartTimes(data.startTimes);
     if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
     if (data.chromaKey) setChromaKey(data.chromaKey);
+    if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
     if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
     if (data.globalAudio) setGlobalAudio(data.globalAudio);
     
@@ -113,13 +116,14 @@ export const RallyProvider = ({ children }) => {
       startTimes,
       currentStageId,
       chromaKey,
+      mapUrl,
       streamConfigs,
       globalAudio,
       timestamp: Date.now()
     };
     
     await wsProvider.current.publish(data);
-  }, [wsEnabled, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, streamConfigs, globalAudio]);
+  }, [wsEnabled, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, streamConfigs, globalAudio]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey) => {
@@ -226,6 +230,11 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('rally_chroma_key', JSON.stringify(chromaKey));
   }, [chromaKey]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_map_url', JSON.stringify(mapUrl));
+    updateDataVersion();
+  }, [mapUrl]);
 
   useEffect(() => {
     localStorage.setItem('rally_stream_configs', JSON.stringify(streamConfigs));
@@ -427,6 +436,7 @@ export const RallyProvider = ({ children }) => {
       globalAudio,
       currentStageId,
       chromaKey,
+      mapUrl,
       dataVersion,
       exportDate: new Date().toISOString()
     };
@@ -446,6 +456,7 @@ export const RallyProvider = ({ children }) => {
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
+      if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
       updateDataVersion();
       return true;
     } catch (error) {
@@ -465,6 +476,7 @@ export const RallyProvider = ({ children }) => {
     setGlobalAudio({ volume: 100, muted: false });
     setCurrentStageId(null);
     setChromaKey('#000000');
+    setMapUrl('');
     updateDataVersion();
   };
 
@@ -479,6 +491,7 @@ export const RallyProvider = ({ children }) => {
     globalAudio,
     currentStageId,
     chromaKey,
+    mapUrl,
     currentScene,
     dataVersion,
     // WebSocket state
@@ -489,6 +502,7 @@ export const RallyProvider = ({ children }) => {
     // Setters
     setCurrentScene,
     setChromaKey,
+    setMapUrl,
     setCurrentStageId,
     setGlobalAudio,
     // CRUD operations

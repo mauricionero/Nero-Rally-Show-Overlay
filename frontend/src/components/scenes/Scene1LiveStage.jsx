@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Map } from 'lucide-react';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -16,11 +16,14 @@ const LAYOUTS = [
   { id: '3x2', name: '3x2 Grid', cols: 3, rows: 2, slots: 6 }
 ];
 
-export default function Scene1LiveStage() {
-  const { pilots, stages, currentStageId, startTimes, times, categories } = useRally();
+// Special ID for Google Maps slot
+const MAP_SLOT_ID = '__google_maps__';
+
+export default function Scene1LiveStage({ hideStreams = false }) {
+  const { pilots, stages, currentStageId, startTimes, times, categories, chromaKey, mapUrl } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedLayout, setSelectedLayout] = useState('2x2');
-  const [selectedPilotIds, setSelectedPilotIds] = useState([]);
+  const [selectedSlotIds, setSelectedSlotIds] = useState([]);
   const [bottomScroll, setBottomScroll] = useState(0);
   const [maxScroll, setMaxScroll] = useState(0);
   const bottomContainerRef = useRef(null);
@@ -47,17 +50,17 @@ export default function Scene1LiveStage() {
   
   // Auto-select active pilots up to layout slots
   useEffect(() => {
-    if (selectedPilotIds.length === 0 && activePilots.length > 0) {
-      setSelectedPilotIds(activePilots.slice(0, layout.slots).map(p => p.id));
+    if (selectedSlotIds.length === 0 && activePilots.length > 0) {
+      setSelectedSlotIds(activePilots.slice(0, layout.slots).map(p => p.id));
     }
-  }, [activePilots, layout.slots, selectedPilotIds.length]);
+  }, [activePilots, layout.slots, selectedSlotIds.length]);
 
-  const togglePilot = (pilotId) => {
-    setSelectedPilotIds(prev => {
-      if (prev.includes(pilotId)) {
-        return prev.filter(id => id !== pilotId);
+  const toggleSlot = (slotId) => {
+    setSelectedSlotIds(prev => {
+      if (prev.includes(slotId)) {
+        return prev.filter(id => id !== slotId);
       } else if (prev.length < layout.slots) {
-        return [...prev, pilotId];
+        return [...prev, slotId];
       }
       return prev;
     });
@@ -78,7 +81,7 @@ export default function Scene1LiveStage() {
     const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
     if (dragIndex === dropIndex) return;
 
-    setSelectedPilotIds(prev => {
+    setSelectedSlotIds(prev => {
       const newOrder = [...prev];
       const [removed] = newOrder.splice(dragIndex, 1);
       newOrder.splice(dropIndex, 0, removed);
@@ -86,7 +89,16 @@ export default function Scene1LiveStage() {
     });
   };
 
-  const displayPilots = selectedPilotIds.map(id => pilots.find(p => p.id === id)).filter(Boolean);
+  // Get display items (pilots or map)
+  const getDisplayItem = (slotId) => {
+    if (slotId === MAP_SLOT_ID) {
+      return { type: 'map', id: MAP_SLOT_ID };
+    }
+    const pilot = pilots.find(p => p.id === slotId);
+    return pilot ? { type: 'pilot', ...pilot } : null;
+  };
+
+  const displayItems = selectedSlotIds.map(id => getDisplayItem(id)).filter(Boolean);
 
   const getGridClass = () => {
     return `grid-cols-${layout.cols} grid-rows-${layout.rows}`;
@@ -111,15 +123,32 @@ export default function Scene1LiveStage() {
           </div>
 
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">Select Pilots ({selectedPilotIds.length}/{layout.slots})</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">Select Items ({selectedSlotIds.length}/{layout.slots})</Label>
             <div className="space-y-2 max-h-96 overflow-y-auto">
+              {/* Google Maps Option */}
+              {mapUrl && (
+                <div className="flex items-center space-x-2 pb-2 border-b border-zinc-700 mb-2">
+                  <Checkbox
+                    id="slot-map"
+                    checked={selectedSlotIds.includes(MAP_SLOT_ID)}
+                    onCheckedChange={() => toggleSlot(MAP_SLOT_ID)}
+                    disabled={!selectedSlotIds.includes(MAP_SLOT_ID) && selectedSlotIds.length >= layout.slots}
+                  />
+                  <label htmlFor="slot-map" className="text-white text-sm cursor-pointer flex items-center gap-2">
+                    <Map className="w-4 h-4 text-[#FF4500]" />
+                    Google Maps
+                  </label>
+                </div>
+              )}
+              
+              {/* Pilot Options */}
               {activePilots.map((pilot) => (
                 <div key={pilot.id} className="flex items-center space-x-2">
                   <Checkbox
                     id={`pilot-${pilot.id}`}
-                    checked={selectedPilotIds.includes(pilot.id)}
-                    onCheckedChange={() => togglePilot(pilot.id)}
-                    disabled={!selectedPilotIds.includes(pilot.id) && selectedPilotIds.length >= layout.slots}
+                    checked={selectedSlotIds.includes(pilot.id)}
+                    onCheckedChange={() => toggleSlot(pilot.id)}
+                    disabled={!selectedSlotIds.includes(pilot.id) && selectedSlotIds.length >= layout.slots}
                   />
                   <label htmlFor={`pilot-${pilot.id}`} className="text-white text-sm cursor-pointer">
                     {pilot.name}
@@ -129,16 +158,19 @@ export default function Scene1LiveStage() {
             </div>
           </div>
 
-          {selectedPilotIds.length > 0 && (
+          {selectedSlotIds.length > 0 && (
             <div>
               <Label className="text-white text-xs uppercase mb-2 block">Reorder (Drag & Drop)</Label>
               <div className="space-y-1">
-                {selectedPilotIds.map((pilotId, index) => {
-                  const pilot = pilots.find(p => p.id === pilotId);
-                  if (!pilot) return null;
+                {selectedSlotIds.map((slotId, index) => {
+                  const isMap = slotId === MAP_SLOT_ID;
+                  const pilot = !isMap ? pilots.find(p => p.id === slotId) : null;
+                  const label = isMap ? 'Google Maps' : pilot?.name;
+                  if (!label) return null;
+                  
                   return (
                     <div
-                      key={pilotId}
+                      key={slotId}
                       draggable
                       onDragStart={(e) => handleDragStart(e, index)}
                       onDragOver={handleDragOver}
@@ -147,7 +179,8 @@ export default function Scene1LiveStage() {
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-zinc-500 text-xs">{index + 1}.</span>
-                        <span className="text-white text-sm">{pilot.name}</span>
+                        {isMap && <Map className="w-3 h-3 text-[#FF4500]" />}
+                        <span className="text-white text-sm">{label}</span>
                       </div>
                     </div>
                   );
@@ -159,17 +192,43 @@ export default function Scene1LiveStage() {
       </LeftControls>
 
       <div className={`grid ${getGridClass()} gap-4 h-[calc(100%-200px)]`}>
-        {displayPilots.length === 0 ? (
+        {displayItems.length === 0 ? (
           <div className="flex items-center justify-center h-full col-span-full">
             <div className="text-center">
               <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                No Pilots Selected
+                No Items Selected
               </p>
-              <p className="text-zinc-400 mt-2">Select pilots from the left panel</p>
+              <p className="text-zinc-400 mt-2">Select pilots or Google Maps from the left panel</p>
             </div>
           </div>
         ) : (
-          displayPilots.map((pilot) => {
+          displayItems.map((item) => {
+            // Google Maps Item
+            if (item.type === 'map') {
+              return (
+                <div key={MAP_SLOT_ID} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: chromaKey }}>
+                  <iframe
+                    src={mapUrl}
+                    className="w-full h-full border-0"
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title="Rally Map"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
+                    <div className="flex items-center gap-2">
+                      <Map className="w-5 h-5 text-[#FF4500]" />
+                      <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
+                        Rally Map
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Pilot Stream Item
+            const pilot = item;
             const status = currentStageId ? getPilotStatus(pilot.id, currentStageId, startTimes, times) : 'not_started';
             const startTime = currentStageId ? startTimes[pilot.id]?.[currentStageId] : null;
             const finishTime = currentStageId ? times[pilot.id]?.[currentStageId] : null;
@@ -189,16 +248,18 @@ export default function Scene1LiveStage() {
             }
             
             return (
-              <div key={pilot.id} className="relative bg-black rounded overflow-hidden border-2 border-[#FF4500]">
+              <div key={pilot.id} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: hideStreams ? chromaKey : 'black' }}>
                 {category && (
                   <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ backgroundColor: category.color }} />
                 )}
-                <StreamPlayer
-                  pilotId={pilot.id}
-                  streamUrl={pilot.streamUrl}
-                  name={pilot.name}
-                  className="w-full h-full"
-                />
+                {!hideStreams && (
+                  <StreamPlayer
+                    pilotId={pilot.id}
+                    streamUrl={pilot.streamUrl}
+                    name={pilot.name}
+                    className="w-full h-full"
+                  />
+                )}
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">
                     <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1), -1px -1px 2px rgba(0,0,0,1)' }}>

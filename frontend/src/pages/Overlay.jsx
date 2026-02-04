@@ -7,7 +7,8 @@ import Scene3Leaderboard from '../components/scenes/Scene3Leaderboard.jsx';
 import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
-import { Wifi, WifiOff, X } from 'lucide-react';
+import { Checkbox } from '../components/ui/checkbox';
+import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
 
 export default function Overlay() {
   const [searchParams] = useSearchParams();
@@ -28,6 +29,7 @@ export default function Overlay() {
   const [showWsPanel, setShowWsPanel] = useState(false);
   const [wsKeyInput, setWsKeyInput] = useState('');
   const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
+  const [hideStreams, setHideStreams] = useState(false);
 
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
@@ -115,15 +117,15 @@ export default function Overlay() {
   const renderScene = () => {
     switch (currentScene) {
       case 1:
-        return <Scene1LiveStage />;
+        return <Scene1LiveStage hideStreams={hideStreams} />;
       case 2:
-        return <Scene2TimingTower />;
+        return <Scene2TimingTower hideStreams={hideStreams} />;
       case 3:
-        return <Scene3Leaderboard />;
+        return <Scene3Leaderboard hideStreams={hideStreams} />;
       case 4:
-        return <Scene4PilotFocus />;
+        return <Scene4PilotFocus hideStreams={hideStreams} />;
       default:
-        return <Scene1LiveStage />;
+        return <Scene1LiveStage hideStreams={hideStreams} />;
     }
   };
 
@@ -159,7 +161,21 @@ export default function Overlay() {
             ))}
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            {/* Hide Streams Checkbox */}
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <Checkbox
+                checked={hideStreams}
+                onCheckedChange={setHideStreams}
+                className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                data-testid="hide-streams-checkbox"
+              />
+              <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium">
+                <VideoOff className="w-3 h-3" />
+                Hide Streams
+              </span>
+            </label>
+
             {/* WebSocket Status/Button */}
             <button
               onClick={() => setShowWsPanel(!showWsPanel)}
@@ -184,18 +200,20 @@ export default function Overlay() {
             </button>
             
             {/* Heartbeat indicator */}
-            <div 
-              className={`w-3 h-3 rounded-full transition-all duration-200 ${
-                wsConnectionStatus === 'connected' ? 'bg-[#22C55E]' :
-                heartbeatStatus === 'checking' ? 'bg-[#22C55E] animate-pulse' :
-                heartbeatStatus === 'changed' ? 'bg-[#FF4500] animate-pulse' :
-                'bg-zinc-700'
-              }`}
-            />
-            <span className="text-xs text-zinc-500">
-              {wsConnectionStatus === 'connected' ? 'WebSocket' :
-               heartbeatStatus === 'changed' ? 'Updated' : 'Local'}
-            </span>
+            <div className="flex items-center gap-2 min-w-[85px]">
+              <div 
+                className={`w-3 h-3 rounded-full transition-all duration-200 flex-shrink-0 ${
+                  wsConnectionStatus === 'connected' ? 'bg-[#22C55E]' :
+                  heartbeatStatus === 'checking' ? 'bg-[#22C55E] animate-pulse' :
+                  heartbeatStatus === 'changed' ? 'bg-[#FF4500] animate-pulse' :
+                  'bg-zinc-700'
+                }`}
+              />
+              <span className="text-xs text-zinc-500 whitespace-nowrap">
+                {wsConnectionStatus === 'connected' ? 'WebSocket' :
+                 heartbeatStatus === 'changed' ? 'Updated' : 'Local'}
+              </span>
+            </div>
           </div>
         </div>
         

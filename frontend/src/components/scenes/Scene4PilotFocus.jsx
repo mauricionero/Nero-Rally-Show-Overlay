@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 
-export default function Scene4PilotFocus() {
-  const { pilots, stages, times, startTimes, currentStageId } = useRally();
+export default function Scene4PilotFocus({ hideStreams = false }) {
+  const { pilots, stages, times, startTimes, currentStageId, chromaKey } = useRally();
   const [selectedPilotId, setSelectedPilotId] = useState(pilots[0]?.id || null);
   const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -119,7 +119,7 @@ export default function Scene4PilotFocus() {
 
       {/* Stream Display */}
       <div className="flex-1 p-8">
-        {focusPilot.streamUrl ? (
+        {focusPilot.streamUrl && !hideStreams ? (
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
             <StreamPlayer
               pilotId={focusPilot.id}
@@ -142,8 +142,25 @@ export default function Scene4PilotFocus() {
               </div>
             )}
           </div>
+        ) : hideStreams && focusPilot.streamUrl ? (
+          <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
+            {selectedStageData && (
+              <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                <p className="text-zinc-400 text-xs uppercase">
+                  {selectedStage?.ssNumber ? `SS${selectedStage.ssNumber}` : selectedStage?.name}
+                </p>
+                <p className={`text-2xl font-mono font-bold ${
+                  selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                  selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                  'text-zinc-500'
+                }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  {selectedStageData.time}
+                </p>
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="h-full bg-black rounded border-2 border-[#FF4500] flex items-center justify-center">
+          <div className="h-full rounded border-2 border-[#FF4500] flex items-center justify-center" style={{ backgroundColor: hideStreams ? chromaKey : 'black' }}>
             <p className="text-zinc-500 text-xl">No stream available</p>
           </div>
         )}

@@ -1,0 +1,160 @@
+<analysis>**original_problem_statement:**
+The user wants to build a WRC (World Rally Championship) style dashboard overlay. The application must be entirely frontend, using local storage for data persistence.
+
+**PRODUCT REQUIREMENTS:**
+1.  **Two Main Pages:**  (for configuration) and  (for live display).
+2.  **Setup Page Features:**
+    *   Manage Pilots, Categories, and Stages.
+    *   A time-entry matrix.
+    *   Chroma key background configuration.
+    *   JSON import/export for all data.
+    *   A Streams tab to manage all pilot video streams, including individual volume/video adjustments, solo/mute controls, and a new global master audio control.
+    *   A configuration option for a Google Maps URL.
+3.  **Overlay (Live) Page Features:**
+    *   Real-time data updates from the Setup page, with options for both  polling and a new WebSocket (Ably) connection.
+    *   Scene switching via a top navigation bar.
+    *   A Hide Streams option to replace video feeds with the chroma key background or pilot avatars.
+    *   A shareable URL that includes the WebSocket key for auto-connection on the live page.
+    *   The Made with Emergent badge must be hidden.
+4.  **Scene-Specific Requirements:**
+    *   **Scene 1 (Live Stage):** A grid layout for selected pilot streams or a new Google Maps view.
+    *   **Scene 2 (Timing Tower):** Redesigned with a sports broadcast aesthetic, showing a compact timing list and a larger, focused view for a selected pilot. Interactions include expanding rows to show a larger, unmuted stream.
+    *   **Scene 3 (Leaderboard):** An overall standings table.
+    *   **Scene 4 (Pilot Focus):** A view dedicated to a single pilot.
+
+**User's preferred language**: English
+
+**what currently exists?**
+A complete, client-side React application using  for data persistence. The app has a comprehensive  page (Pilots, Categories, Stages, Times) and a new  tab with individual and global audio/video controls. The  page features real-time data sync via  polling or a newly implemented Ably WebSocket connection, complete with a key generation and sharing system. The build process is configured to output to a  directory for easy deployment to GitHub Pages, and routing is handled dynamically to work in both development and production environments. Most user-requested visual and functional enhancements have been implemented, including a complete redesign of Scene 2.
+
+**Last working item**:
+-   **Last item agent was working:** The user requested the ability to add a Google Maps URL on the config tab and display it as an option in the Scene 1 grid.
+-   **Status:** NOT STARTED
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?** frontend testing agent
+-   **User Testing Done:** N
+
+**All Pending/In progress Issue list**:
+There are no pending bugs or issues. The current focus is on implementing the new Google Maps feature.
+
+**In progress Task List**:
+-   **Task 1 (P0): Implement Google Maps Integration**
+    -   **Where to resume:**
+        1.  Modify  to add state for . Include it in the , , and  functions.
+        2.  Update  to add a new input field in the Config tab for the Google Maps URL.
+        3.  Modify  to add Google Maps as a selectable option in the pilot/stream grid. When selected, render the map URL in an iframe.
+    -   **What will be achieved with this?** Users will be able to display a live rally map from Google Maps within the Scene 1 grid, alongside or instead of pilot video streams.
+    -   **Status:** NOT STARTED
+    -   **Should Test frontend/backend/both after fix?** Frontend
+
+**Upcoming and Future Tasks**
+-   **Future Tasks:**
+    -   **P1: Optimize Stream Loading:** Implement a method to keep video stream elements loaded in the background when switching between scenes to prevent the lag/delay of re-initializing the stream.
+    -   **P2: Add Keyboard Shortcuts:** Implement keyboard shortcuts for global audio controls (e.g., 'M' to toggle global mute, +/- to adjust master volume).
+    -   **P3: Refactor Setup.jsx:** The  component is now very large and complex. It should be broken down into sub-components for each tab (Pilots, Stages, Times, Streams, Config) to improve maintainability.
+
+**Completed work in this session**
+-   **Scene 3 Leaderboard Fix:** Corrected the overall time calculation to properly include running times for active stages.
+-   **Stream Setup Tab:** Implemented a new Streams tab on the Setup page with controls for individual stream volume, solo/mute, and video adjustments (saturation, contrast, brightness).
+-   **Global Audio Controls:** Added a master audio slider and Mute All button to the Streams tab.
+-   **Visual Audio Meters:** Added simulated VU meters for both master and individual streams.
+-   **WebSocket Live Sync:** Integrated Ably for real-time, frontend-only data synchronization as an alternative to  polling. This included:
+    -   UI for generating, copying, and connecting with a shareable key.
+    -   Auto-connection on the Overlay page via a URL parameter ().
+-   **GitHub Pages Deployment:**
+    -   Configured the build process (, ) to output to a  folder.
+    -   Made routing dynamic ( in ) to support both local development and deployment in a subdirectory on GitHub Pages.
+    -   Added a  redirect script to handle client-side routing refreshes.
+-   **Hide Streams Feature:** Added a checkbox on the Overlay page to replace all video streams with the chroma key background or pilot avatars, saving resources and offering more overlay flexibility.
+-   **Scene 2 Redesign:** Completely overhauled Scene 2 (Timing Tower) with a sports broadcast aesthetic, including a compact live timing list, a wider main stream display, and new interactions for expanding pilot rows.
+-   **UX/UI Refinements:**
+    -   Fixed the heartbeat indicator display to have a fixed width.
+    -   Ensured small streams on Scene 2 are muted by default and do not show a mute icon.
+    -   Hid the Made with Emergent badge on the  page.
+
+**Earlier issues found/mentioned but not fixed**
+None.
+
+**Known issue recurrence from previous fork**
+-   **Issue recurrence in previous fork:** .
+-   **Recurrence count:** 2
+-   **Status:** RESOLVED. The issue did not recur in this session, but the next agent should remain cautious about dependency order in  hooks.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **Frontend:** React, Tailwind CSS, Shadcn/UI
+-   **State Management:** React Context API () persisting to .
+-   **Data Synchronization:**
+    -   **Primary:** WebSocket (Ably) for real-time pub/sub updates.
+    -   **Fallback:**  polling (heartbeat system).
+-   **Deployment:** Build process configured via  and  scripts to generate a static site in the  folder for GitHub Pages.
+-   **Routing:** React Router with a dynamic  to support both root-level development and subdirectory-based production deployment.
+
+**key DB schema**
+Not applicable. The application uses . The main data object in  now includes , , , and  in addition to , , , and 0m0.000s 0m0.000s
+0m0.000s 0m0.000s.
+
+**changes in tech stack**
+-   **Added:**  and  for WebSocket functionality (though Pusher was abandoned, the dependency may remain).
+-   **Build:**  is used to customize the Create React App build process.
+
+**All files of reference**
+-   : The core of the application logic. Handles all state, , and WebSocket connections.
+-   : Contains the UI for all configuration, including the new Streams and WebSocket controls.
+-   : Manages scene display, the Hide Streams toggle, and the WebSocket connection UI for the live page.
+-   : The most heavily modified scene, completely redesigned for a sports broadcast feel.
+-   : New reusable component for rendering video streams with all new configuration options (volume, mute, video filters, etc.).
+-   : Abstraction layer for the Ably WebSocket connection.
+-   : Contains the  script for GitHub Pages deployment.
+-   : Configures the React Router  for dynamic pathing.
+
+**Areas that need refactoring**:
+-   The  component is now over 1400 lines and urgently needs to be refactored into smaller sub-components for each configuration tab to improve maintainability.
+-   Time calculation logic could still be centralized in  to avoid duplication across scenes.
+
+**key api endpoints**
+Not applicable. The application is 100% frontend. An initial attempt to create a backend for Pusher was reverted after user clarification.
+
+**Critical Info for New Agent**
+-   **Frontend-Only:** Do not attempt to add or use a backend. The user is firm on this requirement. The WebSocket implementation via Ably was chosen specifically because it supports a frontend-only publishing model.
+-   **Dual Environment:** The app is designed to run in two modes: local development (at root ) and GitHub Pages (at a subdirectory like ). This is handled by the  environment variable, which is set only during the  script. Use  from  for all internal navigation to respect the .
+-   **WebSocket Integration:** The Ably integration requires an API key in  (). The core logic is in  and .
+-   **State Persistence:** Test data can be cleared between browser sessions during development/testing. Be prepared to re-populate data on the Setup page to test the Overlay page features.
+
+**documents and test reports created in this job**
+-   
+-    (created and updated multiple times)
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User:** Requests Scene 2 redesign: hide expanded stream when not in use, make main stream wider, and add cool sports-like visuals. (Completed)
+2.  **User:** Reports small streams in Scene 2 still have volume and a mute button. Asks for them to be truly muted and for the avatar to remain visible when the row is expanded. (Completed)
+3.  **User:** Requests new feature: add a Google Maps URL field in Config and an option to display it in the Scene 1 grid. (Pending - this is the current task)
+4.  **Agent:** Clarifies implementation plan for Google Maps feature. (Last agent action)
+5.  **User:** Asks for  to be run. (Completed)
+6.  **User:** States that  has been run and pushed, but the GitHub Pages URL still shows a blank page. (Completed)
+7.  **Agent:** Identifies the routing issue and implements a fix using . (Completed)
+8.  **User:** Confirms the GitHub pages fix worked and provides the next set of visual/usability requirements for the Hide Streams feature. (Completed)
+9.  **Agent:** Implements the Hide Streams feature. (Completed)
+10. **User:** Requests a fix for the resizing heartbeat indicator and a redesign of Scene 2 interactions (mute streams by default, click to expand). (Completed)
+
+**Project Health Check:**
+-   **Broken:** None.
+-   **Mocked:** The audio meters are simulated, as real audio data from cross-origin iframes is not accessible. This is documented in the UI.
+
+**3rd Party Integrations**
+-   **Ably:** Used for WebSocket-based live data synchronization. Requires a  in .
+
+**Testing status**
+-   **Testing agent used after significant changes:** YES
+-   **Troubleshoot agent used after agent stuck in loop:** NO
+-   **Test files created:** None.
+-   **Known regressions:** None in this session.
+
+**Credentials to test flow:**
+The application requires an Ably API key to be set in  for the WebSocket functionality to work.
+
+
+**What agent forgot to execute**
+-   The agent initially misunderstood the frontend-only constraint and started building a backend server to support Pusher. This was corrected immediately upon user feedback, and the implementation was switched to Ably, which supports client-side publishing. This highlights the importance of adhering strictly to the frontend-only architecture.</analysis>
