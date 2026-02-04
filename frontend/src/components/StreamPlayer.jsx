@@ -8,6 +8,7 @@ export const StreamPlayer = ({
   className = '', 
   showControls = false,
   showMeter = false, // Show VDO.Ninja built-in audio meter
+  showMuteIndicator = true, // Show/hide the mute icon
   forceUnmute = false, // Force unmute (for inline expanded streams)
   forceMute = false, // Force mute (for small preview streams)
   size = 'normal' // 'small', 'normal', 'large'
@@ -55,6 +56,7 @@ export const StreamPlayer = ({
   
   if (isEffectivelyMuted) {
     urlWithParams.searchParams.set('muted', '1');
+    urlWithParams.searchParams.set('volume', '0');
   } else {
     // Volume: VDO.Ninja uses 'volume' param (0-100)
     urlWithParams.searchParams.set('volume', effectiveVolume.toString());
@@ -76,7 +78,7 @@ export const StreamPlayer = ({
         title={name}
         style={{ pointerEvents: showControls ? 'auto' : 'none' }}
       />
-      {isEffectivelyMuted && (
+      {isEffectivelyMuted && showMuteIndicator && (
         <div className="absolute bottom-1 right-1 bg-black/70 px-1 rounded text-xs text-red-500 font-bold">
           🔇
         </div>
