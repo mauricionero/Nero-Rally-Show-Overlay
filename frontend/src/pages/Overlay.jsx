@@ -161,7 +161,21 @@ export default function Overlay() {
             ))}
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            {/* Hide Streams Checkbox */}
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <Checkbox
+                checked={hideStreams}
+                onCheckedChange={setHideStreams}
+                className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                data-testid="hide-streams-checkbox"
+              />
+              <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium">
+                <VideoOff className="w-3 h-3" />
+                Hide Streams
+              </span>
+            </label>
+
             {/* WebSocket Status/Button */}
             <button
               onClick={() => setShowWsPanel(!showWsPanel)}
