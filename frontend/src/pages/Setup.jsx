@@ -188,7 +188,9 @@ export default function Setup() {
   };
 
   const handleGoLive = () => {
-    window.open('/overlay', '_blank');
+    // Use PUBLIC_URL for correct path in both dev and GitHub Pages
+    const basePath = process.env.PUBLIC_URL || '';
+    window.open(`${basePath}/overlay`, '_blank');
     toast.success('Overlay page opened in new tab');
   };
 
