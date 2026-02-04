@@ -60,7 +60,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "build:docs": "BUILD_PATH=../docs craco build",
+    "build:docs": "PUBLIC_URL=/Nero-Rally-Show-Overlay BUILD_PATH=../docs craco build",
     "test": "craco test"
   },
   "browserslist": {
