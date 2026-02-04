@@ -6,10 +6,13 @@ import Overlay from './pages/Overlay.jsx';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
+// Get basename from homepage in package.json for GitHub Pages
+const basename = process.env.PUBLIC_URL || '';
+
 function App() {
   return (
     <RallyProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <Routes>
           <Route path="/" element={<Setup />} />
           <Route path="/overlay" element={<Overlay />} />
