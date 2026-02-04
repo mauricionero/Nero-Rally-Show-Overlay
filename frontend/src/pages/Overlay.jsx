@@ -117,15 +117,15 @@ export default function Overlay() {
   const renderScene = () => {
     switch (currentScene) {
       case 1:
-        return <Scene1LiveStage />;
+        return <Scene1LiveStage hideStreams={hideStreams} />;
       case 2:
-        return <Scene2TimingTower />;
+        return <Scene2TimingTower hideStreams={hideStreams} />;
       case 3:
-        return <Scene3Leaderboard />;
+        return <Scene3Leaderboard hideStreams={hideStreams} />;
       case 4:
-        return <Scene4PilotFocus />;
+        return <Scene4PilotFocus hideStreams={hideStreams} />;
       default:
-        return <Scene1LiveStage />;
+        return <Scene1LiveStage hideStreams={hideStreams} />;
     }
   };
 
