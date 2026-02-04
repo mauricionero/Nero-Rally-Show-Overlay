@@ -3,8 +3,8 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
 
-export default function Scene2TimingTower() {
-  const { pilots, categories, stages, times, startTimes, currentStageId } = useRally();
+export default function Scene2TimingTower({ hideStreams = false }) {
+  const { pilots, categories, stages, times, startTimes, currentStageId, chromaKey } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedPilotId, setSelectedPilotId] = useState(null);
   const currentStage = stages.find(s => s.id === currentStageId);
