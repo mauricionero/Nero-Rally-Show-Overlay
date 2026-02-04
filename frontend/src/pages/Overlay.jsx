@@ -7,7 +7,8 @@ import Scene3Leaderboard from '../components/scenes/Scene3Leaderboard.jsx';
 import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
-import { Wifi, WifiOff, X } from 'lucide-react';
+import { Checkbox } from '../components/ui/checkbox';
+import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
 
 export default function Overlay() {
   const [searchParams] = useSearchParams();
@@ -28,6 +29,7 @@ export default function Overlay() {
   const [showWsPanel, setShowWsPanel] = useState(false);
   const [wsKeyInput, setWsKeyInput] = useState('');
   const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
+  const [hideStreams, setHideStreams] = useState(false);
 
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
