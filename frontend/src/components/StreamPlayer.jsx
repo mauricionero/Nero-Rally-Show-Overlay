@@ -8,6 +8,8 @@ export const StreamPlayer = ({
   className = '', 
   showControls = false,
   showMeter = false, // Show VDO.Ninja built-in audio meter
+  forceUnmute = false, // Force unmute (for inline expanded streams)
+  forceMute = false, // Force mute (for small preview streams)
   size = 'normal' // 'small', 'normal', 'large'
 }) => {
   const { getStreamConfig, streamConfigs, globalAudio } = useRally();
@@ -18,7 +20,11 @@ export const StreamPlayer = ({
   
   // Check if any other stream is solo'd
   const hasSoloStream = Object.values(streamConfigs).some(c => c?.solo);
-  const isEffectivelyMuted = config.muted || globalAudio.muted || (hasSoloStream && !config.solo);
+  
+  // Calculate mute state
+  let isEffectivelyMuted = config.muted || globalAudio.muted || (hasSoloStream && !config.solo);
+  if (forceUnmute) isEffectivelyMuted = false;
+  if (forceMute) isEffectivelyMuted = true;
   
   // Calculate effective volume (individual * global)
   const effectiveVolume = Math.round((config.volume / 100) * (globalAudio.volume / 100) * 100);
