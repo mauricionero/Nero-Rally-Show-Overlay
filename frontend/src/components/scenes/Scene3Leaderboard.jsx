@@ -152,6 +152,17 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
 
   return (
     <div className="relative w-full h-full flex items-center justify-center p-8" data-testid="scene-3-leaderboard">
+      {/* Logo - Top Right */}
+      {logoUrl && (
+        <div className="absolute top-8 right-8 z-10">
+          <img 
+            src={logoUrl} 
+            alt="Channel Logo" 
+            className="h-20 max-w-[200px] object-contain"
+          />
+        </div>
+      )}
+
       <LeftControls>
         <div className="space-y-4">
           <div>
