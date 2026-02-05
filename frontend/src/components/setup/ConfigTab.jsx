@@ -102,6 +102,45 @@ export default function ConfigTab() {
 
   return (
     <div className="space-y-4">
+      {/* Branding */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Image className="w-5 h-5" />
+            Branding
+          </CardTitle>
+          <CardDescription className="text-zinc-400">Customize your channel branding for the overlay</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-white">Logo URL</Label>
+              <Input
+                value={logoUrl || ''}
+                onChange={(e) => setLogoUrl(e.target.value)}
+                placeholder="https://example.com/your-logo.png"
+                className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
+                data-testid="input-logo-url"
+              />
+              <p className="text-xs text-zinc-500">
+                Your logo will appear on all overlay scenes. Recommended: PNG with transparent background.
+              </p>
+            </div>
+            {logoUrl && (
+              <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
+                <span className="text-xs text-zinc-400">Preview:</span>
+                <img 
+                  src={logoUrl} 
+                  alt="Logo preview" 
+                  className="h-10 max-w-[150px] object-contain"
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Google Maps URL */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
