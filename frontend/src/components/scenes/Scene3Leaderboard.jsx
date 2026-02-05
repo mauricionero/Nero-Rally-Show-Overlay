@@ -8,7 +8,7 @@ import { CategoryBar } from '../CategoryBadge.jsx';
 import { parseTime, getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, categories } = useRally();
+  const { pilots, stages, times, startTimes, categories, logoUrl } = useRally();
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   
