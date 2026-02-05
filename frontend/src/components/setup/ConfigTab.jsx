@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Map } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image } from 'lucide-react';
 
 export default function ConfigTab() {
   const {
@@ -14,6 +14,8 @@ export default function ConfigTab() {
     stages,
     mapUrl,
     setMapUrl,
+    logoUrl,
+    setLogoUrl,
     exportData,
     importData,
     clearAllData,
