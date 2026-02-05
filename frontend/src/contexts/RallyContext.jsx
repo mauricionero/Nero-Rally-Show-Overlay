@@ -446,6 +446,7 @@ export const RallyProvider = ({ children }) => {
       currentStageId,
       chromaKey,
       mapUrl,
+      logoUrl,
       dataVersion,
       exportDate: new Date().toISOString()
     };
@@ -466,6 +467,7 @@ export const RallyProvider = ({ children }) => {
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
+      if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
       updateDataVersion();
       return true;
     } catch (error) {
@@ -486,6 +488,7 @@ export const RallyProvider = ({ children }) => {
     setCurrentStageId(null);
     setChromaKey('#000000');
     setMapUrl('');
+    setLogoUrl('');
     updateDataVersion();
   };
 
