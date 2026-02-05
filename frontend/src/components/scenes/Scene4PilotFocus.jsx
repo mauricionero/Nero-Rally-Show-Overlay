@@ -7,7 +7,7 @@ import { Label } from '../ui/label';
 import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 
 export default function Scene4PilotFocus({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, currentStageId, chromaKey } = useRally();
+  const { pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl } = useRally();
   const [selectedPilotId, setSelectedPilotId] = useState(pilots[0]?.id || null);
   const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
   const [currentTime, setCurrentTime] = useState(new Date());
