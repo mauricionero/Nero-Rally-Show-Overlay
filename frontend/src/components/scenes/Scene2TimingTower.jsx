@@ -5,7 +5,7 @@ import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '.
 import { ChevronRight, Radio } from 'lucide-react';
 
 export default function Scene2TimingTower({ hideStreams = false }) {
-  const { pilots, categories, stages, times, startTimes, currentStageId, chromaKey } = useRally();
+  const { pilots, categories, stages, times, startTimes, currentStageId, chromaKey, logoUrl } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedPilotId, setSelectedPilotId] = useState(null);
   const [expandedPilotId, setExpandedPilotId] = useState(null);
