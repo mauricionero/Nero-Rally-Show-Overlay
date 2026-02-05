@@ -282,11 +282,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       {currentStage && currentStageId && (
         <div className="absolute bottom-8 left-8 right-8">
           <div className="bg-black/95 backdrop-blur-sm border-l-4 border-[#FF4500] overflow-hidden mb-4">
-            <div className="p-4">
-              <p className="text-zinc-400 text-sm uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>Current Stage</p>
-              <p className="text-white text-3xl font-bold uppercase mt-1" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                {currentStage.ssNumber ? `SS${currentStage.ssNumber}` : ''} {currentStage.name}
-              </p>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-zinc-400 text-sm uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>Current Stage</p>
+                <p className="text-white text-3xl font-bold uppercase mt-1" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {currentStage.ssNumber ? `SS${currentStage.ssNumber}` : ''} {currentStage.name}
+                </p>
+              </div>
+              {logoUrl && (
+                <img 
+                  src={logoUrl} 
+                  alt="Channel Logo" 
+                  className="h-12 max-w-[150px] object-contain"
+                />
+              )}
             </div>
           </div>
 
