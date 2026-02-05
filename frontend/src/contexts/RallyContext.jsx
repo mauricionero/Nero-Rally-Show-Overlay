@@ -31,6 +31,7 @@ export const RallyProvider = ({ children }) => {
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
   const [mapUrl, setMapUrl] = useState(() => loadFromStorage('rally_map_url', ''));
+  const [logoUrl, setLogoUrl] = useState(() => loadFromStorage('rally_logo_url', ''));
   const [streamConfigs, setStreamConfigs] = useState(() => loadFromStorage('rally_stream_configs', {}));
   const [globalAudio, setGlobalAudio] = useState(() => loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
   const [currentScene, setCurrentScene] = useState(1);
@@ -58,6 +59,7 @@ export const RallyProvider = ({ children }) => {
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
     setMapUrl(loadFromStorage('rally_map_url', ''));
+    setLogoUrl(loadFromStorage('rally_logo_url', ''));
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
     const newVersion = loadFromStorage('rally_data_version', Date.now());
@@ -82,6 +84,7 @@ export const RallyProvider = ({ children }) => {
     if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
     if (data.chromaKey) setChromaKey(data.chromaKey);
     if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
+    if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
     if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
     if (data.globalAudio) setGlobalAudio(data.globalAudio);
     
@@ -117,6 +120,7 @@ export const RallyProvider = ({ children }) => {
       currentStageId,
       chromaKey,
       mapUrl,
+      logoUrl,
       streamConfigs,
       globalAudio,
       timestamp: Date.now()
@@ -235,6 +239,11 @@ export const RallyProvider = ({ children }) => {
     localStorage.setItem('rally_map_url', JSON.stringify(mapUrl));
     updateDataVersion();
   }, [mapUrl]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_logo_url', JSON.stringify(logoUrl));
+    updateDataVersion();
+  }, [logoUrl]);
 
   useEffect(() => {
     localStorage.setItem('rally_stream_configs', JSON.stringify(streamConfigs));
