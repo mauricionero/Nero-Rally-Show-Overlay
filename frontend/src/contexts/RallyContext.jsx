@@ -504,6 +504,7 @@ export const RallyProvider = ({ children }) => {
     currentStageId,
     chromaKey,
     mapUrl,
+    logoUrl,
     currentScene,
     dataVersion,
     // WebSocket state
@@ -515,6 +516,7 @@ export const RallyProvider = ({ children }) => {
     setCurrentScene,
     setChromaKey,
     setMapUrl,
+    setLogoUrl,
     setCurrentStageId,
     setGlobalAudio,
     // CRUD operations
