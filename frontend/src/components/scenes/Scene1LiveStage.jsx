@@ -20,7 +20,7 @@ const LAYOUTS = [
 const MAP_SLOT_ID = '__google_maps__';
 
 export default function Scene1LiveStage({ hideStreams = false }) {
-  const { pilots, stages, currentStageId, startTimes, times, categories, chromaKey, mapUrl } = useRally();
+  const { pilots, stages, currentStageId, startTimes, times, categories, chromaKey, mapUrl, logoUrl } = useRally();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedLayout, setSelectedLayout] = useState('2x2');
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
