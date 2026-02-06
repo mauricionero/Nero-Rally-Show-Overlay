@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { TimeInput } from '../TimeInput.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
+import { X } from 'lucide-react';
 
 export default function TimesTab() {
   const {
@@ -95,9 +96,16 @@ export default function TimesTab() {
                               value={getStartTime(pilot.id, stage.id)}
                               onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
                               placeholder="HH:MM"
-                              className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7"
+                              className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                               data-testid={`input-start-${pilot.id}-${stage.id}`}
                             />
+                            <button
+                              onClick={() => setStartTime(pilot.id, stage.id, '')}
+                              className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                              title="Clear start time"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           </div>
                           <div className="flex items-center gap-1">
                             <div className="flex gap-1 flex-1">
@@ -116,6 +124,16 @@ export default function TimesTab() {
                                 data-testid={`input-time-${pilot.id}-${stage.id}`}
                               />
                             </div>
+                            <button
+                              onClick={() => {
+                                setArrivalTime(pilot.id, stage.id, '');
+                                setTime(pilot.id, stage.id, '');
+                              }}
+                              className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                              title="Clear arrival times"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           </div>
                         </div>
                       </TableCell>

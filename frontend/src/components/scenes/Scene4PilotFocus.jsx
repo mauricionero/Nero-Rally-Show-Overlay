@@ -7,7 +7,7 @@ import { Label } from '../ui/label';
 import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 
 export default function Scene4PilotFocus({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, currentStageId, chromaKey } = useRally();
+  const { pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl } = useRally();
   const [selectedPilotId, setSelectedPilotId] = useState(pilots[0]?.id || null);
   const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -168,6 +168,17 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
 
       {/* Right Side - Pilot Info */}
       <div className="w-1/3 bg-black/95 backdrop-blur-sm p-6 overflow-y-auto">
+
+        {/* Logo - Top Right */}
+        {logoUrl && (
+          <div className="flex justify-end mb-4">
+            <img 
+              src={logoUrl} 
+              alt="Channel Logo" 
+              className="h-12 max-w-[120px] object-contain"
+            />
+          </div>
+        )}
 
         {/* Pilot Header */}
         <div className="text-center mb-6">
