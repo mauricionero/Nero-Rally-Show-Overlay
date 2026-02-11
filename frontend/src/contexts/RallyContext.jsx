@@ -715,12 +715,6 @@ export const RallyProvider = ({ children }) => {
     wsChannelKey,
     wsConnectionStatus,
     wsError,
-    // Race config setters
-    setRaceType,
-    wsEnabled,
-    wsChannelKey,
-    wsConnectionStatus,
-    wsError,
     // Setters
     setEventName,
     setCurrentScene,
