@@ -1,27 +1,112 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
-import { ChevronRight, Radio } from 'lucide-react';
+import { ChevronRight, Radio, RotateCcw, Flag } from 'lucide-react';
+
+// Helper to calculate positions for Lap Race
+const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
+  const selectedPilotIds = stagePilots[stageId] || pilots.map(p => p.id);
+  const selectedPilots = pilots.filter(p => selectedPilotIds.includes(p.id));
+  
+  const pilotData = selectedPilots.map(pilot => {
+    const pilotLaps = lapTimes[pilot.id]?.[stageId] || [];
+    const completedLaps = pilotLaps.filter(t => t && t.trim() !== '').length;
+    
+    let totalTimeMs = 0;
+    pilotLaps.forEach(lapTime => {
+      if (!lapTime) return;
+      const parts = lapTime.split(':');
+      if (parts.length >= 2) {
+        const hours = parts.length === 3 ? parseInt(parts[0]) || 0 : 0;
+        const mins = parts.length === 3 ? parseInt(parts[1]) || 0 : parseInt(parts[0]) || 0;
+        const secsStr = parts.length === 3 ? parts[2] : parts[1];
+        const [secs, ms] = (secsStr || '0').split('.');
+        totalTimeMs += (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
+      }
+    });
+    
+    const isFinished = completedLaps >= numberOfLaps;
+    const isRacing = completedLaps > 0 && !isFinished;
+    
+    return { 
+      pilot, 
+      completedLaps, 
+      totalTimeMs,
+      isFinished,
+      isRacing,
+      status: isFinished ? 'finished' : (isRacing ? 'racing' : 'not_started')
+    };
+  });
+
+  pilotData.sort((a, b) => {
+    if (b.completedLaps !== a.completedLaps) return b.completedLaps - a.completedLaps;
+    if (a.completedLaps === 0) return 0;
+    return a.totalTimeMs - b.totalTimeMs;
+  });
+
+  return pilotData.map((data, index) => ({
+    ...data,
+    position: index + 1
+  }));
+};
+
+// Format milliseconds to readable time
+const formatTime = (ms) => {
+  if (!ms) return '';
+  const totalSecs = ms / 1000;
+  const mins = Math.floor(totalSecs / 60);
+  const secs = (totalSecs % 60).toFixed(3);
+  return `${mins}:${secs.padStart(6, '0')}`;
+};
 
 export default function Scene2TimingTower({ hideStreams = false }) {
-  const { pilots, categories, stages, times, startTimes, currentStageId, chromaKey, logoUrl } = useRally();
+  const { 
+    pilots, categories, stages, times, startTimes, currentStageId, 
+    chromaKey, logoUrl, lapTimes, stagePilots 
+  } = useRally();
+  
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedPilotId, setSelectedPilotId] = useState(null);
   const [expandedPilotId, setExpandedPilotId] = useState(null);
+  
   const currentStage = stages.find(s => s.id === currentStageId);
+  const isLapRace = currentStage?.type === 'Lap Race';
+  const isSSStage = currentStage?.type === 'SS';
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (!selectedPilotId) {
-      const activePilot = pilots.find(p => p.isActive && p.streamUrl);
-      if (activePilot) setSelectedPilotId(activePilot.id);
+  // Calculate sorted pilots based on stage type
+  const sortedPilotsData = useMemo(() => {
+    if (!currentStageId || !currentStage) return [];
+    
+    if (isLapRace) {
+      return calculateLapRaceData(pilots, currentStageId, lapTimes, stagePilots, currentStage.numberOfLaps || 5);
     }
-  }, [pilots, selectedPilotId]);
+    
+    // SS Stage - use existing logic
+    const sortedPilots = sortPilotsByStatus(pilots, currentStageId, startTimes, times);
+    return sortedPilots.map((pilot, index) => {
+      const status = getPilotStatus(pilot.id, currentStageId, startTimes, times);
+      return {
+        pilot,
+        position: index + 1,
+        status,
+        isFinished: status === 'finished',
+        isRacing: status === 'racing'
+      };
+    });
+  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times]);
+
+  useEffect(() => {
+    if (!selectedPilotId && sortedPilotsData.length > 0) {
+      const activePilot = sortedPilotsData.find(d => d.pilot.isActive && d.pilot.streamUrl);
+      if (activePilot) setSelectedPilotId(activePilot.pilot.id);
+    }
+  }, [sortedPilotsData, selectedPilotId]);
 
   if (!currentStageId) {
     return (
@@ -31,17 +116,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     );
   }
 
-  const sortedPilots = sortPilotsByStatus(pilots, currentStageId, startTimes, times);
-  const racing = sortedPilots.filter(p => getPilotStatus(p.id, currentStageId, startTimes, times) === 'racing');
-  const finished = sortedPilots.filter(p => getPilotStatus(p.id, currentStageId, startTimes, times) === 'finished');
-  const notStarted = sortedPilots.filter(p => getPilotStatus(p.id, currentStageId, startTimes, times) === 'not_started');
+  const racing = sortedPilotsData.filter(d => d.status === 'racing');
+  const finished = sortedPilotsData.filter(d => d.status === 'finished');
+  const notStarted = sortedPilotsData.filter(d => d.status === 'not_started');
   const leader = finished[0];
-
-  // Get overall position for a pilot
-  const getOverallPosition = (pilotId) => {
-    const allSorted = [...finished, ...racing, ...notStarted];
-    return allSorted.findIndex(p => p.id === pilotId) + 1;
-  };
 
   const handleArrowClick = (e, pilotId) => {
     e.stopPropagation();
@@ -54,135 +132,125 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     setExpandedPilotId(expandedPilotId === pilotId ? null : pilotId);
   };
 
-  const renderPilotRow = (pilot, index, status) => {
-    const startTime = startTimes[pilot.id]?.[currentStageId];
-    const finishTime = times[pilot.id]?.[currentStageId];
+  const renderPilotRow = (data, index) => {
+    const { pilot, position, completedLaps, totalTimeMs, isFinished, isRacing } = data;
     const category = categories.find(c => c.id === pilot.categoryId);
-    const isSelectedForMain = pilot.id === selectedPilotId;
-    const isExpanded = pilot.id === expandedPilotId;
-    const position = getOverallPosition(pilot.id);
+    const isExpanded = expandedPilotId === pilot.id;
+    const hasStream = pilot.streamUrl;
     
-    let displayTime = '-';
-    let gap = '';
-
-    if (status === 'racing' && startTime) {
-      displayTime = getRunningTime(startTime);
-    } else if (status === 'finished' && finishTime) {
-      displayTime = finishTime;
-      if (leader && pilot.id !== leader.id) {
-        const pilotSeconds = parseTime(finishTime);
-        const leaderSeconds = parseTime(times[leader.id]?.[currentStageId]);
-        gap = '+' + (pilotSeconds - leaderSeconds).toFixed(3);
+    let displayTime = '';
+    let timeColor = 'text-zinc-500';
+    let statusColor = 'bg-zinc-700';
+    
+    if (isLapRace) {
+      if (isFinished) {
+        displayTime = formatTime(totalTimeMs);
+        timeColor = 'text-[#22C55E]';
+        statusColor = 'bg-[#22C55E]';
+      } else if (isRacing) {
+        displayTime = `Lap ${completedLaps}/${currentStage?.numberOfLaps || 0}`;
+        timeColor = 'text-[#FACC15]';
+        statusColor = 'bg-[#FACC15]';
       }
-    } else if (status === 'not_started' && startTime) {
-      displayTime = startTime;
+    } else {
+      // SS Stage logic
+      const startTime = startTimes[pilot.id]?.[currentStageId];
+      const finishTime = times[pilot.id]?.[currentStageId];
+      
+      if (isFinished && finishTime) {
+        displayTime = finishTime;
+        timeColor = 'text-[#22C55E]';
+        statusColor = 'bg-[#22C55E]';
+      } else if (isRacing && startTime) {
+        displayTime = getRunningTime(startTime);
+        timeColor = 'text-[#FF8C00]';
+        statusColor = 'bg-[#FF8C00]';
+      } else if (startTime) {
+        displayTime = `Start: ${startTime}`;
+        timeColor = 'text-zinc-500';
+      }
     }
 
-    const statusColors = {
-      racing: { bg: 'bg-gradient-to-r from-[#FF8C00]/20 to-transparent', border: 'border-[#FF8C00]', text: 'text-[#FACC15]' },
-      finished: { bg: 'bg-gradient-to-r from-[#22C55E]/20 to-transparent', border: 'border-[#22C55E]', text: 'text-[#22C55E]' },
-      not_started: { bg: 'bg-gradient-to-r from-zinc-700/20 to-transparent', border: 'border-zinc-600', text: 'text-zinc-500' }
-    };
-    const colors = statusColors[status];
+    // Calculate gap from leader
+    let gap = '';
+    if (isFinished && leader && leader.pilot.id !== pilot.id) {
+      if (isLapRace) {
+        const leaderTime = leader.totalTimeMs;
+        const pilotTime = totalTimeMs;
+        if (leaderTime && pilotTime) {
+          const gapMs = pilotTime - leaderTime;
+          gap = `+${formatTime(gapMs)}`;
+        }
+      } else {
+        const leaderTime = parseTime(times[leader.pilot.id]?.[currentStageId]);
+        const pilotTime = parseTime(times[pilot.id]?.[currentStageId]);
+        if (leaderTime && pilotTime) {
+          const gapMs = pilotTime - leaderTime;
+          const gapSecs = gapMs / 1000;
+          gap = `+${gapSecs.toFixed(3)}s`;
+        }
+      }
+    }
 
     return (
-      <div
-        key={pilot.id}
-        className={`relative overflow-hidden transition-all duration-300 ${
-          pilot.streamUrl ? 'cursor-pointer' : ''
-        } ${isSelectedForMain ? 'translate-x-2' : ''}`}
-      >
-        {/* Racing stripe accent */}
+      <div key={pilot.id}>
         <div 
-          className="absolute left-0 top-0 bottom-0 w-1"
-          style={{ backgroundColor: category?.color || '#3f3f46' }}
-        />
-        
-        {/* Main row */}
-        <div 
-          className={`${colors.bg} border-l-4 ${colors.border} ml-1 hover:bg-white/10 transition-colors`}
           onClick={() => handleRowClick(pilot.id)}
+          className={`relative flex items-center px-3 py-2 border-b border-zinc-800/50 transition-all duration-300 ${
+            hasStream ? 'cursor-pointer hover:bg-white/5' : ''
+          } ${isExpanded ? 'bg-white/10' : ''}`}
         >
-          <div className="flex items-center gap-2 p-2">
-            {/* Position badge */}
-            <div className={`w-8 h-8 flex items-center justify-center font-black text-lg ${
-              position === 1 ? 'bg-[#FFD700] text-black' :
-              position === 2 ? 'bg-[#C0C0C0] text-black' :
-              position === 3 ? 'bg-[#CD7F32] text-black' :
-              'bg-zinc-800 text-white'
-            }`} style={{ 
-              fontFamily: 'Barlow Condensed, sans-serif',
-              clipPath: 'polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%)'
-            }}>
-              {position}
-            </div>
-
-            {/* Small stream thumbnail or avatar - always visible */}
-            <div className="relative flex-shrink-0">
-              {pilot.streamUrl && !hideStreams ? (
-                <div className="w-14 h-9 rounded overflow-hidden bg-black border border-zinc-700">
-                  <StreamPlayer
-                    pilotId={pilot.id}
-                    streamUrl={pilot.streamUrl}
-                    name={pilot.name}
-                    className="w-full h-full"
-                    forceMute={true}
-                    showMuteIndicator={false}
-                    />
-                  </div>
-                ) : pilot.picture ? (
-                  <img src={pilot.picture} alt={pilot.name} className="w-10 h-10 rounded object-cover" />
-                ) : (
-                  <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center">
-                    <span className="text-sm font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
-                  </div>
-                )}
-              </div>
-
-            {/* Pilot info */}
-            <div className="flex-1 min-w-0">
-              <p className="text-white font-bold uppercase text-sm truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                {pilot.name}
-              </p>
-              <div className="flex items-center gap-2">
-                <span className={`font-mono text-xs font-bold ${colors.text}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  {displayTime}
-                </span>
-                {gap && (
-                  <span className="text-red-400 text-xs font-mono font-bold">{gap}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Arrow button */}
-            {pilot.streamUrl && (
-              <button
-                onClick={(e) => handleArrowClick(e, pilot.id)}
-                className={`w-7 h-10 flex items-center justify-center transition-all duration-200 ${
-                  isSelectedForMain 
-                    ? 'text-[#FF4500] bg-[#FF4500]/30 shadow-[0_0_15px_rgba(255,69,0,0.7)]' 
-                    : 'text-zinc-500 hover:text-white hover:bg-white/10'
-                }`}
-                style={{ clipPath: 'polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%)' }}
-              >
-                <ChevronRight className={`w-4 h-4 transition-transform ${isSelectedForMain ? 'scale-110' : ''}`} />
-              </button>
+          {/* Category stripe */}
+          {category && (
+            <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
+          )}
+          
+          {/* Position */}
+          <div className="w-8 flex-shrink-0 ml-2">
+            <span className="text-[#FF4500] font-bold text-sm">{position}</span>
+          </div>
+          
+          {/* Status indicator */}
+          <div className="w-2 h-2 rounded-full mr-2 flex-shrink-0" style={{ backgroundColor: statusColor.replace('bg-', '') === 'zinc-700' ? '#3f3f46' : statusColor.replace('bg-[', '').replace(']', '') }} />
+          
+          {/* Pilot name */}
+          <div className="flex-1 min-w-0">
+            <span className="text-white text-sm font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+              {pilot.name}
+            </span>
+          </div>
+          
+          {/* Time/Gap */}
+          <div className="text-right flex-shrink-0 ml-2">
+            <span className={`font-mono text-sm ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              {displayTime}
+            </span>
+            {gap && (
+              <span className="text-zinc-500 text-xs ml-2 font-mono">{gap}</span>
             )}
           </div>
+          
+          {/* Arrow */}
+          {hasStream && (
+            <button
+              onClick={(e) => handleArrowClick(e, pilot.id)}
+              className="ml-2 text-zinc-500 hover:text-white transition-colors"
+            >
+              <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+            </button>
+          )}
         </div>
-
-        {/* Expanded inline stream - only render when expanded */}
-        {isExpanded && pilot.streamUrl && !hideStreams && (
-          <div className="px-2 pb-2 pt-1 ml-1 bg-black/50">
-            <div className="w-full h-[140px] rounded overflow-hidden border-2 border-[#FF4500] bg-black shadow-[0_0_20px_rgba(255,69,0,0.4)]">
-              <StreamPlayer
-                pilotId={pilot.id}
-                streamUrl={pilot.streamUrl}
-                name={pilot.name}
-                className="w-full h-full"
-                forceUnmute={true}
-              />
-            </div>
+        
+        {/* Expanded stream */}
+        {isExpanded && hasStream && !hideStreams && (
+          <div className="h-32 bg-black m-2 rounded overflow-hidden">
+            <StreamPlayer
+              pilotId={pilot.id}
+              streamUrl={pilot.streamUrl}
+              name={pilot.name}
+              className="w-full h-full"
+              muted={true}
+            />
           </div>
         )}
       </div>
@@ -190,9 +258,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   };
 
   const selectedPilot = pilots.find(p => p.id === selectedPilotId);
-  const selectedPosition = selectedPilot ? getOverallPosition(selectedPilot.id) : null;
-  const selectedStatus = selectedPilot ? getPilotStatus(selectedPilot.id, currentStageId, startTimes, times) : null;
-  const selectedCategory = selectedPilot ? categories.find(c => c.id === selectedPilot.categoryId) : null;
+  const selectedPilotData = sortedPilotsData.find(d => d.pilot.id === selectedPilotId);
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-2-timing-tower">
@@ -210,167 +276,96 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               />
             </div>
           )}
-          <h2 className="text-[#FF4500] text-2xl font-black uppercase tracking-wider relative z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            Live Timing
-          </h2>
+          <div className="flex items-center gap-2 relative z-10">
+            {isLapRace ? (
+              <RotateCcw className="w-5 h-5 text-[#FACC15]" />
+            ) : (
+              <Flag className="w-5 h-5 text-[#FF4500]" />
+            )}
+            <h2 className="text-[#FF4500] text-2xl font-black uppercase tracking-wider" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+              Live Timing
+            </h2>
+          </div>
           {currentStage && (
             <div className="flex items-center gap-2 mt-1 relative z-10">
               <span className="text-zinc-400 text-xs font-bold uppercase">
-                {currentStage.ssNumber ? `SS${currentStage.ssNumber}` : ''} {currentStage.name}
+                {isSSStage && currentStage.ssNumber ? `SS${currentStage.ssNumber} ` : ''}
+                {currentStage.name}
+                {isLapRace && ` (${currentStage.numberOfLaps} laps)`}
               </span>
             </div>
           )}
         </div>
 
-        {/* Pilot list */}
-        <div className="space-y-1 px-2 pb-4">
-          {racing.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 px-2 py-1">
-                <div className="w-2 h-2 rounded-full bg-[#FACC15] animate-pulse" />
-                <span className="text-[#FACC15] text-xs font-bold uppercase tracking-wider">On Stage</span>
-              </div>
-              <div className="space-y-1">
-                {racing.map((pilot, idx) => renderPilotRow(pilot, idx, 'racing'))}
-              </div>
+        {/* Racing Section */}
+        {racing.length > 0 && (
+          <div className="mb-2">
+            <div className="px-3 py-1 bg-[#FF8C00]/20 border-l-2 border-[#FF8C00]">
+              <span className="text-[#FF8C00] text-xs font-bold uppercase flex items-center gap-1">
+                <Radio className="w-3 h-3 animate-pulse" />
+                {isLapRace ? 'Racing' : 'On Stage'}
+              </span>
             </div>
-          )}
+            {racing.map((data, index) => renderPilotRow(data, index))}
+          </div>
+        )}
 
-          {finished.length > 0 && (
-            <div className="mt-3">
-              <div className="flex items-center gap-2 px-2 py-1">
-                <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
-                <span className="text-[#22C55E] text-xs font-bold uppercase tracking-wider">Finished</span>
-              </div>
-              <div className="space-y-1">
-                {finished.map((pilot, idx) => renderPilotRow(pilot, idx, 'finished'))}
-              </div>
+        {/* Finished Section */}
+        {finished.length > 0 && (
+          <div className="mb-2">
+            <div className="px-3 py-1 bg-[#22C55E]/20 border-l-2 border-[#22C55E]">
+              <span className="text-[#22C55E] text-xs font-bold uppercase">Finished</span>
             </div>
-          )}
+            {finished.map((data, index) => renderPilotRow(data, index))}
+          </div>
+        )}
 
-          {notStarted.length > 0 && (
-            <div className="mt-3">
-              <div className="flex items-center gap-2 px-2 py-1">
-                <div className="w-2 h-2 rounded-full bg-zinc-500" />
-                <span className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Waiting</span>
-              </div>
-              <div className="space-y-1">
-                {notStarted.map((pilot, idx) => renderPilotRow(pilot, idx, 'not_started'))}
-              </div>
+        {/* Not Started Section */}
+        {notStarted.length > 0 && (
+          <div>
+            <div className="px-3 py-1 bg-zinc-800/50 border-l-2 border-zinc-600">
+              <span className="text-zinc-400 text-xs font-bold uppercase">
+                {isLapRace ? 'Not Started' : 'Will Start'}
+              </span>
             </div>
-          )}
-        </div>
+            {notStarted.map((data, index) => renderPilotRow(data, index))}
+          </div>
+        )}
       </div>
 
-      {/* Right Side - Main Stream (wider) */}
-      <div className="flex-1 p-4 flex flex-col">
-        {!selectedPilot || !selectedPilot.streamUrl ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              {selectedPilot ? 'No Stream Available' : 'Click a pilot to view'}
-            </p>
-          </div>
-        ) : (
-          <div className="relative flex-1 rounded-lg overflow-hidden border-2 border-[#FF4500]">
-            {/* Stream */}
-            {hideStreams ? (
-              <div className="w-full h-full" style={{ backgroundColor: chromaKey }} />
-            ) : (
-              <StreamPlayer
-                pilotId={selectedPilot.id}
-                streamUrl={selectedPilot.streamUrl}
-                name={selectedPilot.name}
-                className="w-full h-full"
-              />
-            )}
-
-            {/* LIVE Badge */}
-            <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded">
-              <Radio className="w-4 h-4 animate-pulse" />
-              <span className="text-sm font-black uppercase tracking-wider">LIVE</span>
-            </div>
-
-            {/* Stage info badge */}
-            {currentStage && (
-              <div className="absolute top-4 right-4 bg-black/80 backdrop-blur-sm px-4 py-2 rounded">
-                <span className="text-[#FF4500] text-lg font-black uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {currentStage.ssNumber ? `SS${currentStage.ssNumber}` : currentStage.name}
-                </span>
-              </div>
-            )}
-
-            {/* Bottom overlay - Driver info bar */}
-            <div className="absolute bottom-0 left-0 right-0">
-              {/* Diagonal racing stripe */}
-              <div 
-                className="h-1 w-full"
-                style={{ 
-                  background: `linear-gradient(90deg, ${selectedCategory?.color || '#FF4500'} 0%, transparent 100%)`
-                }}
-              />
-              
-              {/* Info bar */}
-              <div className="bg-gradient-to-t from-black via-black/95 to-transparent pt-8 pb-4 px-6">
-                <div className="flex items-end justify-between">
-                  {/* Left - Position & Name */}
-                  <div className="flex items-end gap-4">
-                    {/* Position badge */}
-                    <div className={`w-16 h-16 flex items-center justify-center font-black text-3xl ${
-                      selectedPosition === 1 ? 'bg-[#FFD700] text-black' :
-                      selectedPosition === 2 ? 'bg-[#C0C0C0] text-black' :
-                      selectedPosition === 3 ? 'bg-[#CD7F32] text-black' :
-                      'bg-zinc-800 text-white'
-                    }`} style={{ 
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      clipPath: 'polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%)'
-                    }}>
-                      P{selectedPosition}
-                    </div>
-                    
-                    {/* Name */}
-                    <div>
-                      <p className="text-white font-black text-3xl uppercase tracking-wide" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {selectedPilot.name}
-                      </p>
-                      {selectedCategory && (
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedCategory.color }} />
-                          <span className="text-zinc-400 text-sm font-bold uppercase">{selectedCategory.name}</span>
-                        </div>
-                      )}
-                    </div>
+      {/* Right Side - Main Stream */}
+      <div className="flex-1 relative" style={{ backgroundColor: chromaKey }}>
+        {selectedPilot && selectedPilot.streamUrl && !hideStreams ? (
+          <>
+            <StreamPlayer
+              pilotId={selectedPilot.id}
+              streamUrl={selectedPilot.streamUrl}
+              name={selectedPilot.name}
+              className="w-full h-full"
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
+              <div className="flex items-center gap-4">
+                {selectedPilotData && (
+                  <div className="bg-[#FF4500] px-3 py-1 rounded">
+                    <span className="text-white font-bold text-2xl">P{selectedPilotData.position}</span>
                   </div>
-
-                  {/* Right - Time */}
-                  <div className="text-right">
-                    {selectedStatus === 'racing' && (
-                      <>
-                        <p className="text-zinc-400 text-xs uppercase tracking-wider">Stage Time</p>
-                        <p className="text-[#FACC15] text-4xl font-mono font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {getRunningTime(startTimes[selectedPilot.id]?.[currentStageId])}
-                        </p>
-                      </>
-                    )}
-                    {selectedStatus === 'finished' && (
-                      <>
-                        <p className="text-zinc-400 text-xs uppercase tracking-wider">Stage Time</p>
-                        <p className="text-[#22C55E] text-4xl font-mono font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {times[selectedPilot.id]?.[currentStageId] || '-'}
-                        </p>
-                      </>
-                    )}
-                    {selectedStatus === 'not_started' && (
-                      <>
-                        <p className="text-zinc-400 text-xs uppercase tracking-wider">Start Time</p>
-                        <p className="text-white text-4xl font-mono font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {startTimes[selectedPilot.id]?.[currentStageId] || '-'}
-                        </p>
-                      </>
-                    )}
-                  </div>
+                )}
+                <div>
+                  <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {selectedPilot.name}
+                  </p>
+                  {isLapRace && selectedPilotData && (
+                    <p className="text-[#FACC15] text-lg font-mono">
+                      Lap {selectedPilotData.completedLaps || 0}/{currentStage?.numberOfLaps || 0}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
+          </>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <p className="text-white text-xl">Select a pilot with an active stream</p>
           </div>
         )}
       </div>
