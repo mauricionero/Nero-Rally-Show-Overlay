@@ -22,6 +22,14 @@ const loadFromStorage = (key, defaultValue) => {
 };
 
 export const RallyProvider = ({ children }) => {
+  // Race configuration
+  const [raceType, setRaceType] = useState(() => loadFromStorage('rally_race_type', 'rally')); // rally, lapRace, rallyX
+  const [eventName, setEventName] = useState(() => loadFromStorage('rally_event_name', ''));
+  const [numberOfLaps, setNumberOfLaps] = useState(() => loadFromStorage('rally_number_of_laps', 10));
+  const [raceStartTime, setRaceStartTime] = useState(() => loadFromStorage('rally_race_start_time', '')); // For lap race single start
+  const [positions, setPositions] = useState(() => loadFromStorage('rally_positions', {})); // pilotId -> stageId -> position
+  const [lapTimes, setLapTimes] = useState(() => loadFromStorage('rally_lap_times', {})); // pilotId -> stageId -> [lap1, lap2, ...]
+  
   const [pilots, setPilots] = useState(() => loadFromStorage('rally_pilots', []));
   const [categories, setCategories] = useState(() => loadFromStorage('rally_categories', []));
   const [stages, setStages] = useState(() => loadFromStorage('rally_stages', []));
