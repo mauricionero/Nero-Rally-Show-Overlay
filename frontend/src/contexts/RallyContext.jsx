@@ -215,9 +215,6 @@ export const RallyProvider = ({ children }) => {
   }, [dataVersion, wsEnabled, publishToWebSocket]);
 
   useEffect(() => {
-    localStorage.setItem('rally_race_type', JSON.stringify(raceType));
-    updateDataVersion();
-  useEffect(() => {
     localStorage.setItem('rally_event_name', JSON.stringify(eventName));
     updateDataVersion();
   }, [eventName]);
