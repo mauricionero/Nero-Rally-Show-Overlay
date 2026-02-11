@@ -168,6 +168,11 @@ export default function PilotsTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 text-sm">#{pilot.startOrder || '?'}</span>
+                    {pilot.carNumber && (
+                      <span className="bg-[#FF4500] text-white text-xs font-bold px-1.5 py-0.5 rounded">
+                        {pilot.carNumber}
+                      </span>
+                    )}
                     <h3 className="font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                       {pilot.name}
                     </h3>
