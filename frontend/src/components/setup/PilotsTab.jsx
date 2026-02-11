@@ -68,7 +68,7 @@ export default function PilotsTab() {
           <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Add New Pilot</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
             <div>
               <Label htmlFor="pilot-name" className="text-white">Pilot Name *</Label>
               <Input
@@ -78,6 +78,17 @@ export default function PilotsTab() {
                 placeholder="John Doe"
                 className="bg-[#09090B] border-zinc-700 text-white"
                 data-testid="input-pilot-name"
+              />
+            </div>
+            <div>
+              <Label htmlFor="pilot-car-number" className="text-white">Car #</Label>
+              <Input
+                id="pilot-car-number"
+                value={newPilot.carNumber}
+                onChange={(e) => setNewPilot({ ...newPilot, carNumber: e.target.value })}
+                placeholder="42"
+                className="bg-[#09090B] border-zinc-700 text-white"
+                data-testid="input-pilot-car-number"
               />
             </div>
             <div>
