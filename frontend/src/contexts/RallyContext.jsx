@@ -374,6 +374,7 @@ export const RallyProvider = ({ children }) => {
       type: stage.type || 'SS',
       ssNumber: stage.ssNumber || '',
       startTime: stage.startTime || '',
+      numberOfLaps: stage.numberOfLaps || 0, // For RallyX SS stages
       ...stage
     };
     setStages(prev => [...prev, newStage]);
@@ -402,6 +403,90 @@ export const RallyProvider = ({ children }) => {
         }
       });
       return newStartTimes;
+    });
+    setLapTimes(prev => {
+      const newLapTimes = { ...prev };
+      Object.keys(newLapTimes).forEach(pilotId => {
+        if (newLapTimes[pilotId]) {
+          delete newLapTimes[pilotId][id];
+        }
+      });
+      return newLapTimes;
+    });
+    setPositions(prev => {
+      const newPositions = { ...prev };
+      Object.keys(newPositions).forEach(pilotId => {
+        if (newPositions[pilotId]) {
+          delete newPositions[pilotId][id];
+        }
+      });
+      return newPositions;
+    });
+  };
+
+  // Lap times functions
+  const setLapTime = (pilotId, stageId, lapIndex, time) => {
+    setLapTimes(prev => {
+      const pilotLaps = prev[pilotId] || {};
+      const stageLaps = [...(pilotLaps[stageId] || [])];
+      stageLaps[lapIndex] = time;
+      return {
+        ...prev,
+        [pilotId]: {
+          ...pilotLaps,
+          [stageId]: stageLaps
+        }
+      };
+    });
+  };
+
+  const getLapTime = (pilotId, stageId, lapIndex) => {
+    return lapTimes[pilotId]?.[stageId]?.[lapIndex] || '';
+  };
+
+  const getPilotLapTimes = (pilotId, stageId) => {
+    return lapTimes[pilotId]?.[stageId] || [];
+  };
+
+  // Position functions
+  const setPosition = (pilotId, stageId, position) => {
+    setPositions(prev => ({
+      ...prev,
+      [pilotId]: {
+        ...(prev[pilotId] || {}),
+        [stageId]: position
+      }
+    }));
+  };
+
+  const getPosition = (pilotId, stageId) => {
+    return positions[pilotId]?.[stageId] || null;
+  };
+
+  // Calculate positions based on lap times (for lap race / rallyX)
+  const calculatePositions = (stageId, currentLap) => {
+    const pilotData = pilots.map(pilot => {
+      const pilotLaps = lapTimes[pilot.id]?.[stageId] || [];
+      const completedLaps = pilotLaps.filter(t => t).length;
+      const totalTime = pilotLaps.reduce((sum, t) => {
+        if (!t) return sum;
+        const parts = t.split(':');
+        const mins = parseInt(parts[0]) || 0;
+        const secsAndMs = parts[1] ? parseFloat(parts[1]) : 0;
+        return sum + mins * 60 + secsAndMs;
+      }, 0);
+      return { pilotId: pilot.id, completedLaps, totalTime };
+    });
+
+    // Sort by completed laps (desc), then by total time (asc)
+    pilotData.sort((a, b) => {
+      if (b.completedLaps !== a.completedLaps) return b.completedLaps - a.completedLaps;
+      return a.totalTime - b.totalTime;
+    });
+
+    // Update positions
+    pilotData.forEach((data, index) => {
+      setPosition(data.pilotId, stageId, index + 1);
     });
   };
 
