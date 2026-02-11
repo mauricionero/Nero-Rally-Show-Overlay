@@ -202,11 +202,13 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         <div className="relative p-4 pb-3 overflow-hidden">
           <div className="absolute -right-10 -top-10 w-32 h-32 bg-[#FF4500]/20 rotate-45" />
           {logoUrl && (
-            <img 
-              src={logoUrl} 
-              alt="Channel Logo" 
-              className="h-8 max-w-[120px] object-contain mb-2 relative z-10"
-            />
+            <div className="flex justify-center mb-3 relative z-10">
+              <img 
+                src={logoUrl} 
+                alt="Channel Logo" 
+                className="w-1/2 max-h-16 object-contain"
+              />
+            </div>
           )}
           <h2 className="text-[#FF4500] text-2xl font-black uppercase tracking-wider relative z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             Live Timing
