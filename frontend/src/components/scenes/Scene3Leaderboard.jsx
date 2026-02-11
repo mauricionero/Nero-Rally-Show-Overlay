@@ -158,7 +158,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           <img 
             src={logoUrl} 
             alt="Channel Logo" 
-            className="h-20 max-w-[200px] object-contain"
+            className="h-28 max-w-[280px] object-contain"
           />
         </div>
       )}
