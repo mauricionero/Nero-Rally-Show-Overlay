@@ -221,6 +221,15 @@ export default function PilotsTab() {
                             />
                           </div>
                           <div>
+                            <Label className="text-white">Car #</Label>
+                            <Input
+                              value={editingPilot.carNumber || ''}
+                              onChange={(e) => setEditingPilot({ ...editingPilot, carNumber: e.target.value })}
+                              placeholder="42"
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                          </div>
+                          <div>
                             <Label className="text-white">Start Order</Label>
                             <Input
                               type="number"
