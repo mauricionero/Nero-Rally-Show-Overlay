@@ -58,6 +58,12 @@ export const RallyProvider = ({ children }) => {
 
   // Reload all data from localStorage
   const reloadData = useCallback(() => {
+    setRaceType(loadFromStorage('rally_race_type', 'rally'));
+    setEventName(loadFromStorage('rally_event_name', ''));
+    setNumberOfLaps(loadFromStorage('rally_number_of_laps', 10));
+    setRaceStartTime(loadFromStorage('rally_race_start_time', ''));
+    setPositions(loadFromStorage('rally_positions', {}));
+    setLapTimes(loadFromStorage('rally_lap_times', {}));
     setPilots(loadFromStorage('rally_pilots', []));
     setCategories(loadFromStorage('rally_categories', []));
     setStages(loadFromStorage('rally_stages', []));
@@ -83,6 +89,12 @@ export const RallyProvider = ({ children }) => {
     // Prevent re-publishing when applying received data
     isPublishing.current = true;
     
+    if (data.raceType) setRaceType(data.raceType);
+    if (data.eventName !== undefined) setEventName(data.eventName);
+    if (data.numberOfLaps !== undefined) setNumberOfLaps(data.numberOfLaps);
+    if (data.raceStartTime !== undefined) setRaceStartTime(data.raceStartTime);
+    if (data.positions) setPositions(data.positions);
+    if (data.lapTimes) setLapTimes(data.lapTimes);
     if (data.pilots) setPilots(data.pilots);
     if (data.categories) setCategories(data.categories);
     if (data.stages) setStages(data.stages);
