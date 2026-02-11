@@ -7,23 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
-import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw } from 'lucide-react';
+import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
 
-const STAGE_TYPES = ['SS', 'Liaison', 'Service Park', 'Other'];
-const RACE_TYPES = [
-  { id: 'rally', name: 'Rally', description: 'Traditional point-to-point stages' },
-  { id: 'lapRace', name: 'Lap Race', description: 'Circuit racing with multiple laps' },
-  { id: 'rallyX', name: 'Rally X', description: 'Multiple short races with laps' }
+const STAGE_TYPES = [
+  { id: 'SS', name: 'SS (Special Stage)', description: 'Point-to-point timed stage', icon: Flag },
+  { id: 'Lap Race', name: 'Lap Race', description: 'Circuit racing with multiple laps', icon: RotateCcw },
+  { id: 'Liaison', name: 'Liaison', description: 'Transfer section between stages', icon: Car },
+  { id: 'Service Park', name: 'Service Park', description: 'Service/repair period', icon: Timer }
 ];
 
 export default function TheRaceTab() {
   const {
-    raceType,
-    setRaceType,
     eventName,
     setEventName,
-    numberOfLaps,
-    setNumberOfLaps,
     stages,
     currentStageId,
     setCurrentStageId,
@@ -38,17 +34,17 @@ export default function TheRaceTab() {
 
   const handleAddStage = () => {
     if (!newStage.name.trim()) {
-      toast.error('Stage/Race name is required');
+      toast.error('Stage name is required');
       return;
     }
     addStage(newStage);
     setNewStage({ name: '', type: 'SS', ssNumber: '', startTime: '', numberOfLaps: 5 });
-    toast.success(raceType === 'rally' ? 'Stage added successfully' : 'Race added successfully');
+    toast.success('Stage added successfully');
   };
 
   const handleUpdateStage = () => {
     if (!editingStage.name.trim()) {
-      toast.error('Stage/Race name is required');
+      toast.error('Stage name is required');
       return;
     }
     updateStage(editingStage.id, editingStage);
@@ -64,50 +60,33 @@ export default function TheRaceTab() {
   });
 
   const currentStage = stages.find(s => s.id === currentStageId);
+  const isLapRaceType = newStage.type === 'Lap Race';
+  const isSSType = newStage.type === 'SS';
 
-  // For Lap Race, we treat it as having one implicit stage (the event itself)
-  const isLapRace = raceType === 'lapRace';
-  const isRallyX = raceType === 'rallyX';
-  const isRally = raceType === 'rally';
+  const getStageTypeIcon = (type) => {
+    const stageType = STAGE_TYPES.find(t => t.id === type);
+    return stageType?.icon || Flag;
+  };
+
+  const getStageTypeColor = (type) => {
+    switch (type) {
+      case 'SS': return 'text-[#FF4500]';
+      case 'Lap Race': return 'text-[#FACC15]';
+      case 'Liaison': return 'text-blue-400';
+      case 'Service Park': return 'text-green-400';
+      default: return 'text-zinc-400';
+    }
+  };
 
   return (
     <div className="space-y-4">
-      {/* Race Type Selector */}
+      {/* Event Name */}
       <Card className="bg-[#18181B] border-zinc-800 border-l-4 border-l-[#FF4500]">
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             <Trophy className="w-5 h-5 text-[#FF4500]" />
-            Race Type
+            Event Name
           </CardTitle>
-          <CardDescription className="text-zinc-400">Select the type of racing event</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {RACE_TYPES.map((type) => (
-              <button
-                key={type.id}
-                onClick={() => setRaceType(type.id)}
-                className={`p-4 rounded-lg border-2 text-left transition-all ${
-                  raceType === type.id
-                    ? 'border-[#FF4500] bg-[#FF4500]/10'
-                    : 'border-zinc-700 hover:border-zinc-500'
-                }`}
-                data-testid={`race-type-${type.id}`}
-              >
-                <h3 className="font-bold text-lg uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {type.name}
-                </h3>
-                <p className="text-xs text-zinc-400 mt-1">{type.description}</p>
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Event Name */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Event Name</CardTitle>
         </CardHeader>
         <CardContent>
           <Input
@@ -120,290 +99,288 @@ export default function TheRaceTab() {
         </CardContent>
       </Card>
 
-      {/* Lap Race - Number of Laps */}
-      {isLapRace && (
-        <Card className="bg-[#18181B] border-zinc-800">
-          <CardHeader>
-            <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              <RotateCcw className="w-5 h-5" />
-              Number of Laps
-            </CardTitle>
-            <CardDescription className="text-zinc-400">Set the total number of laps for this race</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <Input
-                type="number"
-                min="1"
-                max="999"
-                value={numberOfLaps}
-                onChange={(e) => setNumberOfLaps(parseInt(e.target.value) || 1)}
-                className="bg-[#09090B] border-zinc-700 text-white w-32 text-center text-2xl font-bold"
-                data-testid="input-number-of-laps"
-              />
-              <span className="text-zinc-400">laps</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Rally / RallyX - Stage Management */}
-      {(isRally || isRallyX) && (
-        <>
-          {/* Add New Stage/Race */}
-          <Card className="bg-[#18181B] border-zinc-800">
-            <CardHeader>
-              <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                <Flag className="w-5 h-5" />
-                {isRallyX ? 'Add New Race' : 'Add New Stage'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                <div className="md:col-span-2">
-                  <Label className="text-white">{isRallyX ? 'Race Name *' : 'Stage Name *'}</Label>
-                  <Input
-                    value={newStage.name}
-                    onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
-                    placeholder={isRallyX ? 'Heat 1' : 'SS1 - Mountain Pass'}
-                    className="bg-[#09090B] border-zinc-700 text-white"
-                    data-testid="input-stage-name"
-                  />
-                </div>
-                <div>
-                  <Label className="text-white">Type</Label>
-                  <Select value={newStage.type} onValueChange={(val) => setNewStage({ ...newStage, type: val })}>
-                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STAGE_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {isRally && (
-                  <div>
-                    <Label className="text-white">SS Number</Label>
-                    <Input
-                      value={newStage.ssNumber}
-                      onChange={(e) => setNewStage({ ...newStage, ssNumber: e.target.value })}
-                      placeholder="1"
-                      className="bg-[#09090B] border-zinc-700 text-white"
-                    />
-                  </div>
-                )}
-                {isRallyX && newStage.type === 'SS' && (
-                  <div>
-                    <Label className="text-white">Number of Laps</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={newStage.numberOfLaps}
-                      onChange={(e) => setNewStage({ ...newStage, numberOfLaps: parseInt(e.target.value) || 1 })}
-                      placeholder="5"
-                      className="bg-[#09090B] border-zinc-700 text-white"
-                    />
-                  </div>
-                )}
-                <div>
-                  <Label className="text-white">Start Time</Label>
-                  <Input
-                    value={newStage.startTime}
-                    onChange={(e) => setNewStage({ ...newStage, startTime: e.target.value })}
-                    placeholder="09:00"
-                    className="bg-[#09090B] border-zinc-700 text-white"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button
-                    onClick={handleAddStage}
-                    className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
-                    data-testid="button-add-stage"
+      {/* Add New Stage */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Plus className="w-5 h-5" />
+            Add New Stage
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Stage Type Selector */}
+          <div>
+            <Label className="text-white mb-2 block">Stage Type</Label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {STAGE_TYPES.map((type) => {
+                const Icon = type.icon;
+                return (
+                  <button
+                    key={type.id}
+                    onClick={() => setNewStage({ ...newStage, type: type.id })}
+                    className={`p-3 rounded-lg border-2 text-left transition-all ${
+                      newStage.type === type.id
+                        ? 'border-[#FF4500] bg-[#FF4500]/10'
+                        : 'border-zinc-700 hover:border-zinc-500'
+                    }`}
+                    data-testid={`stage-type-${type.id}`}
                   >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Current Stage Selector */}
-          <Card className="bg-[#18181B] border-zinc-800">
-            <CardHeader>
-              <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                {isRallyX ? 'Current Race' : 'Current Stage'}
-              </CardTitle>
-              <CardDescription className="text-zinc-400">
-                {isRallyX ? 'Select the race currently being run' : 'Select the stage currently being raced'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
-                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" data-testid="select-current-stage">
-                  <SelectValue placeholder={isRallyX ? 'Select current race' : 'Select current stage'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {sortedStages.map((stage) => (
-                    <SelectItem key={stage.id} value={stage.id}>
-                      {isRally && stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
-                      {isRallyX && stage.type === 'SS' && stage.numberOfLaps ? ` (${stage.numberOfLaps} laps)` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {currentStage && (
-                <p className="mt-2 text-[#FACC15] font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  LIVE: {isRally && currentStage.ssNumber ? `SS${currentStage.ssNumber} - ` : ''}{currentStage.name}
-                  {isRallyX && currentStage.type === 'SS' && currentStage.numberOfLaps ? ` (${currentStage.numberOfLaps} laps)` : ''}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Stages/Races List */}
-          <div className="space-y-2">
-            {sortedStages.map((stage) => (
-              <Card key={stage.id} className="bg-[#18181B] border-zinc-800" data-testid={`stage-card-${stage.id}`}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-xl uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {isRally && stage.ssNumber && <span className="text-[#FF4500]">SS{stage.ssNumber}</span>} {stage.name}
-                      </h3>
-                      <div className="flex gap-4 mt-1 text-sm text-zinc-400">
-                        <span>Type: {stage.type}</span>
-                        {stage.startTime && <span>Start: {stage.startTime}</span>}
-                        {isRallyX && stage.type === 'SS' && stage.numberOfLaps && (
-                          <span className="text-[#FF4500]">{stage.numberOfLaps} laps</span>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Icon className={`w-4 h-4 ${getStageTypeColor(type.id)}`} />
+                      <span className="font-bold text-sm text-white">{type.id}</span>
                     </div>
-                    <div className="flex gap-1">
-                      <Dialog open={stageDialogOpen && editingStage?.id === stage.id} onOpenChange={(open) => {
-                        setStageDialogOpen(open);
-                        if (!open) setEditingStage(null);
-                      }}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setEditingStage({ ...stage })}
-                            className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
-                            data-testid={`button-edit-stage-${stage.id}`}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
-                          <DialogHeader>
-                            <DialogTitle className="text-white">{isRallyX ? 'Edit Race' : 'Edit Stage'}</DialogTitle>
-                          </DialogHeader>
-                          {editingStage && (
-                            <div className="space-y-4">
-                              <div>
-                                <Label className="text-white">{isRallyX ? 'Race Name *' : 'Stage Name *'}</Label>
-                                <Input
-                                  value={editingStage.name}
-                                  onChange={(e) => setEditingStage({ ...editingStage, name: e.target.value })}
-                                  className="bg-[#09090B] border-zinc-700 text-white"
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-white">Type</Label>
-                                <Select value={editingStage.type} onValueChange={(val) => setEditingStage({ ...editingStage, type: val })}>
-                                  <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {STAGE_TYPES.map((type) => (
-                                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              {isRally && (
-                                <div>
-                                  <Label className="text-white">SS Number</Label>
-                                  <Input
-                                    value={editingStage.ssNumber}
-                                    onChange={(e) => setEditingStage({ ...editingStage, ssNumber: e.target.value })}
-                                    className="bg-[#09090B] border-zinc-700 text-white"
-                                  />
-                                </div>
-                              )}
-                              {isRallyX && editingStage.type === 'SS' && (
-                                <div>
-                                  <Label className="text-white">Number of Laps</Label>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    value={editingStage.numberOfLaps || ''}
-                                    onChange={(e) => setEditingStage({ ...editingStage, numberOfLaps: parseInt(e.target.value) || 1 })}
-                                    className="bg-[#09090B] border-zinc-700 text-white"
-                                  />
-                                </div>
-                              )}
-                              <div>
-                                <Label className="text-white">Start Time (HH:MM)</Label>
-                                <Input
-                                  value={editingStage.startTime}
-                                  onChange={(e) => setEditingStage({ ...editingStage, startTime: e.target.value })}
-                                  className="bg-[#09090B] border-zinc-700 text-white"
-                                />
-                              </div>
-                            </div>
-                          )}
-                          <DialogFooter>
-                            <Button onClick={handleUpdateStage} className="bg-[#FF4500] hover:bg-[#FF4500]/90">
-                              Update
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          if (window.confirm(`Delete this ${isRallyX ? 'race' : 'stage'}?`)) {
-                            deleteStage(stage.id);
-                            toast.success('Deleted successfully');
-                          }
-                        }}
-                        className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                        data-testid={`button-delete-stage-${stage.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <p className="text-xs text-zinc-400 mt-1">{type.description}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {stages.length === 0 && (
-            <div className="text-center py-12 text-zinc-500">
-              No {isRallyX ? 'races' : 'stages'} registered. Add your first {isRallyX ? 'race' : 'stage'} above.
+          {/* Stage Details Form */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="md:col-span-2">
+              <Label className="text-white">Stage Name *</Label>
+              <Input
+                value={newStage.name}
+                onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
+                placeholder={isLapRaceType ? 'Heat 1' : 'Mountain Pass'}
+                className="bg-[#09090B] border-zinc-700 text-white"
+                data-testid="input-stage-name"
+              />
             </div>
-          )}
-        </>
-      )}
+            
+            {isSSType && (
+              <div>
+                <Label className="text-white">SS Number</Label>
+                <Input
+                  value={newStage.ssNumber}
+                  onChange={(e) => setNewStage({ ...newStage, ssNumber: e.target.value })}
+                  placeholder="1"
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                />
+              </div>
+            )}
+            
+            {isLapRaceType && (
+              <div>
+                <Label className="text-white">Number of Laps</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={newStage.numberOfLaps}
+                  onChange={(e) => setNewStage({ ...newStage, numberOfLaps: parseInt(e.target.value) || 1 })}
+                  placeholder="5"
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                />
+              </div>
+            )}
+            
+            <div>
+              <Label className="text-white">{isLapRaceType ? 'Race Start Time' : 'Start Time'}</Label>
+              <Input
+                value={newStage.startTime}
+                onChange={(e) => setNewStage({ ...newStage, startTime: e.target.value })}
+                placeholder="09:00"
+                className="bg-[#09090B] border-zinc-700 text-white"
+              />
+            </div>
+            
+            <div className="flex items-end">
+              <Button
+                onClick={handleAddStage}
+                className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
+                data-testid="button-add-stage"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Stage
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Lap Race Info */}
-      {isLapRace && (
-        <Card className="bg-[#09090B] border-zinc-800 border-dashed">
-          <CardContent className="py-8 text-center">
-            <p className="text-zinc-400">
-              Lap Race mode uses the event name as the race identifier.
+      {/* Current Stage Selector */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            Current Stage (Live)
+          </CardTitle>
+          <CardDescription className="text-zinc-400">
+            Select the stage currently being raced - affects overlay display
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
+            <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" data-testid="select-current-stage">
+              <SelectValue placeholder="Select current stage" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedStages.map((stage) => {
+                const Icon = getStageTypeIcon(stage.type);
+                return (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    <div className="flex items-center gap-2">
+                      <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
+                      {stage.type === 'SS' && stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}
+                      {stage.name}
+                      {stage.type === 'Lap Race' && ` (${stage.numberOfLaps} laps)`}
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {currentStage && (
+            <p className="mt-2 text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
+              LIVE: {currentStage.type === 'SS' && currentStage.ssNumber ? `SS${currentStage.ssNumber} - ` : ''}{currentStage.name}
+              {currentStage.type === 'Lap Race' && ` (${currentStage.numberOfLaps} laps)`}
             </p>
-            <p className="text-zinc-500 text-sm mt-2">
-              Configure pilots in the Pilots tab and record lap times in the Times tab.
-            </p>
-          </CardContent>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Stages List */}
+      <div className="space-y-2">
+        {sortedStages.map((stage) => {
+          const Icon = getStageTypeIcon(stage.type);
+          const isEditing = stageDialogOpen && editingStage?.id === stage.id;
+          
+          return (
+            <Card 
+              key={stage.id} 
+              className={`bg-[#18181B] border-zinc-800 ${stage.id === currentStageId ? 'border-l-4 border-l-[#FACC15]' : ''}`}
+              data-testid={`stage-card-${stage.id}`}
+            >
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Icon className={`w-5 h-5 ${getStageTypeColor(stage.type)}`} />
+                      <h3 className="font-bold text-xl uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {stage.type === 'SS' && stage.ssNumber && <span className="text-[#FF4500]">SS{stage.ssNumber} </span>}
+                        {stage.name}
+                      </h3>
+                      <span className={`text-xs px-2 py-0.5 rounded ${getStageTypeColor(stage.type)} bg-white/5`}>
+                        {stage.type}
+                      </span>
+                    </div>
+                    <div className="flex gap-4 mt-1 text-sm text-zinc-400">
+                      {stage.startTime && <span>Start: {stage.startTime}</span>}
+                      {stage.type === 'Lap Race' && (
+                        <span className="text-[#FACC15]">{stage.numberOfLaps} laps</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Dialog open={isEditing} onOpenChange={(open) => {
+                      setStageDialogOpen(open);
+                      if (!open) setEditingStage(null);
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingStage({ ...stage })}
+                          className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
+                          data-testid={`button-edit-stage-${stage.id}`}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
+                        <DialogHeader>
+                          <DialogTitle className="text-white">Edit Stage</DialogTitle>
+                        </DialogHeader>
+                        {editingStage && (
+                          <div className="space-y-4">
+                            <div>
+                              <Label className="text-white">Stage Type</Label>
+                              <Select value={editingStage.type} onValueChange={(val) => setEditingStage({ ...editingStage, type: val })}>
+                                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {STAGE_TYPES.map((type) => (
+                                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-white">Stage Name *</Label>
+                              <Input
+                                value={editingStage.name}
+                                onChange={(e) => setEditingStage({ ...editingStage, name: e.target.value })}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            {editingStage.type === 'SS' && (
+                              <div>
+                                <Label className="text-white">SS Number</Label>
+                                <Input
+                                  value={editingStage.ssNumber || ''}
+                                  onChange={(e) => setEditingStage({ ...editingStage, ssNumber: e.target.value })}
+                                  className="bg-[#09090B] border-zinc-700 text-white"
+                                />
+                              </div>
+                            )}
+                            {editingStage.type === 'Lap Race' && (
+                              <div>
+                                <Label className="text-white">Number of Laps</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={editingStage.numberOfLaps || 5}
+                                  onChange={(e) => setEditingStage({ ...editingStage, numberOfLaps: parseInt(e.target.value) || 1 })}
+                                  className="bg-[#09090B] border-zinc-700 text-white"
+                                />
+                              </div>
+                            )}
+                            <div>
+                              <Label className="text-white">{editingStage.type === 'Lap Race' ? 'Race Start Time' : 'Start Time'}</Label>
+                              <Input
+                                value={editingStage.startTime || ''}
+                                onChange={(e) => setEditingStage({ ...editingStage, startTime: e.target.value })}
+                                placeholder="HH:MM"
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        <DialogFooter>
+                          <Button onClick={handleUpdateStage} className="bg-[#FF4500] hover:bg-[#FF4500]/90">
+                            Update Stage
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        if (window.confirm('Delete this stage?')) {
+                          deleteStage(stage.id);
+                          toast.success('Stage deleted');
+                        }
+                      }}
+                      className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                      data-testid={`button-delete-stage-${stage.id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {stages.length === 0 && (
+        <div className="text-center py-12 text-zinc-500">
+          No stages registered. Add your first stage above.
+        </div>
       )}
     </div>
   );
