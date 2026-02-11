@@ -576,6 +576,12 @@ export const RallyProvider = ({ children }) => {
 
   const exportData = () => {
     const data = {
+      raceType,
+      eventName,
+      numberOfLaps,
+      raceStartTime,
+      positions,
+      lapTimes,
       pilots,
       categories,
       stages,
