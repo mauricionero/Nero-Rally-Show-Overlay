@@ -609,6 +609,12 @@ export const RallyProvider = ({ children }) => {
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
       if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
+      if (data.raceType) setRaceType(data.raceType);
+      if (data.eventName !== undefined) setEventName(data.eventName);
+      if (data.numberOfLaps !== undefined) setNumberOfLaps(data.numberOfLaps);
+      if (data.raceStartTime !== undefined) setRaceStartTime(data.raceStartTime);
+      if (data.positions) setPositions(data.positions);
+      if (data.lapTimes) setLapTimes(data.lapTimes);
       updateDataVersion();
       return true;
     } catch (error) {
@@ -618,6 +624,12 @@ export const RallyProvider = ({ children }) => {
   };
 
   const clearAllData = () => {
+    setRaceType('rally');
+    setEventName('');
+    setNumberOfLaps(10);
+    setRaceStartTime('');
+    setPositions({});
+    setLapTimes({});
     setPilots([]);
     setCategories([]);
     setStages([]);
@@ -634,6 +646,14 @@ export const RallyProvider = ({ children }) => {
   };
 
   const value = {
+    // Race configuration
+    raceType,
+    eventName,
+    numberOfLaps,
+    raceStartTime,
+    positions,
+    lapTimes,
+    // Core data
     pilots,
     categories,
     stages,
@@ -653,6 +673,11 @@ export const RallyProvider = ({ children }) => {
     wsChannelKey,
     wsConnectionStatus,
     wsError,
+    // Race config setters
+    setRaceType,
+    setEventName,
+    setNumberOfLaps,
+    setRaceStartTime,
     // Setters
     setCurrentScene,
     setChromaKey,
@@ -677,6 +702,14 @@ export const RallyProvider = ({ children }) => {
     getArrivalTime,
     setStartTime,
     getStartTime,
+    // Lap time functions
+    setLapTime,
+    getLapTime,
+    getPilotLapTimes,
+    // Position functions
+    setPosition,
+    getPosition,
+    calculatePositions,
     getStreamConfig,
     setStreamConfig,
     setSoloStream,
