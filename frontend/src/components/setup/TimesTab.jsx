@@ -3,12 +3,11 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
 import { TimeInput } from '../TimeInput.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
-import { X, Clock, Timer } from 'lucide-react';
+import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square } from 'lucide-react';
 
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = () => {
@@ -20,7 +19,7 @@ const getCurrentTimeString = () => {
   return `${hours}:${minutes}:${seconds}.${ms}`;
 };
 
-// Helper to calculate lap time from previous lap
+// Helper to calculate lap duration from previous lap
 const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
   if (!currentLapTime) return '';
   
@@ -49,34 +48,415 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
   return `${mins}:${secs.padStart(6, '0')}`;
 };
 
-export default function TimesTab() {
+const getStageTypeIcon = (type) => {
+  switch (type) {
+    case 'SS': return Flag;
+    case 'Lap Race': return RotateCcw;
+    case 'Liaison': return Car;
+    case 'Service Park': return Timer;
+    default: return Flag;
+  }
+};
+
+const getStageTypeColor = (type) => {
+  switch (type) {
+    case 'SS': return 'border-l-[#FF4500]';
+    case 'Lap Race': return 'border-l-[#FACC15]';
+    case 'Liaison': return 'border-l-blue-400';
+    case 'Service Park': return 'border-l-green-400';
+    default: return 'border-l-zinc-400';
+  }
+};
+
+// SS Stage Component - Card layout for each pilot
+function SSStageCard({ stage, pilots, categories }) {
   const {
-    raceType,
-    eventName,
-    numberOfLaps,
-    raceStartTime,
-    setRaceStartTime,
-    pilots,
-    stages,
     times,
     setTime,
     getTime,
     setArrivalTime,
     getArrivalTime,
     setStartTime,
-    getStartTime,
-    setLapTime,
-    getLapTime,
-    getPilotLapTimes,
-    currentStageId,
-    setCurrentStageId
+    getStartTime
   } = useRally();
 
-  const sortedPilots = [...pilots].sort((a, b) => {
-    const orderA = a.startOrder || 999;
-    const orderB = b.startOrder || 999;
-    return orderA - orderB;
-  });
+  const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
+
+  const handleArrivalTimeChange = (pilotId, value) => {
+    setArrivalTime(pilotId, stage.id, value);
+    const startTime = getStartTime(pilotId, stage.id);
+    if (startTime && value) {
+      const totalTime = arrivalTimeToTotal(value, startTime);
+      if (totalTime) {
+        setTime(pilotId, stage.id, totalTime);
+      }
+    }
+  };
+
+  const handleTotalTimeChange = (pilotId, value) => {
+    setTime(pilotId, stage.id, value);
+    const startTime = getStartTime(pilotId, stage.id);
+    if (startTime && value) {
+      const arrivalTime = totalTimeToArrival(value, startTime);
+      if (arrivalTime) {
+        setArrivalTime(pilotId, stage.id, arrivalTime);
+      }
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      {sortedPilots.map((pilot) => {
+        const category = categories.find(c => c.id === pilot.categoryId);
+        return (
+          <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
+            {category && (
+              <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l" style={{ backgroundColor: category.color }} />
+            )}
+            <CardContent className="p-3 pl-4">
+              {/* Pilot Header */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                {pilot.carNumber && (
+                  <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
+                    {pilot.carNumber}
+                  </span>
+                )}
+                <span className="text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {pilot.name}
+                </span>
+              </div>
+              
+              {/* Start Time */}
+              <div className="mb-2">
+                <Label className="text-xs text-zinc-400">Start Time</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={getStartTime(pilot.id, stage.id)}
+                    onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
+                    placeholder="HH:MM"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8"
+                  />
+                  <button
+                    onClick={() => setStartTime(pilot.id, stage.id, '')}
+                    className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                    title="Clear"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Arrival Time */}
+              <div className="mb-2">
+                <Label className="text-xs text-zinc-400">Arrival Time</Label>
+                <div className="flex items-center gap-1">
+                  <TimeInput
+                    value={getArrivalTime(pilot.id, stage.id)}
+                    onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
+                    placeholder="HH:MM:SS.000"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                  />
+                  <button
+                    onClick={() => setArrivalTime(pilot.id, stage.id, getCurrentTimeString())}
+                    className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
+                    title="Set current time"
+                  >
+                    <Clock className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setArrivalTime(pilot.id, stage.id, '');
+                      setTime(pilot.id, stage.id, '');
+                    }}
+                    className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                    title="Clear"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Total Time */}
+              <div>
+                <Label className="text-xs text-zinc-400">Total Time</Label>
+                <div className="flex items-center gap-1">
+                  <TimeInput
+                    value={getTime(pilot.id, stage.id)}
+                    onChange={(val) => handleTotalTimeChange(pilot.id, val)}
+                    placeholder="MM:SS.000"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// Liaison/Service Park Stage Component - Simple start/end per pilot
+function LiaisonStageCard({ stage, pilots, categories }) {
+  const { setStartTime, getStartTime, setTime, getTime } = useRally();
+
+  const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      {sortedPilots.map((pilot) => {
+        const category = categories.find(c => c.id === pilot.categoryId);
+        return (
+          <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
+            {category && (
+              <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l" style={{ backgroundColor: category.color }} />
+            )}
+            <CardContent className="p-3 pl-4">
+              {/* Pilot Header */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                <span className="text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {pilot.name}
+                </span>
+              </div>
+              
+              {/* Start Time */}
+              <div className="mb-2">
+                <Label className="text-xs text-zinc-400">Start Time</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={getStartTime(pilot.id, stage.id)}
+                    onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
+                    placeholder="HH:MM"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                  />
+                  <button
+                    onClick={() => setStartTime(pilot.id, stage.id, getCurrentTimeString().slice(0, 5))}
+                    className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
+                    title="Set current time"
+                  >
+                    <Clock className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => setStartTime(pilot.id, stage.id, '')}
+                    className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* End Time */}
+              <div>
+                <Label className="text-xs text-zinc-400">End Time</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={getTime(pilot.id, stage.id)}
+                    onChange={(e) => setTime(pilot.id, stage.id, e.target.value)}
+                    placeholder="HH:MM"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                  />
+                  <button
+                    onClick={() => setTime(pilot.id, stage.id, getCurrentTimeString().slice(0, 5))}
+                    className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
+                    title="Set current time"
+                  >
+                    <Clock className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => setTime(pilot.id, stage.id, '')}
+                    className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// Lap Race Stage Component - Laps x Pilots matrix with pilot selection
+function LapRaceStageCard({ stage, pilots, categories }) {
+  const {
+    setLapTime,
+    getLapTime,
+    getStagePilots,
+    togglePilotInStage,
+    selectAllPilotsInStage,
+    deselectAllPilotsInStage,
+    updateStage
+  } = useRally();
+
+  const selectedPilotIds = getStagePilots(stage.id);
+  const selectedPilots = pilots.filter(p => selectedPilotIds.includes(p.id));
+  const sortedPilots = [...selectedPilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
+  
+  const lapsArray = Array.from({ length: stage.numberOfLaps || 5 }, (_, i) => i);
+  const allSelected = selectedPilotIds.length === pilots.length;
+  const noneSelected = selectedPilotIds.length === 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Race Start Time */}
+      <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
+        <Label className="text-white whitespace-nowrap">Race Start Time:</Label>
+        <Input
+          value={stage.startTime || ''}
+          onChange={(e) => updateStage(stage.id, { startTime: e.target.value })}
+          placeholder="HH:MM:SS"
+          className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => updateStage(stage.id, { startTime: getCurrentTimeString().slice(0, 8) })}
+          className="border-zinc-700 text-white"
+        >
+          <Clock className="w-3 h-3 mr-1" />
+          Now
+        </Button>
+      </div>
+
+      {/* Pilot Selection */}
+      <div className="p-3 bg-[#09090B] rounded border border-zinc-700">
+        <div className="flex items-center justify-between mb-2">
+          <Label className="text-white">Pilots in this race ({selectedPilotIds.length}/{pilots.length})</Label>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => selectAllPilotsInStage(stage.id)}
+              className={`text-xs ${allSelected ? 'text-green-500' : 'text-zinc-400'}`}
+            >
+              <CheckSquare className="w-3 h-3 mr-1" />
+              All
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => deselectAllPilotsInStage(stage.id)}
+              className={`text-xs ${noneSelected ? 'text-red-500' : 'text-zinc-400'}`}
+            >
+              <Square className="w-3 h-3 mr-1" />
+              None
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {pilots.map(pilot => (
+            <label
+              key={pilot.id}
+              className={`flex items-center gap-1 px-2 py-1 rounded cursor-pointer transition-colors ${
+                selectedPilotIds.includes(pilot.id)
+                  ? 'bg-[#FF4500]/20 border border-[#FF4500]'
+                  : 'bg-zinc-800 border border-zinc-700'
+              }`}
+            >
+              <Checkbox
+                checked={selectedPilotIds.includes(pilot.id)}
+                onCheckedChange={() => togglePilotInStage(stage.id, pilot.id)}
+                className="w-3 h-3"
+              />
+              <span className="text-white text-xs">{pilot.name}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Lap Times Matrix */}
+      {sortedPilots.length === 0 ? (
+        <div className="text-center py-8 text-zinc-500">
+          Select pilots to record lap times
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-700">
+                <th className="text-left text-white uppercase font-bold p-2 sticky left-0 bg-[#18181B] z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  Pilot
+                </th>
+                {lapsArray.map((lapIndex) => (
+                  <th key={lapIndex} className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    <div>Lap {lapIndex + 1}</div>
+                    <div className="text-xs text-zinc-400 font-normal">Time / Duration</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedPilots.map((pilot) => {
+                const category = categories.find(c => c.id === pilot.categoryId);
+                return (
+                  <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
+                    <td className="p-2 sticky left-0 bg-[#18181B] z-10">
+                      <div className="flex items-center gap-2">
+                        {category && (
+                          <div className="w-1 h-6 rounded" style={{ backgroundColor: category.color }} />
+                        )}
+                        <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                        <span className="text-white font-bold text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {pilot.name}
+                        </span>
+                      </div>
+                    </td>
+                    {lapsArray.map((lapIndex) => {
+                      const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
+                      const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, stage.id, lapIndex - 1) : null;
+                      const lapDuration = calculateLapDuration(lapTime, prevLapTime, stage.startTime);
+                      
+                      return (
+                        <td key={lapIndex} className="p-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              <TimeInput
+                                value={lapTime}
+                                onChange={(val) => setLapTime(pilot.id, stage.id, lapIndex, val)}
+                                placeholder="HH:MM:SS.000"
+                                className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                              />
+                              <button
+                                onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString())}
+                                className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
+                                title="Set current time"
+                              >
+                                <Clock className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => setLapTime(pilot.id, stage.id, lapIndex, '')}
+                                className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                                title="Clear"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                            {lapDuration && (
+                              <div className="text-xs text-[#22C55E] font-mono text-center">
+                                {lapDuration}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function TimesTab() {
+  const { pilots, stages, categories } = useRally();
 
   const sortedStages = [...stages].sort((a, b) => {
     if (!a.startTime) return 1;
@@ -84,406 +464,59 @@ export default function TimesTab() {
     return a.startTime.localeCompare(b.startTime);
   });
 
-  // Get SS stages only for RallyX
-  const ssStages = sortedStages.filter(s => s.type === 'SS');
-
-  const handleArrivalTimeChange = (pilotId, stageId, value) => {
-    setArrivalTime(pilotId, stageId, value);
-    const startTime = getStartTime(pilotId, stageId);
-    if (startTime && value) {
-      const totalTime = arrivalTimeToTotal(value, startTime);
-      if (totalTime) {
-        setTime(pilotId, stageId, totalTime);
-      }
-    }
-  };
-
-  const handleTotalTimeChange = (pilotId, stageId, value) => {
-    setTime(pilotId, stageId, value);
-    const startTime = getStartTime(pilotId, stageId);
-    if (startTime && value) {
-      const arrivalTime = totalTimeToArrival(value, startTime);
-      if (arrivalTime) {
-        setArrivalTime(pilotId, stageId, arrivalTime);
-      }
-    }
-  };
-
-  const handleNowClick = (pilotId, stageId, field) => {
-    const now = getCurrentTimeString();
-    if (field === 'arrival') {
-      handleArrivalTimeChange(pilotId, stageId, now);
-    } else if (field === 'lap') {
-      // For lap times, this is handled separately
-    }
-  };
-
-  const handleLapNowClick = (pilotId, stageId, lapIndex) => {
-    const now = getCurrentTimeString();
-    setLapTime(pilotId, stageId, lapIndex, now);
-  };
-
-  const isRally = raceType === 'rally';
-  const isLapRace = raceType === 'lapRace';
-  const isRallyX = raceType === 'rallyX';
-
-  // For Lap Race, use a virtual stage ID
-  const lapRaceStageId = '__lap_race__';
-
-  // Rally Times Matrix
-  if (isRally) {
+  if (pilots.length === 0) {
     return (
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Time Matrix</CardTitle>
-          <CardDescription className="text-zinc-400">Register start times and finish times for each pilot in each stage</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {sortedPilots.length === 0 || sortedStages.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500">
-              Add pilots and stages first to register times.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-zinc-700">
-                    <TableHead className="bg-[#18181B] text-white uppercase font-bold sticky left-0" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</TableHead>
-                    {sortedStages.map((stage) => (
-                      <TableHead key={stage.id} className="bg-[#18181B] text-white uppercase font-bold text-center" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        <div>{stage.ssNumber ? `SS${stage.ssNumber}` : stage.name}</div>
-                        <div className="text-xs text-zinc-400 font-normal">Start / Arrival / Total</div>
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedPilots.map((pilot) => (
-                    <TableRow key={pilot.id} className="border-zinc-700 hover:bg-white/5">
-                      <TableCell className="font-bold text-white sticky left-0 bg-[#18181B]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                          {pilot.name}
-                        </div>
-                      </TableCell>
-                      {sortedStages.map((stage) => (
-                        <TableCell key={stage.id}>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1">
-                              <Input
-                                value={getStartTime(pilot.id, stage.id)}
-                                onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
-                                placeholder="HH:MM"
-                                className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                                data-testid={`input-start-${pilot.id}-${stage.id}`}
-                              />
-                              <button
-                                onClick={() => setStartTime(pilot.id, stage.id, '')}
-                                className="text-zinc-500 hover:text-red-500 transition-colors p-1"
-                                title="Clear start time"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <div className="flex gap-1 flex-1">
-                                <TimeInput
-                                  value={getArrivalTime(pilot.id, stage.id)}
-                                  onChange={(val) => handleArrivalTimeChange(pilot.id, stage.id, val)}
-                                  placeholder="HH:MM:SS.000"
-                                  className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                                  data-testid={`input-arrival-${pilot.id}-${stage.id}`}
-                                />
-                                <TimeInput
-                                  value={getTime(pilot.id, stage.id)}
-                                  onChange={(val) => handleTotalTimeChange(pilot.id, stage.id, val)}
-                                  placeholder="MM:SS.000"
-                                  className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                                  data-testid={`input-time-${pilot.id}-${stage.id}`}
-                                />
-                              </div>
-                              <button
-                                onClick={() => handleNowClick(pilot.id, stage.id, 'arrival')}
-                                className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
-                                title="Set current time"
-                              >
-                                <Clock className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setArrivalTime(pilot.id, stage.id, '');
-                                  setTime(pilot.id, stage.id, '');
-                                }}
-                                className="text-zinc-500 hover:text-red-500 transition-colors p-1"
-                                title="Clear arrival times"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Lap Race Times Matrix
-  if (isLapRace) {
-    const lapsArray = Array.from({ length: numberOfLaps }, (_, i) => i);
-    
-    return (
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            <Timer className="w-5 h-5" />
-            Lap Times - {eventName || 'Untitled Race'}
-          </CardTitle>
-          <CardDescription className="text-zinc-400">Record lap times for each pilot. {numberOfLaps} laps total.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Race Start Time */}
-          <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
-            <Label className="text-white whitespace-nowrap">Race Start Time:</Label>
-            <Input
-              value={raceStartTime}
-              onChange={(e) => setRaceStartTime(e.target.value)}
-              placeholder="HH:MM:SS"
-              className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRaceStartTime(getCurrentTimeString().slice(0, 8))}
-              className="border-zinc-700 text-white"
-            >
-              <Clock className="w-3 h-3 mr-1" />
-              Now
-            </Button>
-          </div>
-
-          {sortedPilots.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500">
-              Add pilots first to register lap times.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-zinc-700">
-                    <TableHead className="bg-[#18181B] text-white uppercase font-bold sticky left-0 z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</TableHead>
-                    {lapsArray.map((lapIndex) => (
-                      <TableHead key={lapIndex} className="bg-[#18181B] text-white uppercase font-bold text-center min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        <div>Lap {lapIndex + 1}</div>
-                        <div className="text-xs text-zinc-400 font-normal">Time / Duration</div>
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedPilots.map((pilot) => {
-                    const pilotLaps = getPilotLapTimes(pilot.id, lapRaceStageId);
-                    return (
-                      <TableRow key={pilot.id} className="border-zinc-700 hover:bg-white/5">
-                        <TableCell className="font-bold text-white sticky left-0 bg-[#18181B] z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          <div className="flex items-center gap-2">
-                            <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                            {pilot.name}
-                          </div>
-                        </TableCell>
-                        {lapsArray.map((lapIndex) => {
-                          const lapTime = getLapTime(pilot.id, lapRaceStageId, lapIndex);
-                          const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, lapRaceStageId, lapIndex - 1) : null;
-                          const lapDuration = calculateLapDuration(lapTime, prevLapTime, raceStartTime);
-                          
-                          return (
-                            <TableCell key={lapIndex}>
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-1">
-                                  <TimeInput
-                                    value={lapTime}
-                                    onChange={(val) => setLapTime(pilot.id, lapRaceStageId, lapIndex, val)}
-                                    placeholder="HH:MM:SS.000"
-                                    className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                                  />
-                                  <button
-                                    onClick={() => handleLapNowClick(pilot.id, lapRaceStageId, lapIndex)}
-                                    className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
-                                    title="Set current time"
-                                  >
-                                    <Clock className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => setLapTime(pilot.id, lapRaceStageId, lapIndex, '')}
-                                    className="text-zinc-500 hover:text-red-500 transition-colors p-1"
-                                    title="Clear"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                                {lapDuration && (
-                                  <div className="text-xs text-[#22C55E] font-mono text-center">
-                                    {lapDuration}
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // RallyX Times - Multiple races with lap times
-  if (isRallyX) {
-    return (
-      <div className="space-y-6">
-        {/* Current Race Selector */}
-        <Card className="bg-[#18181B] border-zinc-800">
-          <CardHeader>
-            <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Current Race</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
-              <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                <SelectValue placeholder="Select race to edit times" />
-              </SelectTrigger>
-              <SelectContent>
-                {ssStages.map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    {stage.name} ({stage.numberOfLaps || 0} laps)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
-
-        {/* Race-specific lap times */}
-        {ssStages.map((stage) => {
-          const lapsArray = Array.from({ length: stage.numberOfLaps || 0 }, (_, i) => i);
-          const stageStartTime = stage.startTime || '';
-          
-          return (
-            <Card key={stage.id} className={`bg-[#18181B] border-zinc-800 ${currentStageId === stage.id ? 'border-l-4 border-l-[#FF4500]' : ''}`}>
-              <CardHeader>
-                <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  <Timer className="w-5 h-5" />
-                  {stage.name}
-                  <span className="text-zinc-400 text-sm font-normal">({stage.numberOfLaps || 0} laps)</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Race Start Time for this stage */}
-                <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
-                  <Label className="text-white whitespace-nowrap">Race Start:</Label>
-                  <Input
-                    value={stageStartTime}
-                    readOnly
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-32"
-                  />
-                  <span className="text-xs text-zinc-500">(Set in The Race tab)</span>
-                </div>
-
-                {sortedPilots.length === 0 || lapsArray.length === 0 ? (
-                  <div className="text-center py-8 text-zinc-500">
-                    {lapsArray.length === 0 ? 'Set number of laps in The Race tab' : 'Add pilots first'}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-zinc-700">
-                          <TableHead className="bg-[#18181B] text-white uppercase font-bold sticky left-0 z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</TableHead>
-                          {lapsArray.map((lapIndex) => (
-                            <TableHead key={lapIndex} className="bg-[#18181B] text-white uppercase font-bold text-center min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                              <div>Lap {lapIndex + 1}</div>
-                              <div className="text-xs text-zinc-400 font-normal">Time / Duration</div>
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sortedPilots.map((pilot) => (
-                          <TableRow key={pilot.id} className="border-zinc-700 hover:bg-white/5">
-                            <TableCell className="font-bold text-white sticky left-0 bg-[#18181B] z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                              <div className="flex items-center gap-2">
-                                <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                                {pilot.name}
-                              </div>
-                            </TableCell>
-                            {lapsArray.map((lapIndex) => {
-                              const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
-                              const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, stage.id, lapIndex - 1) : null;
-                              const lapDuration = calculateLapDuration(lapTime, prevLapTime, stageStartTime);
-                              
-                              return (
-                                <TableCell key={lapIndex}>
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-1">
-                                      <TimeInput
-                                        value={lapTime}
-                                        onChange={(val) => setLapTime(pilot.id, stage.id, lapIndex, val)}
-                                        placeholder="HH:MM:SS.000"
-                                        className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                                      />
-                                      <button
-                                        onClick={() => handleLapNowClick(pilot.id, stage.id, lapIndex)}
-                                        className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
-                                        title="Set current time"
-                                      >
-                                        <Clock className="w-3 h-3" />
-                                      </button>
-                                      <button
-                                        onClick={() => setLapTime(pilot.id, stage.id, lapIndex, '')}
-                                        className="text-zinc-500 hover:text-red-500 transition-colors p-1"
-                                        title="Clear"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                    {lapDuration && (
-                                      <div className="text-xs text-[#22C55E] font-mono text-center">
-                                        {lapDuration}
-                                      </div>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-
-        {ssStages.length === 0 && (
-          <div className="text-center py-12 text-zinc-500">
-            Add SS-type races in The Race tab first to record lap times.
-          </div>
-        )}
+      <div className="text-center py-12 text-zinc-500">
+        Add pilots first in the Pilots tab to record times.
       </div>
     );
   }
 
-  return null;
+  if (stages.length === 0) {
+    return (
+      <div className="text-center py-12 text-zinc-500">
+        Add stages first in The Race tab to record times.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {sortedStages.map((stage) => {
+        const Icon = getStageTypeIcon(stage.type);
+        const borderColor = getStageTypeColor(stage.type);
+        
+        return (
+          <Card key={stage.id} className={`bg-[#18181B] border-zinc-800 border-l-4 ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <Icon className="w-5 h-5" />
+                {stage.type === 'SS' && stage.ssNumber && <span className="text-[#FF4500]">SS{stage.ssNumber}</span>}
+                {stage.name}
+                {stage.type === 'Lap Race' && (
+                  <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} laps)</span>
+                )}
+              </CardTitle>
+              {stage.type !== 'Lap Race' && stage.startTime && (
+                <CardDescription className="text-zinc-400">
+                  Scheduled: {stage.startTime}
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              {stage.type === 'SS' && (
+                <SSStageCard stage={stage} pilots={pilots} categories={categories} />
+              )}
+              {(stage.type === 'Liaison' || stage.type === 'Service Park') && (
+                <LiaisonStageCard stage={stage} pilots={pilots} categories={categories} />
+              )}
+              {stage.type === 'Lap Race' && (
+                <LapRaceStageCard stage={stage} pilots={pilots} categories={categories} />
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
 }
