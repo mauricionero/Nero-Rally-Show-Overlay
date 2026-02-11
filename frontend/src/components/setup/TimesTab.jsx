@@ -422,14 +422,14 @@ function LapRaceStageCard({ stage, pilots, categories }) {
                               />
                               <button
                                 onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString())}
-                                className="text-zinc-500 hover:text-[#FF4500] transition-colors p-1"
+                                className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
                                 title="Set current time"
                               >
-                                <Clock className="w-3 h-3" />
+                                <Clock className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => setLapTime(pilot.id, stage.id, lapIndex, '')}
-                                className="text-zinc-500 hover:text-red-500 transition-colors p-1"
+                                className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
                                 title="Clear"
                               >
                                 <X className="w-3 h-3" />
