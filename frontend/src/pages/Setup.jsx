@@ -10,7 +10,7 @@ import { Play, Palette } from 'lucide-react';
 // Tab Components
 import PilotsTab from '../components/setup/PilotsTab.jsx';
 import CategoriesTab from '../components/setup/CategoriesTab.jsx';
-import StagesTab from '../components/setup/StagesTab.jsx';
+import TheRaceTab from '../components/setup/TheRaceTab.jsx';
 import TimesTab from '../components/setup/TimesTab.jsx';
 import StreamsTab from '../components/setup/StreamsTab.jsx';
 import ConfigTab from '../components/setup/ConfigTab.jsx';
@@ -22,13 +22,21 @@ const CHROMA_PRESETS = [
 ];
 
 export default function Setup() {
-  const { chromaKey, setChromaKey } = useRally();
+  const { chromaKey, setChromaKey, raceType } = useRally();
   const [customChroma, setCustomChroma] = React.useState('#000000');
 
   const handleGoLive = () => {
     const basePath = process.env.PUBLIC_URL || '';
     window.open(`${basePath}/overlay`, '_blank');
     toast.success('Overlay page opened in new tab');
+  };
+
+  const getRaceTypeLabel = () => {
+    switch (raceType) {
+      case 'lapRace': return 'Lap Race';
+      case 'rallyX': return 'Rally X';
+      default: return 'Rally';
+    }
   };
 
   return (
@@ -40,7 +48,7 @@ export default function Setup() {
             <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
               Rally Dashboard
             </h1>
-            <p className="text-zinc-400 mt-2">Setup & Configuration</p>
+            <p className="text-zinc-400 mt-2">Setup & Configuration • <span className="text-[#FF4500]">{getRaceTypeLabel()}</span></p>
           </div>
           
           <div className="flex gap-3">
@@ -106,7 +114,7 @@ export default function Setup() {
           <TabsList className="bg-[#18181B] border border-zinc-800">
             <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">Pilots</TabsTrigger>
             <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">Categories</TabsTrigger>
-            <TabsTrigger value="stages" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-stages">Stages</TabsTrigger>
+            <TabsTrigger value="therace" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-therace">The Race</TabsTrigger>
             <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">Times</TabsTrigger>
             <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">Streams</TabsTrigger>
             <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">Config</TabsTrigger>
@@ -120,8 +128,8 @@ export default function Setup() {
             <CategoriesTab />
           </TabsContent>
 
-          <TabsContent value="stages">
-            <StagesTab />
+          <TabsContent value="therace">
+            <TheRaceTab />
           </TabsContent>
 
           <TabsContent value="times">
