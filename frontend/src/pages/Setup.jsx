@@ -22,21 +22,13 @@ const CHROMA_PRESETS = [
 ];
 
 export default function Setup() {
-  const { chromaKey, setChromaKey, raceType } = useRally();
+  const { chromaKey, setChromaKey } = useRally();
   const [customChroma, setCustomChroma] = React.useState('#000000');
 
   const handleGoLive = () => {
     const basePath = process.env.PUBLIC_URL || '';
     window.open(`${basePath}/overlay`, '_blank');
     toast.success('Overlay page opened in new tab');
-  };
-
-  const getRaceTypeLabel = () => {
-    switch (raceType) {
-      case 'lapRace': return 'Lap Race';
-      case 'rallyX': return 'Rally X';
-      default: return 'Rally';
-    }
   };
 
   return (
@@ -48,7 +40,7 @@ export default function Setup() {
             <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
               Rally Dashboard
             </h1>
-            <p className="text-zinc-400 mt-2">Setup & Configuration • <span className="text-[#FF4500]">{getRaceTypeLabel()}</span></p>
+            <p className="text-zinc-400 mt-2">Setup & Configuration</p>
           </div>
           
           <div className="flex gap-3">
