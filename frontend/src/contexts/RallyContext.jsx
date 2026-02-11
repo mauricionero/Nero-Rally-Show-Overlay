@@ -620,12 +620,10 @@ export const RallyProvider = ({ children }) => {
 
   const exportData = () => {
     const data = {
-      raceType,
       eventName,
-      numberOfLaps,
-      raceStartTime,
       positions,
       lapTimes,
+      stagePilots,
       pilots,
       categories,
       stages,
@@ -659,12 +657,10 @@ export const RallyProvider = ({ children }) => {
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
       if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
-      if (data.raceType) setRaceType(data.raceType);
       if (data.eventName !== undefined) setEventName(data.eventName);
-      if (data.numberOfLaps !== undefined) setNumberOfLaps(data.numberOfLaps);
-      if (data.raceStartTime !== undefined) setRaceStartTime(data.raceStartTime);
       if (data.positions) setPositions(data.positions);
       if (data.lapTimes) setLapTimes(data.lapTimes);
+      if (data.stagePilots) setStagePilots(data.stagePilots);
       updateDataVersion();
       return true;
     } catch (error) {
@@ -674,12 +670,10 @@ export const RallyProvider = ({ children }) => {
   };
 
   const clearAllData = () => {
-    setRaceType('rally');
     setEventName('');
-    setNumberOfLaps(10);
-    setRaceStartTime('');
     setPositions({});
     setLapTimes({});
+    setStagePilots({});
     setPilots([]);
     setCategories([]);
     setStages([]);
@@ -696,13 +690,11 @@ export const RallyProvider = ({ children }) => {
   };
 
   const value = {
-    // Race configuration
-    raceType,
+    // Event configuration
     eventName,
-    numberOfLaps,
-    raceStartTime,
     positions,
     lapTimes,
+    stagePilots,
     // Core data
     pilots,
     categories,
