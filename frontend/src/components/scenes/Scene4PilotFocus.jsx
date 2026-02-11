@@ -169,13 +169,13 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
       {/* Right Side - Pilot Info */}
       <div className="w-1/3 bg-black/95 backdrop-blur-sm p-6 overflow-y-auto">
 
-        {/* Logo - Top Right */}
+        {/* Logo - Top Center */}
         {logoUrl && (
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-center mb-4">
             <img 
               src={logoUrl} 
               alt="Channel Logo" 
-              className="h-12 max-w-[120px] object-contain"
+              className="w-1/2 max-h-16 object-contain"
             />
           </div>
         )}
