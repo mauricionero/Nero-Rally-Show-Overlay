@@ -293,7 +293,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 <img 
                   src={logoUrl} 
                   alt="Channel Logo" 
-                  className="h-12 max-w-[150px] object-contain"
+                  className="h-16 max-w-[200px] object-contain"
                 />
               )}
             </div>
