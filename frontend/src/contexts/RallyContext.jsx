@@ -357,12 +357,20 @@ export const RallyProvider = ({ children }) => {
       id: Date.now().toString(),
       name: stage.name,
       type: stage.type || 'SS',
-      ssNumber: stage.ssNumber || '',
-      startTime: stage.startTime || '',
-      numberOfLaps: stage.numberOfLaps || 0, // For RallyX SS stages
+      ssNumber: stage.ssNumber || '', // Only for SS type
+      startTime: stage.startTime || '', // For SS/Liaison/Service Park: schedule time. For Lap Race: race start time
+      numberOfLaps: stage.numberOfLaps || 5, // For Lap Race type
       ...stage
     };
     setStages(prev => [...prev, newStage]);
+    
+    // For Lap Race, initialize with all pilots selected by default
+    if (stage.type === 'Lap Race') {
+      setStagePilots(prev => ({
+        ...prev,
+        [newStage.id]: pilots.map(p => p.id)
+      }));
+    }
   };
 
   const updateStage = (id, updates) => {
@@ -379,6 +387,15 @@ export const RallyProvider = ({ children }) => {
         }
       });
       return newTimes;
+    });
+    setArrivalTimes(prev => {
+      const newArrivalTimes = { ...prev };
+      Object.keys(newArrivalTimes).forEach(pilotId => {
+        if (newArrivalTimes[pilotId]) {
+          delete newArrivalTimes[pilotId][id];
+        }
+      });
+      return newArrivalTimes;
     });
     setStartTimes(prev => {
       const newStartTimes = { ...prev };
@@ -407,6 +424,48 @@ export const RallyProvider = ({ children }) => {
       });
       return newPositions;
     });
+    setStagePilots(prev => {
+      const newStagePilots = { ...prev };
+      delete newStagePilots[id];
+      return newStagePilots;
+    });
+  };
+
+  // Stage pilots functions (for Lap Race pilot selection)
+  const getStagePilots = (stageId) => {
+    return stagePilots[stageId] || pilots.map(p => p.id);
+  };
+
+  const setStagePilotsForStage = (stageId, pilotIds) => {
+    setStagePilots(prev => ({
+      ...prev,
+      [stageId]: pilotIds
+    }));
+  };
+
+  const togglePilotInStage = (stageId, pilotId) => {
+    setStagePilots(prev => {
+      const currentPilots = prev[stageId] || pilots.map(p => p.id);
+      if (currentPilots.includes(pilotId)) {
+        return { ...prev, [stageId]: currentPilots.filter(id => id !== pilotId) };
+      } else {
+        return { ...prev, [stageId]: [...currentPilots, pilotId] };
+      }
+    });
+  };
+
+  const selectAllPilotsInStage = (stageId) => {
+    setStagePilots(prev => ({
+      ...prev,
+      [stageId]: pilots.map(p => p.id)
+    }));
+  };
+
+  const deselectAllPilotsInStage = (stageId) => {
+    setStagePilots(prev => ({
+      ...prev,
+      [stageId]: []
+    }));
   };
 
   // Lap times functions
