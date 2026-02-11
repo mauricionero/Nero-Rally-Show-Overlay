@@ -217,22 +217,10 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('rally_race_type', JSON.stringify(raceType));
     updateDataVersion();
-  }, [raceType]);
-
   useEffect(() => {
     localStorage.setItem('rally_event_name', JSON.stringify(eventName));
     updateDataVersion();
   }, [eventName]);
-
-  useEffect(() => {
-    localStorage.setItem('rally_number_of_laps', JSON.stringify(numberOfLaps));
-    updateDataVersion();
-  }, [numberOfLaps]);
-
-  useEffect(() => {
-    localStorage.setItem('rally_race_start_time', JSON.stringify(raceStartTime));
-    updateDataVersion();
-  }, [raceStartTime]);
 
   useEffect(() => {
     localStorage.setItem('rally_positions', JSON.stringify(positions));
@@ -243,6 +231,11 @@ export const RallyProvider = ({ children }) => {
     localStorage.setItem('rally_lap_times', JSON.stringify(lapTimes));
     updateDataVersion();
   }, [lapTimes]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_stage_pilots', JSON.stringify(stagePilots));
+    updateDataVersion();
+  }, [stagePilots]);
 
   useEffect(() => {
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
