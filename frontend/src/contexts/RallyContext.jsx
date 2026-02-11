@@ -717,10 +717,12 @@ export const RallyProvider = ({ children }) => {
     wsError,
     // Race config setters
     setRaceType,
-    setEventName,
-    setNumberOfLaps,
-    setRaceStartTime,
+    wsEnabled,
+    wsChannelKey,
+    wsConnectionStatus,
+    wsError,
     // Setters
+    setEventName,
     setCurrentScene,
     setChromaKey,
     setMapUrl,
@@ -752,6 +754,12 @@ export const RallyProvider = ({ children }) => {
     setPosition,
     getPosition,
     calculatePositions,
+    // Stage pilots functions (for Lap Race)
+    getStagePilots,
+    setStagePilotsForStage,
+    togglePilotInStage,
+    selectAllPilotsInStage,
+    deselectAllPilotsInStage,
     getStreamConfig,
     setStreamConfig,
     setSoloStream,
