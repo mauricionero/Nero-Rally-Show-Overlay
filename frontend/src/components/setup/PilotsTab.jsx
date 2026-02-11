@@ -22,7 +22,7 @@ export default function PilotsTab() {
     togglePilotActive
   } = useRally();
 
-  const [newPilot, setNewPilot] = useState({ name: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
+  const [newPilot, setNewPilot] = useState({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
   const [editingPilot, setEditingPilot] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
 
@@ -36,7 +36,7 @@ export default function PilotsTab() {
       startOrder: parseInt(newPilot.startOrder) || 999
     };
     addPilot(pilotData);
-    setNewPilot({ name: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
+    setNewPilot({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
     toast.success('Pilot added successfully');
   };
 
