@@ -66,6 +66,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     pilots, categories, stages, times, startTimes, currentStageId, 
     chromaKey, logoUrl, lapTimes, stagePilots 
   } = useRally();
+  const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedPilotId, setSelectedPilotId] = useState(null);
@@ -112,7 +113,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   if (!currentStageId) {
     return (
       <div className="relative w-full h-full flex items-center justify-center" data-testid="scene-2-timing-tower">
-        <p className="text-white text-2xl">No current stage selected</p>
+        <p className="text-white text-2xl">{t('scene2.noCurrentStage')}</p>
       </div>
     );
   }
