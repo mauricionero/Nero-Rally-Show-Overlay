@@ -341,22 +341,22 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             <thead>
               <tr className="bg-[#18181B] text-white border-b border-white/10">
                 <th className="p-1 w-1"></th>
-                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pos</th>
-                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</th>
+                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.pos')}</th>
+                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.pilot')}</th>
                 {isLapRaceSelected ? (
                   <>
-                    <th className="p-4 text-center uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Laps</th>
-                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Total Time</th>
+                    <th className="p-4 text-center uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.laps')}</th>
+                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.totalTime')}</th>
                   </>
                 ) : selectedStageId ? (
                   <>
-                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>SS Time</th>
-                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Overall</th>
+                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.ssTime')}</th>
+                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.overall')}</th>
                   </>
                 ) : (
-                  <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Overall</th>
+                  <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.overall')}</th>
                 )}
-                <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Gap</th>
+                <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.gap')}</th>
               </tr>
             </thead>
             <tbody>
@@ -371,14 +371,14 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                     } else if (pilot.isRacing || pilot.isFinished) {
                       const lapDiff = (leader.completedLaps || 0) - (pilot.completedLaps || 0);
                       if (lapDiff > 0) {
-                        gap = `+${lapDiff} lap${lapDiff > 1 ? 's' : ''}`;
+                        gap = `+${lapDiff} ${t('scene3.laps').toLowerCase()}`;
                       }
                     }
                   } else {
                     gap = '+' + (pilot.sortTime - leader.sortTime).toFixed(3) + 's';
                   }
                 } else if (pilot.hasTime && pilot.id === leader?.id) {
-                  gap = 'LEADER';
+                  gap = t('scene3.leader');
                 }
                 
                 const category = categories.find(c => c.id === pilot.categoryId);
