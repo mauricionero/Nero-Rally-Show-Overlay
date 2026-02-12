@@ -6,6 +6,7 @@ import Scene1LiveStage from '../components/scenes/Scene1LiveStage.jsx';
 import Scene2TimingTower from '../components/scenes/Scene2TimingTower.jsx';
 import Scene3Leaderboard from '../components/scenes/Scene3Leaderboard.jsx';
 import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
+import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
