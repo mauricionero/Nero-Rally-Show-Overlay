@@ -1,5 +1,6 @@
 import React from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -70,6 +71,7 @@ const getStageTypeColor = (type) => {
 
 // SS Stage Component - Card layout for each pilot
 function SSStageCard({ stage, pilots, categories }) {
+  const { t } = useTranslation();
   const {
     times,
     setTime,
@@ -129,18 +131,18 @@ function SSStageCard({ stage, pilots, categories }) {
               
               {/* Start Time */}
               <div className="mb-2">
-                <Label className="text-xs text-zinc-400">Start Time</Label>
+                <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
                 <div className="flex items-center gap-1">
                   <Input
                     value={getStartTime(pilot.id, stage.id)}
                     onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
-                    placeholder="HH:MM"
+                    placeholder={t('times.placeholder.shortTime')}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8"
                   />
                   <button
                     onClick={() => setStartTime(pilot.id, stage.id, '')}
                     className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
-                    title="Clear"
+                    title={t('common.clear')}
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -149,12 +151,12 @@ function SSStageCard({ stage, pilots, categories }) {
               
               {/* Arrival Time */}
               <div className="mb-2">
-                <Label className="text-xs text-zinc-400">Arrival Time</Label>
+                <Label className="text-xs text-zinc-400">{t('times.arrivalTime')}</Label>
                 <div className="flex items-center gap-1">
                   <TimeInput
                     value={getArrivalTime(pilot.id, stage.id)}
                     onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
-                    placeholder="HH:MM:SS.000"
+                    placeholder={t('times.placeholder.time')}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
                   />
                   <button
@@ -163,7 +165,7 @@ function SSStageCard({ stage, pilots, categories }) {
                       handleArrivalTimeChange(pilot.id, currentTime);
                     }}
                     className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                    title="Set current time"
+                    title={t('times.now')}
                   >
                     <Clock className="w-4 h-4" />
                   </button>
@@ -173,7 +175,7 @@ function SSStageCard({ stage, pilots, categories }) {
                       setTime(pilot.id, stage.id, '');
                     }}
                     className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
-                    title="Clear"
+                    title={t('common.clear')}
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -182,12 +184,12 @@ function SSStageCard({ stage, pilots, categories }) {
               
               {/* Total Time */}
               <div>
-                <Label className="text-xs text-zinc-400">Total Time</Label>
+                <Label className="text-xs text-zinc-400">{t('times.totalTime')}</Label>
                 <div className="flex items-center gap-1">
                   <TimeInput
                     value={getTime(pilot.id, stage.id)}
                     onChange={(val) => handleTotalTimeChange(pilot.id, val)}
-                    placeholder="MM:SS.000"
+                    placeholder={t('times.placeholder.totalTime')}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
                   />
                 </div>
@@ -202,6 +204,7 @@ function SSStageCard({ stage, pilots, categories }) {
 
 // Liaison/Service Park Stage Component - Simple start/end per pilot
 function LiaisonStageCard({ stage, pilots, categories }) {
+  const { t } = useTranslation();
   const { setStartTime, getStartTime, setTime, getTime } = useRally();
 
   const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
@@ -226,18 +229,18 @@ function LiaisonStageCard({ stage, pilots, categories }) {
               
               {/* Start Time */}
               <div className="mb-2">
-                <Label className="text-xs text-zinc-400">Start Time</Label>
+                <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
                 <div className="flex items-center gap-1">
                   <Input
                     value={getStartTime(pilot.id, stage.id)}
                     onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
-                    placeholder="HH:MM"
+                    placeholder={t('times.placeholder.shortTime')}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
                   />
                   <button
                     onClick={() => setStartTime(pilot.id, stage.id, getCurrentTimeString().slice(0, 5))}
                     className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                    title="Set current time"
+                    title={t('times.now')}
                   >
                     <Clock className="w-4 h-4" />
                   </button>
@@ -252,18 +255,18 @@ function LiaisonStageCard({ stage, pilots, categories }) {
               
               {/* End Time */}
               <div>
-                <Label className="text-xs text-zinc-400">End Time</Label>
+                <Label className="text-xs text-zinc-400">{t('times.endTime')}</Label>
                 <div className="flex items-center gap-1">
                   <Input
                     value={getTime(pilot.id, stage.id)}
                     onChange={(e) => setTime(pilot.id, stage.id, e.target.value)}
-                    placeholder="HH:MM"
+                    placeholder={t('times.placeholder.shortTime')}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
                   />
                   <button
                     onClick={() => setTime(pilot.id, stage.id, getCurrentTimeString().slice(0, 5))}
                     className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                    title="Set current time"
+                    title={t('times.now')}
                   >
                     <Clock className="w-4 h-4" />
                   </button>
@@ -285,6 +288,7 @@ function LiaisonStageCard({ stage, pilots, categories }) {
 
 // Lap Race Stage Component - Laps x Pilots matrix with pilot selection
 function LapRaceStageCard({ stage, pilots, categories }) {
+  const { t } = useTranslation();
   const {
     setLapTime,
     getLapTime,
@@ -307,7 +311,7 @@ function LapRaceStageCard({ stage, pilots, categories }) {
     <div className="space-y-4">
       {/* Race Start Time */}
       <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
-        <Label className="text-white whitespace-nowrap">Race Start Time:</Label>
+        <Label className="text-white whitespace-nowrap">{t('times.raceStartTime')}:</Label>
         <Input
           value={stage.startTime || ''}
           onChange={(e) => updateStage(stage.id, { startTime: e.target.value })}
@@ -321,14 +325,14 @@ function LapRaceStageCard({ stage, pilots, categories }) {
           className="border-zinc-700 text-white"
         >
           <Clock className="w-3 h-3 mr-1" />
-          Now
+          {t('times.now')}
         </Button>
       </div>
 
       {/* Pilot Selection */}
       <div className="p-3 bg-[#09090B] rounded border border-zinc-700">
         <div className="flex items-center justify-between mb-2">
-          <Label className="text-white">Pilots in this race ({selectedPilotIds.length}/{pilots.length})</Label>
+          <Label className="text-white">{t('times.pilotsInRace')} ({selectedPilotIds.length}/{pilots.length})</Label>
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -337,7 +341,7 @@ function LapRaceStageCard({ stage, pilots, categories }) {
               className={`text-xs ${allSelected ? 'text-green-500' : 'text-zinc-400'}`}
             >
               <CheckSquare className="w-3 h-3 mr-1" />
-              All
+              {t('common.all')}
             </Button>
             <Button
               size="sm"
@@ -346,7 +350,7 @@ function LapRaceStageCard({ stage, pilots, categories }) {
               className={`text-xs ${noneSelected ? 'text-red-500' : 'text-zinc-400'}`}
             >
               <Square className="w-3 h-3 mr-1" />
-              None
+              {t('common.none')}
             </Button>
           </div>
         </div>
@@ -374,7 +378,7 @@ function LapRaceStageCard({ stage, pilots, categories }) {
       {/* Lap Times Matrix */}
       {sortedPilots.length === 0 ? (
         <div className="text-center py-8 text-zinc-500">
-          Select pilots to record lap times
+          {t('times.selectPilots')}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -382,12 +386,12 @@ function LapRaceStageCard({ stage, pilots, categories }) {
             <thead>
               <tr className="border-b border-zinc-700">
                 <th className="text-left text-white uppercase font-bold p-2 sticky left-0 bg-[#18181B] z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  Pilot
+                  {t('scene3.pilot')}
                 </th>
                 {lapsArray.map((lapIndex) => (
                   <th key={lapIndex} className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    <div>Lap {lapIndex + 1}</div>
-                    <div className="text-xs text-zinc-400 font-normal">Time / Duration</div>
+                    <div>{t('times.lap')} {lapIndex + 1}</div>
+                    <div className="text-xs text-zinc-400 font-normal">{t('times.time')} / {t('times.duration')}</div>
                   </th>
                 ))}
               </tr>
@@ -420,20 +424,20 @@ function LapRaceStageCard({ stage, pilots, categories }) {
                               <TimeInput
                                 value={lapTime}
                                 onChange={(val) => setLapTime(pilot.id, stage.id, lapIndex, val)}
-                                placeholder="HH:MM:SS.000"
+                                placeholder={t('times.placeholder.time')}
                                 className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                               />
                               <button
                                 onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString())}
                                 className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                                title="Set current time"
+                                title={t('times.now')}
                               >
                                 <Clock className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => setLapTime(pilot.id, stage.id, lapIndex, '')}
                                 className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
-                                title="Clear"
+                                title={t('common.clear')}
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -459,6 +463,7 @@ function LapRaceStageCard({ stage, pilots, categories }) {
 }
 
 export default function TimesTab() {
+  const { t } = useTranslation();
   const { pilots, stages, categories } = useRally();
 
   const sortedStages = [...stages].sort((a, b) => {
@@ -470,7 +475,7 @@ export default function TimesTab() {
   if (pilots.length === 0) {
     return (
       <div className="text-center py-12 text-zinc-500">
-        Add pilots first in the Pilots tab to record times.
+        {t('times.addPilotsFirst')}
       </div>
     );
   }
@@ -478,7 +483,7 @@ export default function TimesTab() {
   if (stages.length === 0) {
     return (
       <div className="text-center py-12 text-zinc-500">
-        Add stages first in The Race tab to record times.
+        {t('times.addStagesFirst')}
       </div>
     );
   }
@@ -497,12 +502,12 @@ export default function TimesTab() {
                 {stage.type === 'SS' && stage.ssNumber && <span className="text-[#FF4500]">SS{stage.ssNumber}</span>}
                 {stage.name}
                 {stage.type === 'Lap Race' && (
-                  <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} laps)</span>
+                  <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})</span>
                 )}
               </CardTitle>
               {stage.type !== 'Lap Race' && stage.startTime && (
                 <CardDescription className="text-zinc-400">
-                  Scheduled: {stage.startTime}
+                  {t('times.scheduled')}: {stage.startTime}
                 </CardDescription>
               )}
             </CardHeader>
