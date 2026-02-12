@@ -285,7 +285,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               <Flag className="w-5 h-5 text-[#FF4500]" />
             )}
             <h2 className="text-[#FF4500] text-2xl font-black uppercase tracking-wider" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              Live Timing
+              {t('scene2.liveTiming')}
             </h2>
           </div>
           {currentStage && (
@@ -293,7 +293,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               <span className="text-zinc-400 text-xs font-bold uppercase">
                 {isSSStage && currentStage.ssNumber ? `SS${currentStage.ssNumber} ` : ''}
                 {currentStage.name}
-                {isLapRace && ` (${currentStage.numberOfLaps} laps)`}
+                {isLapRace && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
               </span>
             </div>
           )}
@@ -305,7 +305,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
             <div className="px-3 py-1 bg-[#FF8C00]/20 border-l-2 border-[#FF8C00]">
               <span className="text-[#FF8C00] text-xs font-bold uppercase flex items-center gap-1">
                 <Radio className="w-3 h-3 animate-pulse" />
-                {isLapRace ? 'Racing' : 'On Stage'}
+                {isLapRace ? t('scene2.racing') : t('scene2.onStage')}
               </span>
             </div>
             {racing.map((data, index) => renderPilotRow(data, index))}
@@ -316,7 +316,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         {finished.length > 0 && (
           <div className="mb-2">
             <div className="px-3 py-1 bg-[#22C55E]/20 border-l-2 border-[#22C55E]">
-              <span className="text-[#22C55E] text-xs font-bold uppercase">Finished</span>
+              <span className="text-[#22C55E] text-xs font-bold uppercase">{t('scene2.finished')}</span>
             </div>
             {finished.map((data, index) => renderPilotRow(data, index))}
           </div>
@@ -327,7 +327,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           <div>
             <div className="px-3 py-1 bg-zinc-800/50 border-l-2 border-zinc-600">
               <span className="text-zinc-400 text-xs font-bold uppercase">
-                {isLapRace ? 'Not Started' : 'Will Start'}
+                {isLapRace ? t('scene2.notStarted') : t('scene2.willStart')}
               </span>
             </div>
             {notStarted.map((data, index) => renderPilotRow(data, index))}
