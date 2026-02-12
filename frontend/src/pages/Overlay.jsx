@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
+import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { useSearchParams } from 'react-router-dom';
 import Scene1LiveStage from '../components/scenes/Scene1LiveStage.jsx';
 import Scene2TimingTower from '../components/scenes/Scene2TimingTower.jsx';
@@ -12,6 +13,7 @@ import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
 
 export default function Overlay() {
   const [searchParams] = useSearchParams();
+  const { t } = useTranslation();
   const { 
     chromaKey, 
     currentScene, 
@@ -130,10 +132,10 @@ export default function Overlay() {
   };
 
   const scenes = [
-    { num: 1, name: 'Live Stage' },
-    { num: 2, name: 'Timing Tower' },
-    { num: 3, name: 'Leaderboard' },
-    { num: 4, name: 'Pilot Focus' }
+    { num: 1, name: t('scenes.liveStage') },
+    { num: 2, name: t('scenes.timingTower') },
+    { num: 3, name: t('scenes.leaderboard') },
+    { num: 4, name: t('scenes.pilotFocus') }
   ];
 
   return (
@@ -172,7 +174,7 @@ export default function Overlay() {
               />
               <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium">
                 <VideoOff className="w-3 h-3" />
-                Hide Streams
+                {t('header.hideStreams')}
               </span>
             </label>
 
@@ -194,7 +196,7 @@ export default function Overlay() {
               ) : (
                 <>
                   <WifiOff className="w-3 h-3" />
-                  <span>Connect</span>
+                  <span>{t('header.connect')}</span>
                 </>
               )}
             </button>
@@ -211,7 +213,7 @@ export default function Overlay() {
               />
               <span className="text-xs text-zinc-500 whitespace-nowrap">
                 {wsConnectionStatus === 'connected' ? 'WebSocket' :
-                 heartbeatStatus === 'changed' ? 'Updated' : 'Local'}
+                 heartbeatStatus === 'changed' ? t('header.updated') : t('header.local')}
               </span>
             </div>
           </div>
@@ -221,7 +223,7 @@ export default function Overlay() {
         {showWsPanel && (
           <div className="absolute top-full right-4 mt-2 p-4 bg-[#18181B] border border-zinc-700 rounded-lg shadow-xl z-50 w-80">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-white font-bold text-sm">WebSocket Connection</h3>
+              <h3 className="text-white font-bold text-sm">{t('config.liveSync')}</h3>
               <button onClick={() => setShowWsPanel(false)} className="text-zinc-500 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
@@ -231,7 +233,7 @@ export default function Overlay() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-[#22C55E] text-sm">
                   <Wifi className="w-4 h-4" />
-                  <span>Connected to live sync</span>
+                  <span>{t('config.connected')}</span>
                 </div>
                 <Button
                   variant="destructive"
@@ -242,18 +244,18 @@ export default function Overlay() {
                     setShowWsPanel(false);
                   }}
                 >
-                  Disconnect
+                  {t('header.disconnect')}
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
                 <p className="text-zinc-400 text-xs">
-                  Paste the key from the Setup page to receive live updates:
+                  {t('config.pasteKeyToConnect')}
                 </p>
                 <Input
                   value={wsKeyInput}
                   onChange={(e) => setWsKeyInput(e.target.value)}
-                  placeholder="1-XXXXXXXX"
+                  placeholder={t('config.channelKeyPlaceholder')}
                   className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
                   data-testid="ws-key-input"
                 />
@@ -267,7 +269,7 @@ export default function Overlay() {
                   disabled={wsConnectionStatus === 'connecting' || !wsKeyInput.trim()}
                   data-testid="ws-connect-button"
                 >
-                  {wsConnectionStatus === 'connecting' ? 'Connecting...' : 'Connect'}
+                  {wsConnectionStatus === 'connecting' ? t('config.connecting') : t('header.connect')}
                 </Button>
               </div>
             )}
