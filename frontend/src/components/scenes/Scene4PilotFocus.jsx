@@ -68,6 +68,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl,
     lapTimes, stagePilots
   } = useRally();
+  const { t } = useTranslation();
   
   const [selectedPilotId, setSelectedPilotId] = useState(pilots[0]?.id || null);
   const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
