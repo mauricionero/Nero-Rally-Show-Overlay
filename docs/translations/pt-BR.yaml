@@ -1,0 +1,289 @@
+# Rally Dashboard - Tradução Português (Brasil)
+# Este arquivo contém todas as strings traduzíveis da aplicação
+# Copie este arquivo e traduza para adicionar um novo idioma
+
+# ===========================================
+# COMUM / COMPARTILHADO
+# ===========================================
+common:
+  save: "Salvar"
+  cancel: "Cancelar"
+  delete: "Excluir"
+  edit: "Editar"
+  add: "Adicionar"
+  clear: "Limpar"
+  reset: "Resetar"
+  close: "Fechar"
+  confirm: "Confirmar"
+  loading: "Carregando..."
+  noData: "Nenhum dado disponível"
+  search: "Buscar"
+  select: "Selecionar"
+  none: "Nenhum"
+  all: "Todos"
+  apply: "Aplicar"
+  custom: "Personalizado"
+  yes: "Sim"
+  no: "Não"
+
+# ===========================================
+# CABEÇALHO / NAVEGAÇÃO
+# ===========================================
+header:
+  title: "Painel Rally"
+  subtitle: "Configuração"
+  goLive: "Ao Vivo"
+  hideStreams: "Ocultar Streams"
+  connect: "Conectar"
+  disconnect: "Desconectar"
+  updated: "Atualizado"
+  local: "Local"
+
+# ===========================================
+# PÁGINA SETUP - ABAS
+# ===========================================
+tabs:
+  pilots: "Pilotos"
+  categories: "Categorias"
+  theRace: "A Corrida"
+  times: "Tempos"
+  streams: "Streams"
+  config: "Config"
+
+# ===========================================
+# ABA PILOTOS
+# ===========================================
+pilots:
+  addNewPilot: "Adicionar Novo Piloto"
+  pilotName: "Nome do Piloto"
+  carNumber: "Nº Carro"
+  startOrder: "Ordem de Largada"
+  category: "Categoria"
+  pictureUrl: "URL da Foto"
+  streamUrl: "URL do Stream"
+  addPilot: "Adicionar Piloto"
+  noPilots: "Nenhum piloto cadastrado. Adicione seu primeiro piloto acima."
+  activePilots: "Pilotos Ativos"
+  placeholder:
+    name: "João Silva"
+    carNumber: "42"
+    startOrder: "1"
+    pictureUrl: "https://..."
+    streamUrl: "https://ninja.vdo/..."
+
+# ===========================================
+# ABA CATEGORIAS
+# ===========================================
+categories:
+  addNewCategory: "Adicionar Nova Categoria"
+  categoryName: "Nome da Categoria"
+  color: "Cor"
+  addCategory: "Adicionar Categoria"
+  noCategories: "Nenhuma categoria cadastrada. Adicione sua primeira categoria acima."
+  placeholder:
+    name: "WRC"
+
+# ===========================================
+# ABA A CORRIDA (ETAPAS)
+# ===========================================
+theRace:
+  eventName: "Nome do Evento"
+  eventNamePlaceholder: "ex: Campeonato Rally 2025"
+  stages: "Etapas"
+  addStage: "Adicionar Etapa"
+  addNewStage: "Adicionar Nova Etapa"
+  stageName: "Nome da Etapa"
+  stageType: "Tipo de Etapa"
+  ssNumber: "Número SS"
+  numberOfLaps: "Número de Voltas"
+  scheduledStart: "Horário Previsto"
+  noStages: "Nenhuma etapa cadastrada. Adicione sua primeira etapa acima."
+  stageTypes:
+    ss: "SS (Especial)"
+    lapRace: "Corrida de Voltas"
+    liaison: "Deslocamento"
+    servicePark: "Parque de Serviço"
+  placeholder:
+    stageName: "Shakedown"
+    ssNumber: "1"
+    laps: "5"
+    time: "HH:MM"
+
+# ===========================================
+# ABA TEMPOS
+# ===========================================
+times:
+  startTime: "Horário de Largada"
+  arrivalTime: "Horário de Chegada"
+  totalTime: "Tempo Total"
+  endTime: "Horário Final"
+  raceStartTime: "Horário de Largada da Corrida"
+  pilotsInRace: "Pilotos nesta corrida"
+  selectPilots: "Selecione pilotos para registrar tempos de volta"
+  lap: "Volta"
+  duration: "Duração"
+  time: "Tempo"
+  scheduled: "Programado"
+  now: "Agora"
+  addPilotsFirst: "Adicione pilotos primeiro na aba Pilotos para registrar tempos."
+  addStagesFirst: "Adicione etapas primeiro na aba A Corrida para registrar tempos."
+  placeholder:
+    time: "HH:MM:SS.000"
+    shortTime: "HH:MM"
+    totalTime: "MM:SS.000"
+
+# ===========================================
+# ABA STREAMS
+# ===========================================
+streams:
+  globalAudioControl: "Controle Global de Áudio"
+  masterVolume: "Volume Principal"
+  muteAll: "Mutar Todos"
+  unmuteAll: "Desmutar Todos"
+  pilotStreams: "Streams dos Pilotos"
+  volume: "Volume"
+  solo: "Solo"
+  mute: "Mudo"
+  saturation: "Saturação"
+  contrast: "Contraste"
+  brightness: "Brilho"
+  resetDefaults: "Restaurar Padrões"
+  noActiveStreams: "Nenhum stream de piloto ativo. Ative pilotos na aba Pilotos."
+
+# ===========================================
+# ABA CONFIG
+# ===========================================
+config:
+  backgroundChromaKey: "Cor de Fundo (Chroma Key)"
+  selectBackground: "Selecione a cor de fundo para sobreposição de vídeo"
+  black: "Preto"
+  greenScreen: "Tela Verde"
+  blueScreen: "Tela Azul"
+  applyCustom: "Aplicar Personalizado"
+  
+  googleMapsIntegration: "Integração Google Maps"
+  googleMapsDesc: "Adicione uma URL de embed do Google Maps para exibir na Cena 1"
+  mapsUrlPlaceholder: "https://www.google.com/maps/embed?pb=..."
+  
+  branding: "Marca"
+  logoUrl: "URL do Logo do Canal"
+  logoUrlPlaceholder: "https://exemplo.com/logo.png"
+  
+  language: "Idioma"
+  selectLanguage: "Selecionar Idioma"
+  
+  liveSync: "Sincronização ao Vivo (WebSocket)"
+  liveSyncDesc: "Compartilhe os dados do painel em tempo real com a página de overlay"
+  generateKey: "Gerar Chave"
+  yourChannelKey: "Sua Chave de Canal"
+  copyKey: "Copiar Chave"
+  shareKeyInfo: "Compartilhe esta chave com a página de overlay para habilitar sincronização ao vivo"
+  pasteKeyToConnect: "Cole a chave de canal da página Setup para conectar"
+  channelKeyPlaceholder: "Cole a chave de canal aqui..."
+  connectionStatus: "Status da Conexão"
+  connected: "Conectado"
+  disconnected: "Desconectado"
+  connecting: "Conectando..."
+  error: "Erro"
+  provider: "Provedor"
+  
+  keyboardShortcuts: "Atalhos de Teclado"
+  keyboardShortcutsDesc: "Disponíveis na página de Overlay"
+  switchToScene: "Mudar para Cena"
+  
+  dataManagement: "Gerenciamento de Dados"
+  exportJson: "Exportar JSON"
+  importJson: "Importar JSON"
+  clearAllData: "Limpar Todos os Dados"
+  clearDataConfirm: "Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita."
+  
+  currentSummary: "Resumo Atual"
+  pilotsCount: "Pilotos"
+  categoriesCount: "Categorias"
+  stagesCount: "Etapas"
+
+# ===========================================
+# PÁGINA OVERLAY - CENAS
+# ===========================================
+scenes:
+  liveStage: "Etapa Ao Vivo"
+  timingTower: "Torre de Tempos"
+  leaderboard: "Classificação"
+  pilotFocus: "Foco no Piloto"
+
+# ===========================================
+# CENA 1 - ETAPA AO VIVO
+# ===========================================
+scene1:
+  layout: "Layout"
+  selectItems: "Selecionar Itens"
+  reorderDragDrop: "Reordenar (Arrastar e Soltar)"
+  noItemsSelected: "Nenhum Item Selecionado"
+  selectPilotsOrMaps: "Selecione pilotos ou Google Maps no painel lateral"
+  currentStage: "Etapa Atual"
+  race: "Corrida"
+  rallyMap: "Mapa do Rally"
+  googleMaps: "Google Maps"
+  finished: "FINALIZADO"
+  layouts:
+    oneStream: "1 Stream"
+    oneByTwo: "1x2 Vertical"
+    twoByOne: "2x1 Horizontal"
+    twoByTwo: "2x2 Grade"
+    threeByTwo: "3x2 Grade"
+
+# ===========================================
+# CENA 2 - TORRE DE TEMPOS
+# ===========================================
+scene2:
+  liveTiming: "Tempos Ao Vivo"
+  onStage: "Na Etapa"
+  racing: "Correndo"
+  finished: "Finalizado"
+  willStart: "Vai Largar"
+  notStarted: "Não Largou"
+  noCurrentStage: "Nenhuma etapa atual selecionada"
+  selectPilotWithStream: "Selecione um piloto com stream ativo"
+
+# ===========================================
+# CENA 3 - CLASSIFICAÇÃO
+# ===========================================
+scene3:
+  selectView: "Selecionar Visualização"
+  overallRallyStandings: "Classificação Geral do Rally"
+  overallStandings: "Classificação Geral"
+  specialStages: "Especiais"
+  lapRaces: "Corridas de Voltas"
+  pos: "Pos"
+  pilot: "Piloto"
+  ssTime: "Tempo SS"
+  overall: "Geral"
+  totalTime: "Tempo Total"
+  laps: "Voltas"
+  gap: "Diferença"
+  leader: "LÍDER"
+
+# ===========================================
+# CENA 4 - FOCO NO PILOTO
+# ===========================================
+scene4:
+  selectPilot: "Selecionar Piloto"
+  selectStage: "Selecionar Etapa"
+  noPilotSelected: "Nenhum Piloto Selecionado"
+  noStreamAvailable: "Nenhum stream disponível"
+  allStageTimes: "Tempos de Todas as Etapas"
+  noStagesRegistered: "Nenhuma etapa cadastrada"
+  lapTimes: "Tempos de Volta"
+  total: "TOTAL"
+  live: "AO VIVO"
+
+# ===========================================
+# STATUS / ESTADOS
+# ===========================================
+status:
+  racing: "Correndo"
+  finished: "Finalizado"
+  notStarted: "Não Largou"
+  start: "Largada"
+  active: "Ativo"
+  inactive: "Inativo"
