@@ -303,9 +303,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
           <div className="flex items-center justify-center h-full col-span-full">
             <div className="text-center">
               <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                No Items Selected
+                {t('scene1.noItemsSelected')}
               </p>
-              <p className="text-zinc-400 mt-2">Select pilots or Google Maps from the left panel</p>
+              <p className="text-zinc-400 mt-2">{t('scene1.selectPilotsOrMaps')}</p>
             </div>
           </div>
         ) : (
@@ -320,13 +320,13 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     allowFullScreen
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
-                    title="Rally Map"
+                    title={t('scene1.rallyMap')}
                   />
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                     <div className="flex items-center gap-2">
                       <Map className="w-5 h-5 text-[#FF4500]" />
                       <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
-                        Rally Map
+                        {t('scene1.rallyMap')}
                       </p>
                     </div>
                   </div>
