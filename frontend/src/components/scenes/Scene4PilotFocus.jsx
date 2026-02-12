@@ -375,7 +375,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           {focusPilot.isActive && (
             <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 bg-[#FF4500] rounded-full ml-2">
               <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              <span className="text-white text-xs font-bold uppercase">LIVE</span>
+              <span className="text-white text-xs font-bold uppercase">{t('scene4.live')}</span>
             </div>
           )}
         </div>
@@ -385,7 +385,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           <div className="mb-6 p-4 bg-white/5 rounded border border-[#FACC15]/30">
             <h3 className="text-lg font-bold uppercase text-[#FACC15] mb-3 flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
               <RotateCcw className="w-5 h-5" />
-              {selectedStage?.name} - Lap Times
+              {selectedStage?.name} - {t('scene4.lapTimes')}
             </h3>
             <div className="space-y-2">
               {Array.from({ length: selectedStageData.numberOfLaps }, (_, i) => {
@@ -397,7 +397,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   <div key={i} className={`flex justify-between items-center p-2 rounded ${
                     isCompleted ? 'bg-[#22C55E]/10 border border-[#22C55E]/30' : 'bg-zinc-800/50'
                   }`}>
-                    <span className="text-zinc-400 text-sm">Lap {i + 1}</span>
+                    <span className="text-zinc-400 text-sm">{t('times.lap')} {i + 1}</span>
                     <div className="text-right">
                       {isCompleted ? (
                         <>
@@ -414,7 +414,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               })}
               {selectedStageData.totalTimeMs > 0 && (
                 <div className="flex justify-between items-center p-2 rounded bg-[#FACC15]/20 border border-[#FACC15]/50 mt-3">
-                  <span className="text-[#FACC15] font-bold text-sm">TOTAL</span>
+                  <span className="text-[#FACC15] font-bold text-sm">{t('scene4.total')}</span>
                   <span className="text-[#FACC15] font-mono font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     {formatTimeMs(selectedStageData.totalTimeMs)}
                   </span>
@@ -427,11 +427,11 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         {/* All Stage Times */}
         <div>
           <h3 className="text-xl font-bold uppercase text-[#FF4500] mb-3" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            All Stage Times
+            {t('scene4.allStageTimes')}
           </h3>
           <div className="space-y-2">
             {pilotStageData.length === 0 ? (
-              <p className="text-zinc-500 text-center py-8">No stages registered</p>
+              <p className="text-zinc-500 text-center py-8">{t('scene4.noStagesRegistered')}</p>
             ) : (
               pilotStageData.map((item) => {
                 const Icon = getStageIcon(item.stage.type);
