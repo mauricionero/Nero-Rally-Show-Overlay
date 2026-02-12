@@ -192,13 +192,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     };
   };
 
-  // Get stage display name
+  // Get stage display name - always show stage name, not event name
   const getStageDisplayName = () => {
     if (!currentStage) return '';
-    
-    if (isLapRace) {
-      return eventName || currentStage.name;
-    }
     
     if (isSSStage && currentStage.ssNumber) {
       return `SS${currentStage.ssNumber} ${currentStage.name}`;

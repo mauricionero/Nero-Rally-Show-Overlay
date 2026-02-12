@@ -158,7 +158,10 @@ function SSStageCard({ stage, pilots, categories }) {
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
                   />
                   <button
-                    onClick={() => setArrivalTime(pilot.id, stage.id, getCurrentTimeString())}
+                    onClick={() => {
+                      const currentTime = getCurrentTimeString();
+                      handleArrivalTimeChange(pilot.id, currentTime);
+                    }}
                     className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
                     title="Set current time"
                   >
