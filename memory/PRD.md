@@ -152,6 +152,7 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [ ] **RallyX Point System** - Points calculation for RallyX events
 
 ### P1 - High Priority
+- [ ] **Apply translations to all UI components** - Replace hardcoded strings with `t()` calls
 - [ ] Optimize stream loading: Keep streams loaded in background when switching scenes
 - [ ] Add keyboard shortcuts for global audio controls (M to mute, +/- for volume)
 
