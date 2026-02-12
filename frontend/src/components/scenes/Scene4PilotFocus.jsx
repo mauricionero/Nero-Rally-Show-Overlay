@@ -332,7 +332,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           </div>
         ) : (
           <div className="h-full rounded border-2 border-[#FF4500] flex items-center justify-center" style={{ backgroundColor: hideStreams ? chromaKey : 'black' }}>
-            <p className="text-zinc-500 text-xl">No stream available</p>
+            <p className="text-zinc-500 text-xl">{t('scene4.noStreamAvailable')}</p>
           </div>
         )}
       </div>
