@@ -1,5 +1,6 @@
 import React from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
+import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -10,20 +11,21 @@ import { Play, Palette } from 'lucide-react';
 // Tab Components
 import PilotsTab from '../components/setup/PilotsTab.jsx';
 import CategoriesTab from '../components/setup/CategoriesTab.jsx';
-import StagesTab from '../components/setup/StagesTab.jsx';
+import TheRaceTab from '../components/setup/TheRaceTab.jsx';
 import TimesTab from '../components/setup/TimesTab.jsx';
 import StreamsTab from '../components/setup/StreamsTab.jsx';
 import ConfigTab from '../components/setup/ConfigTab.jsx';
 
-const CHROMA_PRESETS = [
-  { name: 'Black', value: '#000000', label: 'K' },
-  { name: 'Green Screen', value: '#00B140', label: 'G' },
-  { name: 'Blue Screen', value: '#0047BB', label: 'B' }
-];
-
 export default function Setup() {
   const { chromaKey, setChromaKey } = useRally();
+  const { t } = useTranslation();
   const [customChroma, setCustomChroma] = React.useState('#000000');
+
+  const CHROMA_PRESETS = [
+    { name: t('config.black'), value: '#000000', label: 'K' },
+    { name: t('config.greenScreen'), value: '#00B140', label: 'G' },
+    { name: t('config.blueScreen'), value: '#0047BB', label: 'B' }
+  ];
 
   const handleGoLive = () => {
     const basePath = process.env.PUBLIC_URL || '';
@@ -38,9 +40,9 @@ export default function Setup() {
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              Rally Dashboard
+              {t('header.title')}
             </h1>
-            <p className="text-zinc-400 mt-2">Setup & Configuration</p>
+            <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
           </div>
           
           <div className="flex gap-3">
@@ -50,7 +52,7 @@ export default function Setup() {
               data-testid="go-to-overlay-button"
             >
               <Play className="w-4 h-4 mr-2" />
-              Go Live
+              {t('header.goLive')}
             </Button>
           </div>
         </div>
@@ -60,9 +62,9 @@ export default function Setup() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
               <Palette className="w-5 h-5" />
-              Background Color (Chroma Key)
+              {t('config.backgroundChromaKey')}
             </CardTitle>
-            <CardDescription className="text-zinc-400">Select background color for video overlay</CardDescription>
+            <CardDescription className="text-zinc-400">{t('config.selectBackground')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
@@ -95,7 +97,7 @@ export default function Setup() {
                   className="border-zinc-700 text-white"
                   data-testid="apply-custom-chroma-button"
                 >
-                  Apply Custom
+                  {t('config.applyCustom')}
                 </Button>
               </div>
             </div>
@@ -104,12 +106,12 @@ export default function Setup() {
 
         <Tabs defaultValue="pilots" className="space-y-6">
           <TabsList className="bg-[#18181B] border border-zinc-800">
-            <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">Pilots</TabsTrigger>
-            <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">Categories</TabsTrigger>
-            <TabsTrigger value="stages" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-stages">Stages</TabsTrigger>
-            <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">Times</TabsTrigger>
-            <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">Streams</TabsTrigger>
-            <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">Config</TabsTrigger>
+            <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">{t('tabs.pilots')}</TabsTrigger>
+            <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">{t('tabs.categories')}</TabsTrigger>
+            <TabsTrigger value="therace" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-therace">{t('tabs.theRace')}</TabsTrigger>
+            <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">{t('tabs.times')}</TabsTrigger>
+            <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">{t('tabs.streams')}</TabsTrigger>
+            <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">{t('tabs.config')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pilots">
@@ -120,8 +122,8 @@ export default function Setup() {
             <CategoriesTab />
           </TabsContent>
 
-          <TabsContent value="stages">
-            <StagesTab />
+          <TabsContent value="therace">
+            <TheRaceTab />
           </TabsContent>
 
           <TabsContent value="times">

@@ -22,6 +22,12 @@ const loadFromStorage = (key, defaultValue) => {
 };
 
 export const RallyProvider = ({ children }) => {
+  // Event configuration
+  const [eventName, setEventName] = useState(() => loadFromStorage('rally_event_name', ''));
+  const [positions, setPositions] = useState(() => loadFromStorage('rally_positions', {})); // pilotId -> stageId -> position
+  const [lapTimes, setLapTimes] = useState(() => loadFromStorage('rally_lap_times', {})); // pilotId -> stageId -> [lap1, lap2, ...]
+  const [stagePilots, setStagePilots] = useState(() => loadFromStorage('rally_stage_pilots', {})); // stageId -> [pilotIds] (for lap race pilot selection)
+  
   const [pilots, setPilots] = useState(() => loadFromStorage('rally_pilots', []));
   const [categories, setCategories] = useState(() => loadFromStorage('rally_categories', []));
   const [stages, setStages] = useState(() => loadFromStorage('rally_stages', []));
@@ -50,6 +56,10 @@ export const RallyProvider = ({ children }) => {
 
   // Reload all data from localStorage
   const reloadData = useCallback(() => {
+    setEventName(loadFromStorage('rally_event_name', ''));
+    setPositions(loadFromStorage('rally_positions', {}));
+    setLapTimes(loadFromStorage('rally_lap_times', {}));
+    setStagePilots(loadFromStorage('rally_stage_pilots', {}));
     setPilots(loadFromStorage('rally_pilots', []));
     setCategories(loadFromStorage('rally_categories', []));
     setStages(loadFromStorage('rally_stages', []));
@@ -75,6 +85,10 @@ export const RallyProvider = ({ children }) => {
     // Prevent re-publishing when applying received data
     isPublishing.current = true;
     
+    if (data.eventName !== undefined) setEventName(data.eventName);
+    if (data.positions) setPositions(data.positions);
+    if (data.lapTimes) setLapTimes(data.lapTimes);
+    if (data.stagePilots) setStagePilots(data.stagePilots);
     if (data.pilots) setPilots(data.pilots);
     if (data.categories) setCategories(data.categories);
     if (data.stages) setStages(data.stages);
@@ -111,6 +125,10 @@ export const RallyProvider = ({ children }) => {
     }
     
     const data = {
+      eventName,
+      positions,
+      lapTimes,
+      stagePilots,
       pilots,
       categories,
       stages,
@@ -127,7 +145,7 @@ export const RallyProvider = ({ children }) => {
     };
     
     await wsProvider.current.publish(data);
-  }, [wsEnabled, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, streamConfigs, globalAudio]);
+  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, streamConfigs, globalAudio]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey) => {
@@ -195,6 +213,26 @@ export const RallyProvider = ({ children }) => {
       publishToWebSocket();
     }
   }, [dataVersion, wsEnabled, publishToWebSocket]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_event_name', JSON.stringify(eventName));
+    updateDataVersion();
+  }, [eventName]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_positions', JSON.stringify(positions));
+    updateDataVersion();
+  }, [positions]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_lap_times', JSON.stringify(lapTimes));
+    updateDataVersion();
+  }, [lapTimes]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_stage_pilots', JSON.stringify(stagePilots));
+    updateDataVersion();
+  }, [stagePilots]);
 
   useEffect(() => {
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
@@ -316,11 +354,20 @@ export const RallyProvider = ({ children }) => {
       id: Date.now().toString(),
       name: stage.name,
       type: stage.type || 'SS',
-      ssNumber: stage.ssNumber || '',
-      startTime: stage.startTime || '',
+      ssNumber: stage.ssNumber || '', // Only for SS type
+      startTime: stage.startTime || '', // For SS/Liaison/Service Park: schedule time. For Lap Race: race start time
+      numberOfLaps: stage.numberOfLaps || 5, // For Lap Race type
       ...stage
     };
     setStages(prev => [...prev, newStage]);
+    
+    // For Lap Race, initialize with all pilots selected by default
+    if (stage.type === 'Lap Race') {
+      setStagePilots(prev => ({
+        ...prev,
+        [newStage.id]: pilots.map(p => p.id)
+      }));
+    }
   };
 
   const updateStage = (id, updates) => {
@@ -338,6 +385,15 @@ export const RallyProvider = ({ children }) => {
       });
       return newTimes;
     });
+    setArrivalTimes(prev => {
+      const newArrivalTimes = { ...prev };
+      Object.keys(newArrivalTimes).forEach(pilotId => {
+        if (newArrivalTimes[pilotId]) {
+          delete newArrivalTimes[pilotId][id];
+        }
+      });
+      return newArrivalTimes;
+    });
     setStartTimes(prev => {
       const newStartTimes = { ...prev };
       Object.keys(newStartTimes).forEach(pilotId => {
@@ -346,6 +402,132 @@ export const RallyProvider = ({ children }) => {
         }
       });
       return newStartTimes;
+    });
+    setLapTimes(prev => {
+      const newLapTimes = { ...prev };
+      Object.keys(newLapTimes).forEach(pilotId => {
+        if (newLapTimes[pilotId]) {
+          delete newLapTimes[pilotId][id];
+        }
+      });
+      return newLapTimes;
+    });
+    setPositions(prev => {
+      const newPositions = { ...prev };
+      Object.keys(newPositions).forEach(pilotId => {
+        if (newPositions[pilotId]) {
+          delete newPositions[pilotId][id];
+        }
+      });
+      return newPositions;
+    });
+    setStagePilots(prev => {
+      const newStagePilots = { ...prev };
+      delete newStagePilots[id];
+      return newStagePilots;
+    });
+  };
+
+  // Stage pilots functions (for Lap Race pilot selection)
+  const getStagePilots = (stageId) => {
+    return stagePilots[stageId] || pilots.map(p => p.id);
+  };
+
+  const setStagePilotsForStage = (stageId, pilotIds) => {
+    setStagePilots(prev => ({
+      ...prev,
+      [stageId]: pilotIds
+    }));
+  };
+
+  const togglePilotInStage = (stageId, pilotId) => {
+    setStagePilots(prev => {
+      const currentPilots = prev[stageId] || pilots.map(p => p.id);
+      if (currentPilots.includes(pilotId)) {
+        return { ...prev, [stageId]: currentPilots.filter(id => id !== pilotId) };
+      } else {
+        return { ...prev, [stageId]: [...currentPilots, pilotId] };
+      }
+    });
+  };
+
+  const selectAllPilotsInStage = (stageId) => {
+    setStagePilots(prev => ({
+      ...prev,
+      [stageId]: pilots.map(p => p.id)
+    }));
+  };
+
+  const deselectAllPilotsInStage = (stageId) => {
+    setStagePilots(prev => ({
+      ...prev,
+      [stageId]: []
+    }));
+  };
+
+  // Lap times functions
+  const setLapTime = (pilotId, stageId, lapIndex, time) => {
+    setLapTimes(prev => {
+      const pilotLaps = prev[pilotId] || {};
+      const stageLaps = [...(pilotLaps[stageId] || [])];
+      stageLaps[lapIndex] = time;
+      return {
+        ...prev,
+        [pilotId]: {
+          ...pilotLaps,
+          [stageId]: stageLaps
+        }
+      };
+    });
+  };
+
+  const getLapTime = (pilotId, stageId, lapIndex) => {
+    return lapTimes[pilotId]?.[stageId]?.[lapIndex] || '';
+  };
+
+  const getPilotLapTimes = (pilotId, stageId) => {
+    return lapTimes[pilotId]?.[stageId] || [];
+  };
+
+  // Position functions
+  const setPosition = (pilotId, stageId, position) => {
+    setPositions(prev => ({
+      ...prev,
+      [pilotId]: {
+        ...(prev[pilotId] || {}),
+        [stageId]: position
+      }
+    }));
+  };
+
+  const getPosition = (pilotId, stageId) => {
+    return positions[pilotId]?.[stageId] || null;
+  };
+
+  // Calculate positions based on lap times (for lap race / rallyX)
+  const calculatePositions = (stageId, currentLap) => {
+    const pilotData = pilots.map(pilot => {
+      const pilotLaps = lapTimes[pilot.id]?.[stageId] || [];
+      const completedLaps = pilotLaps.filter(t => t).length;
+      const totalTime = pilotLaps.reduce((sum, t) => {
+        if (!t) return sum;
+        const parts = t.split(':');
+        const mins = parseInt(parts[0]) || 0;
+        const secsAndMs = parts[1] ? parseFloat(parts[1]) : 0;
+        return sum + mins * 60 + secsAndMs;
+      }, 0);
+      return { pilotId: pilot.id, completedLaps, totalTime };
+    });
+
+    // Sort by completed laps (desc), then by total time (asc)
+    pilotData.sort((a, b) => {
+      if (b.completedLaps !== a.completedLaps) return b.completedLaps - a.completedLaps;
+      return a.totalTime - b.totalTime;
+    });
+
+    // Update positions
+    pilotData.forEach((data, index) => {
+      setPosition(data.pilotId, stageId, index + 1);
     });
   };
 
@@ -435,6 +617,10 @@ export const RallyProvider = ({ children }) => {
 
   const exportData = () => {
     const data = {
+      eventName,
+      positions,
+      lapTimes,
+      stagePilots,
       pilots,
       categories,
       stages,
@@ -468,6 +654,10 @@ export const RallyProvider = ({ children }) => {
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
       if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
+      if (data.eventName !== undefined) setEventName(data.eventName);
+      if (data.positions) setPositions(data.positions);
+      if (data.lapTimes) setLapTimes(data.lapTimes);
+      if (data.stagePilots) setStagePilots(data.stagePilots);
       updateDataVersion();
       return true;
     } catch (error) {
@@ -477,6 +667,10 @@ export const RallyProvider = ({ children }) => {
   };
 
   const clearAllData = () => {
+    setEventName('');
+    setPositions({});
+    setLapTimes({});
+    setStagePilots({});
     setPilots([]);
     setCategories([]);
     setStages([]);
@@ -493,6 +687,12 @@ export const RallyProvider = ({ children }) => {
   };
 
   const value = {
+    // Event configuration
+    eventName,
+    positions,
+    lapTimes,
+    stagePilots,
+    // Core data
     pilots,
     categories,
     stages,
@@ -513,6 +713,7 @@ export const RallyProvider = ({ children }) => {
     wsConnectionStatus,
     wsError,
     // Setters
+    setEventName,
     setCurrentScene,
     setChromaKey,
     setMapUrl,
@@ -536,6 +737,20 @@ export const RallyProvider = ({ children }) => {
     getArrivalTime,
     setStartTime,
     getStartTime,
+    // Lap time functions
+    setLapTime,
+    getLapTime,
+    getPilotLapTimes,
+    // Position functions
+    setPosition,
+    getPosition,
+    calculatePositions,
+    // Stage pilots functions (for Lap Race)
+    getStagePilots,
+    setStagePilotsForStage,
+    togglePilotInStage,
+    selectAllPilotsInStage,
+    deselectAllPilotsInStage,
     getStreamConfig,
     setStreamConfig,
     setSoloStream,

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -9,6 +10,7 @@ import { toast } from 'sonner';
 import { Trash2, Plus, Edit } from 'lucide-react';
 
 export default function CategoriesTab() {
+  const { t } = useTranslation();
   const {
     categories,
     addCategory,
@@ -22,7 +24,7 @@ export default function CategoriesTab() {
 
   const handleAddCategory = () => {
     if (!newCategory.name.trim()) {
-      toast.error('Category name is required');
+      toast.error(t('categories.categoryName') + ' is required');
       return;
     }
     addCategory(newCategory);
@@ -32,7 +34,7 @@ export default function CategoriesTab() {
 
   const handleUpdateCategory = () => {
     if (!editingCategory.name.trim()) {
-      toast.error('Category name is required');
+      toast.error(t('categories.categoryName') + ' is required');
       return;
     }
     updateCategory(editingCategory.id, editingCategory);
@@ -45,22 +47,22 @@ export default function CategoriesTab() {
     <div className="space-y-4">
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Add New Category</CardTitle>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('categories.addNewCategory')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex gap-4">
             <div className="flex-1">
-              <Label className="text-white">Category Name *</Label>
+              <Label className="text-white">{t('categories.categoryName')} *</Label>
               <Input
                 value={newCategory.name}
                 onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                placeholder="Group A"
+                placeholder={t('categories.placeholder.name')}
                 className="bg-[#09090B] border-zinc-700 text-white"
                 data-testid="input-category-name"
               />
             </div>
             <div className="w-32">
-              <Label className="text-white">Color</Label>
+              <Label className="text-white">{t('categories.color')}</Label>
               <Input
                 type="color"
                 value={newCategory.color}
@@ -76,7 +78,7 @@ export default function CategoriesTab() {
                 data-testid="button-add-category"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add
+                {t('common.add')}
               </Button>
             </div>
           </div>
@@ -113,12 +115,12 @@ export default function CategoriesTab() {
                     </DialogTrigger>
                     <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
                       <DialogHeader>
-                        <DialogTitle className="text-white">Edit Category</DialogTitle>
+                        <DialogTitle className="text-white">{t('common.edit')} {t('tabs.categories')}</DialogTitle>
                       </DialogHeader>
                       {editingCategory && (
                         <div className="space-y-4">
                           <div>
-                            <Label className="text-white">Category Name *</Label>
+                            <Label className="text-white">{t('categories.categoryName')} *</Label>
                             <Input
                               value={editingCategory.name}
                               onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
@@ -126,7 +128,7 @@ export default function CategoriesTab() {
                             />
                           </div>
                           <div>
-                            <Label className="text-white">Color</Label>
+                            <Label className="text-white">{t('categories.color')}</Label>
                             <Input
                               type="color"
                               value={editingCategory.color}
@@ -138,7 +140,7 @@ export default function CategoriesTab() {
                       )}
                       <DialogFooter>
                         <Button onClick={handleUpdateCategory} className="bg-[#FF4500] hover:bg-[#FF4500]/90">
-                          Update Category
+                          {t('common.save')}
                         </Button>
                       </DialogFooter>
                     </DialogContent>
@@ -147,7 +149,7 @@ export default function CategoriesTab() {
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                      if (window.confirm('Delete this category?')) {
+                      if (window.confirm(t('common.delete') + '?')) {
                         deleteCategory(category.id);
                         toast.success('Category deleted');
                       }
@@ -166,7 +168,7 @@ export default function CategoriesTab() {
 
       {categories.length === 0 && (
         <div className="text-center py-12 text-zinc-500">
-          No categories created. Add your first category above.
+          {t('categories.noCategories')}
         </div>
       )}
     </div>

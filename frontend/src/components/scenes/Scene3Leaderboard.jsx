@@ -1,24 +1,100 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { CategoryBar } from '../CategoryBadge.jsx';
 import { parseTime, getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
+import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
+
+// Helper to calculate Lap Race positions and data
+const calculateLapRaceLeaderboard = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
+  const selectedPilotIds = stagePilots[stageId] || pilots.map(p => p.id);
+  const selectedPilots = pilots.filter(p => selectedPilotIds.includes(p.id));
+  
+  const pilotData = selectedPilots.map(pilot => {
+    const pilotLaps = lapTimes[pilot.id]?.[stageId] || [];
+    const completedLaps = pilotLaps.filter(t => t && t.trim() !== '').length;
+    
+    let totalTimeMs = 0;
+    pilotLaps.forEach(lapTime => {
+      if (!lapTime) return;
+      const parts = lapTime.split(':');
+      if (parts.length >= 2) {
+        const hours = parts.length === 3 ? parseInt(parts[0]) || 0 : 0;
+        const mins = parts.length === 3 ? parseInt(parts[1]) || 0 : parseInt(parts[0]) || 0;
+        const secsStr = parts.length === 3 ? parts[2] : parts[1];
+        const [secs, ms] = (secsStr || '0').split('.');
+        totalTimeMs += (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
+      }
+    });
+    
+    const isFinished = completedLaps >= numberOfLaps;
+    const isRacing = completedLaps > 0 && !isFinished;
+    
+    return { 
+      ...pilot,
+      completedLaps, 
+      totalTimeMs,
+      isFinished,
+      isRacing,
+      hasTime: completedLaps > 0,
+      sortTime: isFinished ? totalTimeMs : (isRacing ? totalTimeMs + 999999999 : Infinity)
+    };
+  });
+
+  // Sort: finished first (by time), then racing (by laps desc, time asc), then not started
+  pilotData.sort((a, b) => {
+    // Both finished - sort by total time
+    if (a.isFinished && b.isFinished) return a.totalTimeMs - b.totalTimeMs;
+    // Finished comes before racing
+    if (a.isFinished && !b.isFinished) return -1;
+    if (!a.isFinished && b.isFinished) return 1;
+    // Both racing - sort by laps (desc), then time (asc)
+    if (a.isRacing && b.isRacing) {
+      if (b.completedLaps !== a.completedLaps) return b.completedLaps - a.completedLaps;
+      return a.totalTimeMs - b.totalTimeMs;
+    }
+    // Racing comes before not started
+    if (a.isRacing && !b.isRacing) return -1;
+    if (!a.isRacing && b.isRacing) return 1;
+    return 0;
+  });
+
+  return pilotData;
+};
+
+// Format milliseconds to readable time string
+const formatTimeMs = (ms) => {
+  if (!ms) return '-';
+  const totalSecs = ms / 1000;
+  const mins = Math.floor(totalSecs / 60);
+  const secs = (totalSecs % 60).toFixed(3);
+  return `${mins}:${secs.padStart(6, '0')}`;
+};
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, categories, logoUrl } = useRally();
+  const { pilots, stages, times, startTimes, categories, logoUrl, lapTimes, stagePilots } = useRally();
+  const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(null);
+  const [selectedStageType, setSelectedStageType] = useState('all'); // 'all', 'ss', 'lapRace'
   const [currentTime, setCurrentTime] = useState(new Date());
   
   const selectedStage = stages.find(s => s.id === selectedStageId);
   
-  // Filter only SS type stages
+  // Filter stages by type
   const ssStages = stages.filter(s => s.type === 'SS');
-
+  const lapRaceStages = stages.filter(s => s.type === 'Lap Race');
+  
   // Sort stages by start time
   const sortedSSStages = [...ssStages].sort((a, b) => {
+    if (!a.startTime) return 1;
+    if (!b.startTime) return -1;
+    return a.startTime.localeCompare(b.startTime);
+  });
+
+  const sortedLapRaceStages = [...lapRaceStages].sort((a, b) => {
     if (!a.startTime) return 1;
     if (!b.startTime) return -1;
     return a.startTime.localeCompare(b.startTime);
@@ -29,80 +105,85 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-select overall if none selected (not first SS)
-  useEffect(() => {
-    if (selectedStageId === null && sortedSSStages.length > 0) {
-      // Keep it as overall (null), don't auto-select first stage
-    }
-  }, [sortedSSStages, selectedStageId]);
-
-  // Calculate leaderboard
-  const leaderboard = pilots.map(pilot => {
-    if (selectedStageId) {
-      // Single stage leaderboard
-      const status = getPilotStatus(pilot.id, selectedStageId, startTimes, times);
-      const startTime = startTimes[pilot.id]?.[selectedStageId];
-      const finishTime = times[pilot.id]?.[selectedStageId];
-      
-      let displayTime = '-';
-      let timeColor = 'text-white';
-      let sortTime = Infinity;
-      
-      if (status === 'racing' && startTime) {
-        displayTime = getRunningTime(startTime);
-        timeColor = 'text-[#FACC15]';
-        sortTime = parseTime(displayTime) || Infinity;
-      } else if (status === 'finished' && finishTime) {
-        displayTime = finishTime;
-        timeColor = 'text-white';
-        sortTime = parseTime(finishTime);
-      }
-      
-      // Calculate overall time: sum of all SS up to and including the selected stage
-      let overallTime = 0;
-      let completedStages = 0;
-      let hasRunningInOverall = false;
-      
-      for (const stage of sortedSSStages) {
-        const stageFinishTime = times[pilot.id]?.[stage.id];
-        
-        if (stageFinishTime) {
-          // Stage is finished
-          overallTime += parseTime(stageFinishTime);
-          completedStages++;
-        } else if (stage.id === selectedStageId) {
-          // This is the selected stage and pilot is racing it
-          const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times);
-          const stageStartTime = startTimes[pilot.id]?.[stage.id];
-          if (stageStatus === 'racing' && stageStartTime) {
-            const runningTime = getRunningTime(stageStartTime);
-            overallTime += parseTime(runningTime) || 0;
-            hasRunningInOverall = true;
+  // Calculate leaderboard based on selected stage/type
+  const leaderboard = useMemo(() => {
+    // If a specific stage is selected
+    if (selectedStageId && selectedStage) {
+      if (selectedStage.type === 'Lap Race') {
+        // Lap Race leaderboard
+        return calculateLapRaceLeaderboard(pilots, selectedStageId, lapTimes, stagePilots, selectedStage.numberOfLaps || 5);
+      } else if (selectedStage.type === 'SS') {
+        // Single SS stage leaderboard
+        return pilots.map(pilot => {
+          const status = getPilotStatus(pilot.id, selectedStageId, startTimes, times);
+          const startTime = startTimes[pilot.id]?.[selectedStageId];
+          const finishTime = times[pilot.id]?.[selectedStageId];
+          
+          let displayTime = '-';
+          let timeColor = 'text-white';
+          let sortTime = Infinity;
+          
+          if (status === 'racing' && startTime) {
+            displayTime = getRunningTime(startTime);
+            timeColor = 'text-[#FACC15]';
+            sortTime = parseTime(displayTime) || Infinity;
+          } else if (status === 'finished' && finishTime) {
+            displayTime = finishTime;
+            timeColor = 'text-white';
+            sortTime = parseTime(finishTime);
           }
-        }
-        
-        // Stop after processing the selected stage
-        if (stage.id === selectedStageId) break;
+          
+          // Calculate overall time: sum of all SS up to and including the selected stage
+          let overallTime = 0;
+          let completedStages = 0;
+          let hasRunningInOverall = false;
+          
+          for (const stage of sortedSSStages) {
+            const stageFinishTime = times[pilot.id]?.[stage.id];
+            
+            if (stageFinishTime) {
+              overallTime += parseTime(stageFinishTime);
+              completedStages++;
+            } else if (stage.id === selectedStageId) {
+              const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times);
+              const stageStartTime = startTimes[pilot.id]?.[stage.id];
+              if (stageStatus === 'racing' && stageStartTime) {
+                const runningTime = getRunningTime(stageStartTime);
+                overallTime += parseTime(runningTime) || 0;
+                hasRunningInOverall = true;
+              }
+            }
+            
+            if (stage.id === selectedStageId) break;
+          }
+          
+          const overallMinutes = Math.floor(overallTime / 60);
+          const overallSeconds = (overallTime % 60).toFixed(3).padStart(6, '0');
+          const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? `${overallMinutes}:${overallSeconds}` : '-';
+          const overallColor = hasRunningInOverall ? 'text-[#FACC15]' : 'text-white';
+          
+          return {
+            ...pilot,
+            displayTime,
+            timeColor,
+            sortTime,
+            overallTime,
+            overallDisplay,
+            overallColor,
+            hasTime: status === 'finished' || status === 'racing',
+            status
+          };
+        }).sort((a, b) => {
+          if (!a.hasTime && !b.hasTime) return 0;
+          if (!a.hasTime) return 1;
+          if (!b.hasTime) return -1;
+          return a.sortTime - b.sortTime;
+        });
       }
-      
-      const overallMinutes = Math.floor(overallTime / 60);
-      const overallSeconds = (overallTime % 60).toFixed(3).padStart(6, '0');
-      const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? `${overallMinutes}:${overallSeconds}` : '-';
-      const overallColor = hasRunningInOverall ? 'text-[#FACC15]' : 'text-white';
-      
-      return {
-        ...pilot,
-        displayTime,
-        timeColor,
-        sortTime,
-        overallTime,
-        overallDisplay,
-        overallColor,
-        hasTime: status === 'finished' || status === 'racing',
-        status
-      };
-    } else {
-      // Overall leaderboard - includes running times
+    }
+    
+    // Overall SS standings (default)
+    return pilots.map(pilot => {
       let totalTime = 0;
       let completedStages = 0;
       let hasRunningStage = false;
@@ -110,15 +191,12 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       sortedSSStages.forEach(stage => {
         const finishTime = times[pilot.id]?.[stage.id];
         if (finishTime) {
-          // Finished stage
           totalTime += parseTime(finishTime);
           completedStages++;
         } else {
-          // Check if racing this stage
           const status = getPilotStatus(pilot.id, stage.id, startTimes, times);
           const startTime = startTimes[pilot.id]?.[stage.id];
           if (status === 'racing' && startTime && !hasRunningStage) {
-            // Add running time from current stage
             const runningTime = getRunningTime(startTime);
             totalTime += parseTime(runningTime);
             hasRunningStage = true;
@@ -140,15 +218,27 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         overallDisplay: displayTime,
         hasTime: completedStages > 0 || hasRunningStage
       };
-    }
-  }).sort((a, b) => {
-    if (!a.hasTime && !b.hasTime) return 0;
-    if (!a.hasTime) return 1;
-    if (!b.hasTime) return -1;
-    return a.sortTime - b.sortTime;
-  });
+    }).sort((a, b) => {
+      if (!a.hasTime && !b.hasTime) return 0;
+      if (!a.hasTime) return 1;
+      if (!b.hasTime) return -1;
+      return a.sortTime - b.sortTime;
+    });
+  }, [selectedStageId, selectedStage, pilots, times, startTimes, lapTimes, stagePilots, sortedSSStages]);
 
   const leader = leaderboard.find(p => p.hasTime);
+  const isLapRaceSelected = selectedStage?.type === 'Lap Race';
+
+  // Get stage icon based on type
+  const getStageIcon = (type) => {
+    switch (type) {
+      case 'SS': return Flag;
+      case 'Lap Race': return RotateCcw;
+      case 'Liaison': return Car;
+      case 'Service Park': return Timer;
+      default: return Flag;
+    }
+  };
 
   return (
     <div className="relative w-full h-full flex items-center justify-center p-8" data-testid="scene-3-leaderboard">
@@ -158,7 +248,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           <img 
             src={logoUrl} 
             alt="Channel Logo" 
-            className="h-20 max-w-[200px] object-contain"
+            className="h-28 max-w-[280px] object-contain"
           />
         </div>
       )}
@@ -166,18 +256,52 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       <LeftControls>
         <div className="space-y-4">
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">Select Stage</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene3.selectView')}</Label>
             <Select value={selectedStageId || 'overall'} onValueChange={(val) => setSelectedStageId(val === 'overall' ? null : val)}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="overall">Overall Standings</SelectItem>
-                {sortedSSStages.map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="overall">
+                  <div className="flex items-center gap-2">
+                    <Flag className="w-4 h-4 text-[#FF4500]" />
+                    {t('scene3.overallRallyStandings')}
+                  </div>
+                </SelectItem>
+                
+                {/* SS Stages */}
+                {sortedSSStages.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs text-zinc-500 uppercase border-t border-zinc-700 mt-1">
+                      {t('scene3.specialStages')}
+                    </div>
+                    {sortedSSStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        <div className="flex items-center gap-2">
+                          <Flag className="w-4 h-4 text-[#FF4500]" />
+                          {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+                
+                {/* Lap Race Stages */}
+                {sortedLapRaceStages.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs text-zinc-500 uppercase border-t border-zinc-700 mt-1">
+                      {t('scene3.lapRaces')}
+                    </div>
+                    {sortedLapRaceStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        <div className="flex items-center gap-2">
+                          <RotateCcw className="w-4 h-4 text-[#FACC15]" />
+                          {stage.name} ({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -187,12 +311,28 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       <div className="w-full max-w-6xl">
         {/* Header - Shows selected stage name */}
         <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            {selectedStage ? (
+              <>
+                {React.createElement(getStageIcon(selectedStage.type), { 
+                  className: `w-10 h-10 ${selectedStage.type === 'Lap Race' ? 'text-[#FACC15]' : 'text-[#FF4500]'}` 
+                })}
+              </>
+            ) : (
+              <Flag className="w-10 h-10 text-[#FF4500]" />
+            )}
+          </div>
           <h1 className="text-6xl font-bold uppercase text-[#FF4500] mb-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             {selectedStage 
-              ? `${selectedStage.ssNumber ? `SS${selectedStage.ssNumber} - ` : ''}${selectedStage.name}`
-              : 'Overall Standings'
+              ? (selectedStage.type === 'SS' && selectedStage.ssNumber 
+                  ? `SS${selectedStage.ssNumber} - ${selectedStage.name}`
+                  : selectedStage.name)
+              : t('scene3.overallStandings')
             }
           </h1>
+          {isLapRaceSelected && selectedStage && (
+            <p className="text-zinc-400 text-xl">{selectedStage.numberOfLaps} {t('scene3.laps')}</p>
+          )}
         </div>
 
         {/* Leaderboard Table */}
@@ -201,20 +341,45 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             <thead>
               <tr className="bg-[#18181B] text-white border-b border-white/10">
                 <th className="p-1 w-1"></th>
-                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pos</th>
-                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Pilot</th>
-                {selectedStageId && (
-                  <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>SS Time</th>
+                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.pos')}</th>
+                <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.pilot')}</th>
+                {isLapRaceSelected ? (
+                  <>
+                    <th className="p-4 text-center uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.laps')}</th>
+                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.totalTime')}</th>
+                  </>
+                ) : selectedStageId ? (
+                  <>
+                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.ssTime')}</th>
+                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.overall')}</th>
+                  </>
+                ) : (
+                  <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.overall')}</th>
                 )}
-                <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Overall</th>
-                <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Gap</th>
+                <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.gap')}</th>
               </tr>
             </thead>
             <tbody>
               {leaderboard.map((pilot, index) => {
-                const gap = leader && pilot.id !== leader.id && pilot.hasTime
-                  ? '+' + (pilot.sortTime - leader.sortTime).toFixed(3) + 's'
-                  : pilot.hasTime ? 'LEADER' : '-';
+                // Calculate gap
+                let gap = '-';
+                if (leader && pilot.id !== leader.id && pilot.hasTime) {
+                  if (isLapRaceSelected) {
+                    if (pilot.isFinished && leader.isFinished) {
+                      const gapMs = pilot.totalTimeMs - leader.totalTimeMs;
+                      gap = '+' + formatTimeMs(gapMs);
+                    } else if (pilot.isRacing || pilot.isFinished) {
+                      const lapDiff = (leader.completedLaps || 0) - (pilot.completedLaps || 0);
+                      if (lapDiff > 0) {
+                        gap = `+${lapDiff} ${t('scene3.laps').toLowerCase()}`;
+                      }
+                    }
+                  } else {
+                    gap = '+' + (pilot.sortTime - leader.sortTime).toFixed(3) + 's';
+                  }
+                } else if (pilot.hasTime && pilot.id === leader?.id) {
+                  gap = t('scene3.leader');
+                }
                 
                 const category = categories.find(c => c.id === pilot.categoryId);
 
@@ -261,18 +426,49 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                         </span>
                       </div>
                     </td>
-                    {selectedStageId && (
+                    
+                    {isLapRaceSelected ? (
+                      <>
+                        <td className="p-4 text-center">
+                          <span className={`text-xl font-mono ${
+                            pilot.isFinished ? 'text-[#22C55E]' : 
+                            pilot.isRacing ? 'text-[#FACC15]' : 
+                            'text-zinc-500'
+                          }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {pilot.completedLaps || 0}/{selectedStage?.numberOfLaps || 0}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className={`text-2xl font-mono ${
+                            pilot.isFinished ? 'text-[#22C55E]' : 
+                            pilot.isRacing ? 'text-[#FACC15]' : 
+                            'text-zinc-500'
+                          }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {pilot.hasTime ? formatTimeMs(pilot.totalTimeMs) : '-'}
+                          </span>
+                        </td>
+                      </>
+                    ) : selectedStageId ? (
+                      <>
+                        <td className="p-4 text-right">
+                          <span className={`text-2xl font-mono ${pilot.timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {pilot.displayTime}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className={`text-xl font-mono ${pilot.overallColor || 'text-white'}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {pilot.overallDisplay}
+                          </span>
+                        </td>
+                      </>
+                    ) : (
                       <td className="p-4 text-right">
-                        <span className={`text-2xl font-mono ${pilot.timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {pilot.displayTime}
+                        <span className={`text-xl font-mono ${pilot.timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                          {pilot.overallDisplay}
                         </span>
                       </td>
                     )}
-                    <td className="p-4 text-right">
-                      <span className={`text-xl font-mono ${selectedStageId ? (pilot.overallColor || 'text-white') : pilot.timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {pilot.overallDisplay}
-                      </span>
-                    </td>
+                    
                     <td className="p-4 text-right">
                       <span className="text-zinc-400 text-lg font-mono" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         {gap}

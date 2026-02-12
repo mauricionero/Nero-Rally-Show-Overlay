@@ -1,13 +1,16 @@
 import React, { useRef, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image, Globe } from 'lucide-react';
+import { LanguageSelector } from '../LanguageSelector.jsx';
 
 export default function ConfigTab() {
+  const { t } = useTranslation();
   const {
     pilots,
     categories,
@@ -107,18 +110,18 @@ export default function ConfigTab() {
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             <Image className="w-5 h-5" />
-            Branding
+            {t('config.branding')}
           </CardTitle>
           <CardDescription className="text-zinc-400">Customize your channel branding for the overlay</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-white">Logo URL</Label>
+              <Label className="text-white">{t('config.logoUrl')}</Label>
               <Input
                 value={logoUrl || ''}
                 onChange={(e) => setLogoUrl(e.target.value)}
-                placeholder="https://example.com/your-logo.png"
+                placeholder={t('config.logoUrlPlaceholder')}
                 className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
                 data-testid="input-logo-url"
               />
@@ -141,14 +144,28 @@ export default function ConfigTab() {
         </CardContent>
       </Card>
 
+      {/* Language Selection */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Globe className="w-5 h-5" />
+            {t('config.language')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.selectLanguage')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LanguageSelector showLabel={false} />
+        </CardContent>
+      </Card>
+
       {/* Google Maps URL */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             <Map className="w-5 h-5" />
-            Google Maps Integration
+            {t('config.googleMapsIntegration')}
           </CardTitle>
-          <CardDescription className="text-zinc-400">Add a Google Maps embed URL to display in Scene 1 grid</CardDescription>
+          <CardDescription className="text-zinc-400">{t('config.googleMapsDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -156,7 +173,7 @@ export default function ConfigTab() {
             <Input
               value={mapUrl || ''}
               onChange={(e) => setMapUrl(e.target.value)}
-              placeholder="https://www.google.com/maps/embed?pb=..."
+              placeholder={t('config.mapsUrlPlaceholder')}
               className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
               data-testid="input-map-url"
             />
@@ -172,9 +189,9 @@ export default function ConfigTab() {
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             {wsConnectionStatus === 'connected' ? <Wifi className="w-5 h-5 text-green-500" /> : <WifiOff className="w-5 h-5 text-zinc-500" />}
-            Live Sync (WebSocket)
+            {t('config.liveSync')}
           </CardTitle>
-          <CardDescription className="text-zinc-400">Real-time sync between Setup and Overlay pages across devices</CardDescription>
+          <CardDescription className="text-zinc-400">{t('config.liveSyncDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Connection Status */}
@@ -184,14 +201,18 @@ export default function ConfigTab() {
               wsConnectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
               wsConnectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
             }`} />
-            <span className="text-white capitalize">{wsConnectionStatus}</span>
+            <span className="text-white capitalize">
+              {wsConnectionStatus === 'connected' ? t('config.connected') :
+               wsConnectionStatus === 'connecting' ? t('config.connecting') :
+               wsConnectionStatus === 'error' ? t('config.error') : t('config.disconnected')}
+            </span>
             {wsError && <span className="text-red-400 text-sm">({wsError})</span>}
           </div>
 
           {wsConnectionStatus === 'connected' ? (
             <div className="space-y-3">
               <div className="bg-[#09090B] p-3 rounded border border-zinc-700">
-                <Label className="text-xs text-zinc-400 block mb-1">Connected Channel Key</Label>
+                <Label className="text-xs text-zinc-400 block mb-1">{t('config.yourChannelKey')}</Label>
                 <div className="flex items-center gap-2">
                   <code className="text-[#FACC15] font-mono flex-1 truncate">{wsChannelKey}</code>
                   <Button variant="ghost" size="icon" onClick={handleCopyKey} className="h-8 w-8">
@@ -212,7 +233,7 @@ export default function ConfigTab() {
                 variant="destructive"
                 className="w-full"
               >
-                Disconnect
+                {t('header.disconnect')}
               </Button>
             </div>
           ) : (
@@ -221,11 +242,11 @@ export default function ConfigTab() {
                 <Input
                   value={newKey}
                   onChange={(e) => setNewKey(e.target.value)}
-                  placeholder="Enter or generate a channel key"
+                  placeholder={t('config.channelKeyPlaceholder')}
                   className="bg-[#09090B] border-zinc-700 text-white font-mono"
                 />
                 <Button onClick={handleGenerateKey} variant="outline" className="border-zinc-700 text-white shrink-0">
-                  Generate
+                  {t('config.generateKey')}
                 </Button>
               </div>
               <Button
@@ -233,7 +254,7 @@ export default function ConfigTab() {
                 disabled={!newKey.trim() || wsConnectionStatus === 'connecting'}
                 className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
               >
-                {wsConnectionStatus === 'connecting' ? 'Connecting...' : 'Connect'}
+                {wsConnectionStatus === 'connecting' ? t('config.connecting') : t('header.connect')}
               </Button>
             </div>
           )}
@@ -243,30 +264,26 @@ export default function ConfigTab() {
       {/* Keyboard Shortcuts */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Keyboard Shortcuts</CardTitle>
-          <CardDescription className="text-zinc-400">Quick access to scenes on overlay page</CardDescription>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('config.keyboardShortcuts')}</CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.keyboardShortcutsDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
             <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">1</kbd> Scene 1</span>
-              <span className="text-zinc-500">Live Stage + Streams</span>
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">1</kbd> {t('config.switchToScene')} 1</span>
+              <span className="text-zinc-500">{t('scenes.liveStage')}</span>
             </div>
             <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">2</kbd> Scene 2</span>
-              <span className="text-zinc-500">Timing Tower</span>
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">2</kbd> {t('config.switchToScene')} 2</span>
+              <span className="text-zinc-500">{t('scenes.timingTower')}</span>
             </div>
             <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">3</kbd> Scene 3</span>
-              <span className="text-zinc-500">Leaderboard</span>
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">3</kbd> {t('config.switchToScene')} 3</span>
+              <span className="text-zinc-500">{t('scenes.leaderboard')}</span>
             </div>
             <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">4</kbd> Scene 4</span>
-              <span className="text-zinc-500">Pilot Focus</span>
-            </div>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">5</kbd> Scene 5</span>
-              <span className="text-zinc-500">SS Comparison</span>
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">4</kbd> {t('config.switchToScene')} 4</span>
+              <span className="text-zinc-500">{t('scenes.pilotFocus')}</span>
             </div>
           </div>
         </CardContent>
@@ -275,7 +292,7 @@ export default function ConfigTab() {
       {/* Data Management */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Data Management</CardTitle>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('config.dataManagement')}</CardTitle>
           <CardDescription className="text-zinc-400">Export or import your configuration</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -287,7 +304,7 @@ export default function ConfigTab() {
               data-testid="button-export-config"
             >
               <Download className="w-4 h-4 mr-2" />
-              Export Configuration
+              {t('config.exportJson')}
             </Button>
             <Button
               onClick={() => fileInputRef.current?.click()}
@@ -296,7 +313,7 @@ export default function ConfigTab() {
               data-testid="button-import-config"
             >
               <Upload className="w-4 h-4 mr-2" />
-              Import Configuration
+              {t('config.importJson')}
             </Button>
             <input
               ref={fileInputRef}
@@ -309,7 +326,7 @@ export default function ConfigTab() {
           <div className="pt-4 border-t border-zinc-700">
             <Button
               onClick={() => {
-                if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                if (window.confirm(t('config.clearDataConfirm'))) {
                   clearAllData();
                   toast.success('All data cleared');
                 }
@@ -318,7 +335,7 @@ export default function ConfigTab() {
               className="w-full"
               data-testid="button-clear-all"
             >
-              Clear All Data
+              {t('config.clearAllData')}
             </Button>
           </div>
         </CardContent>
@@ -327,25 +344,25 @@ export default function ConfigTab() {
       {/* Current Summary */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Current Summary</CardTitle>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('config.currentSummary')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div className="bg-[#09090B] p-4 rounded">
               <div className="text-3xl font-bold text-[#FF4500]">{pilots.length}</div>
-              <div className="text-sm text-zinc-400">Pilots</div>
+              <div className="text-sm text-zinc-400">{t('config.pilotsCount')}</div>
             </div>
             <div className="bg-[#09090B] p-4 rounded">
               <div className="text-3xl font-bold text-[#FF4500]">{categories.length}</div>
-              <div className="text-sm text-zinc-400">Categories</div>
+              <div className="text-sm text-zinc-400">{t('config.categoriesCount')}</div>
             </div>
             <div className="bg-[#09090B] p-4 rounded">
               <div className="text-3xl font-bold text-[#FF4500]">{stages.length}</div>
-              <div className="text-sm text-zinc-400">Stages</div>
+              <div className="text-sm text-zinc-400">{t('config.stagesCount')}</div>
             </div>
             <div className="bg-[#09090B] p-4 rounded">
               <div className="text-3xl font-bold text-[#22C55E]">{activePilots.length}</div>
-              <div className="text-sm text-zinc-400">Active Streams</div>
+              <div className="text-sm text-zinc-400">{t('streams.pilotStreams')}</div>
             </div>
           </div>
         </CardContent>

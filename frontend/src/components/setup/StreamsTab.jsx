@@ -1,5 +1,6 @@
 import React from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -9,6 +10,7 @@ import { AudioMeter, GlobalAudioMeter } from '../AudioMeter.jsx';
 import { Volume2, VolumeX, Headphones } from 'lucide-react';
 
 export default function StreamsTab() {
+  const { t } = useTranslation();
   const {
     pilots,
     categories,
@@ -31,7 +33,7 @@ export default function StreamsTab() {
       {/* Global Audio Control */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader className="pb-2">
-          <CardTitle className="uppercase text-white text-lg" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Master Audio</CardTitle>
+          <CardTitle className="uppercase text-white text-lg" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('streams.globalAudioControl')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-6">
@@ -48,7 +50,7 @@ export default function StreamsTab() {
               {/* Global Volume */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <Label className="text-sm text-white">Master Volume</Label>
+                  <Label className="text-sm text-white">{t('streams.masterVolume')}</Label>
                   <span className="text-sm text-zinc-400 font-mono">{globalAudio.volume}%</span>
                 </div>
                 <Slider
@@ -72,7 +74,7 @@ export default function StreamsTab() {
                   data-testid="global-mute-button"
                 >
                   {globalAudio.muted ? <VolumeX className="w-4 h-4 mr-2" /> : <Volume2 className="w-4 h-4 mr-2" />}
-                  {globalAudio.muted ? 'Unmute All' : 'Mute All'}
+                  {globalAudio.muted ? t('streams.unmuteAll') : t('streams.muteAll')}
                 </Button>
                 {globalAudio.muted && (
                   <span className="text-red-500 text-sm font-bold animate-pulse">ALL AUDIO MUTED</span>
@@ -86,7 +88,7 @@ export default function StreamsTab() {
       {/* Stream Control Panel */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>Individual Stream Controls</CardTitle>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('streams.pilotStreams')}</CardTitle>
           <CardDescription className="text-zinc-400">
             Configure audio and video settings for each pilot&apos;s stream. Changes apply live to the overlay.
           </CardDescription>
@@ -94,7 +96,7 @@ export default function StreamsTab() {
         <CardContent>
           {sortedPilots.filter(p => p.streamUrl).length === 0 ? (
             <div className="text-center py-12 text-zinc-500">
-              No pilots with stream URLs. Add stream URLs in the Pilots tab first.
+              {t('streams.noActiveStreams')}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -148,7 +150,7 @@ export default function StreamsTab() {
                             size="icon"
                             onClick={() => setSoloStream(pilot.id)}
                             className={`h-7 w-7 ${config.solo ? 'bg-[#FACC15] text-black hover:bg-[#FACC15]/80' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-                            title="Solo (mute all others)"
+                            title={t('streams.solo')}
                             data-testid={`stream-solo-${pilot.id}`}
                           >
                             <Headphones className="w-4 h-4" />
@@ -159,7 +161,7 @@ export default function StreamsTab() {
                             size="icon"
                             onClick={() => setStreamConfig(pilot.id, { muted: !config.muted })}
                             className={`h-7 w-7 ${config.muted ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-                            title="Mute"
+                            title={t('streams.mute')}
                             data-testid={`stream-mute-${pilot.id}`}
                           >
                             {config.muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -171,7 +173,7 @@ export default function StreamsTab() {
                       <div className="space-y-3">
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <Label className="text-xs text-zinc-400">Volume</Label>
+                            <Label className="text-xs text-zinc-400">{t('streams.volume')}</Label>
                             <span className="text-xs text-zinc-500 font-mono">{config.volume}%</span>
                           </div>
                           <Slider
@@ -187,11 +189,11 @@ export default function StreamsTab() {
                         
                         {/* Video Adjustments */}
                         <div className="pt-2 border-t border-zinc-700">
-                          <Label className="text-xs text-zinc-400 block mb-2">Video Adjustments</Label>
+                          <Label className="text-xs text-zinc-400 block mb-2">Video</Label>
                           
                           {/* Saturation */}
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs text-zinc-500 w-20">Saturation</span>
+                            <span className="text-xs text-zinc-500 w-20">{t('streams.saturation')}</span>
                             <Slider
                               value={[config.saturation]}
                               onValueChange={([val]) => setStreamConfig(pilot.id, { saturation: val })}
@@ -206,7 +208,7 @@ export default function StreamsTab() {
                           
                           {/* Contrast */}
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs text-zinc-500 w-20">Contrast</span>
+                            <span className="text-xs text-zinc-500 w-20">{t('streams.contrast')}</span>
                             <Slider
                               value={[config.contrast]}
                               onValueChange={([val]) => setStreamConfig(pilot.id, { contrast: val })}
@@ -221,7 +223,7 @@ export default function StreamsTab() {
                           
                           {/* Brightness */}
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-zinc-500 w-20">Brightness</span>
+                            <span className="text-xs text-zinc-500 w-20">{t('streams.brightness')}</span>
                             <Slider
                               value={[config.brightness]}
                               onValueChange={([val]) => setStreamConfig(pilot.id, { brightness: val })}
@@ -249,7 +251,7 @@ export default function StreamsTab() {
                           className="w-full text-xs text-zinc-400 hover:text-white mt-2"
                           data-testid={`stream-reset-${pilot.id}`}
                         >
-                          Reset to Defaults
+                          {t('streams.resetDefaults')}
                         </Button>
                       </div>
                     </CardContent>
