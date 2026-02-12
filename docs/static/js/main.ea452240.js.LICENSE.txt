@@ -1,3 +1,5 @@
+/*! js-yaml 4.1.1 https://github.com/nodeca/js-yaml @license MIT */
+
 /**
  * @license React
  * react-dom-client.production.js
@@ -56,7 +58,7 @@
  */
 
 /**
- * react-router v7.11.0
+ * react-router v7.13.0
  *
  * Copyright (c) Remix Software Inc.
  *
