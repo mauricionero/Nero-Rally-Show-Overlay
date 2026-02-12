@@ -10,20 +10,22 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 2. **Overlay Page** - Live view for screen capture in video editing software
 
 ### Setup Page Features
-- **Pilots**: Register pilots with Name, Picture, and VDO.Ninja stream URL
+- **Pilots**: Register pilots with Name, Car Number, Picture, Category, Start Order, and VDO.Ninja stream URL
 - **Categories**: Create categories for pilots with name and associated color
-- **Stages (SS)**: Register rally stages with name, number, type (SS, Liaison, etc.), and start time
-- **Times**: Matrix to register start and finish times for each pilot on each stage
-- **Streams**: Control panel for stream audio/video adjustments (volume, solo, mute, saturation, contrast, brightness)
-- **Configuration**: Selectable background colors for chroma keying (green, blue, black, custom hex)
-- **Google Maps Integration**: Add embed URL to display rally map in Scene 1
-- **Data Management**: Import/export configuration as JSON
+- **The Race** (formerly Stages): Register stages with different types:
+  - **SS (Special Stage)**: Original rally format with individual start/arrival times per pilot
+  - **Lap Race**: Circuit race with single start time, number of laps, and time matrix for laps vs pilots
+  - **Liaison**: Simple start/end time per pilot
+  - **Service Park**: Simple start/end time per pilot
+- **Times**: Dynamic UI that displays all stages at once, rendering different interfaces based on stage type
+- **Streams**: Control panel for stream audio/video adjustments
+- **Configuration**: Chroma key, Google Maps URL, Logo URL, JSON import/export
 
 ### Overlay (Live) Page Features
-- **Real-time Updates**: Heartbeat system to auto-update when data changes in Setup page
-- **Scene Switching**: Top navigation bar with keyboard shortcuts (1-4)
-- **Customizable Layouts**: Resizable left-side panel for scene controls
-- **Four Scenes**: Live Stage, Timing Tower, Leaderboard, Pilot Focus
+- **Scene 1 (Live Stage)**: Display current stage name, multi-stream grid, Google Maps integration
+- **Scene 2 (Timing Tower)**: Sorted pilot list by position based on stage type
+- **Scene 3 (Leaderboard)**: Results display - SS sum or Lap Race individual race results
+- **Scene 4 (Pilot Focus)**: Single pilot view with all stage times
 
 ## Technical Architecture
 
@@ -31,147 +33,128 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - React with Tailwind CSS
 - Shadcn/UI components
 - localStorage for persistence
+- Ably for WebSocket live sync
 
 ### Key Files
-- `/app/frontend/src/contexts/RallyContext.jsx` - State management, localStorage sync, mapUrl state
-- `/app/frontend/src/pages/Setup.jsx` - Configuration UI (refactored to use sub-components)
-- `/app/frontend/src/components/setup/` - Tab sub-components (PilotsTab, CategoriesTab, StagesTab, TimesTab, StreamsTab, ConfigTab)
+- `/app/frontend/src/contexts/RallyContext.jsx` - State management with stage-type architecture
+- `/app/frontend/src/pages/Setup.jsx` - Configuration UI (container for sub-components)
+- `/app/frontend/src/components/setup/` - Tab sub-components
 - `/app/frontend/src/pages/Overlay.jsx` - Live display with heartbeat
-- `/app/frontend/src/components/scenes/` - Scene components
-- `/app/frontend/src/components/StreamPlayer.jsx` - Centralized stream player with config support
+- `/app/frontend/src/components/scenes/` - Scene components (all 4 support stage types)
 
 ### Data Structure (localStorage)
-- `rally_pilots` - Array of pilot objects
+- `rally_event_name` - Event name string
+- `rally_pilots` - Array of pilot objects with carNumber field
 - `rally_categories` - Array of category objects
-- `rally_stages` - Array of stage objects
-- `rally_times` - Object mapping pilotId -> stageId -> time
+- `rally_stages` - Array of stage objects with `type` property (SS, Lap Race, Liaison, Service Park)
+- `rally_times` - Object mapping pilotId -> stageId -> time (for SS/Liaison/Service Park)
 - `rally_start_times` - Object mapping pilotId -> stageId -> start time
-- `rally_stream_configs` - Object mapping pilotId -> stream config (volume, mute, solo, saturation, contrast, brightness)
-- `rally_global_audio` - Object with global audio settings { volume, muted }
-- `rally_map_url` - Google Maps embed URL for Scene 1 display
+- `rally_arrival_times` - Object mapping pilotId -> stageId -> arrival time
+- `rally_lap_times` - Object mapping pilotId -> stageId -> [lap times array] (for Lap Race)
+- `rally_stage_pilots` - Object mapping stageId -> [pilotIds] (for Lap Race pilot selection)
+- `rally_positions` - Object mapping pilotId -> stageId -> position
+- `rally_logo_url` - Channel logo URL for branding
+- `rally_map_url` - Google Maps embed URL
+- `rally_stream_configs` - Stream configuration per pilot
+- `rally_global_audio` - Global audio settings
 - `rally_data_version` - Timestamp for heartbeat sync
 
 ---
 
 ## Implemented Features (December 2025)
 
+### Stage-Type-Driven Architecture (NEW - December 2025)
+- [x] **Per-stage type selection** - Each stage has its own type (SS, Lap Race, Liaison, Service Park)
+- [x] **"The Race" Tab** - Renamed from Stages, dynamic UI based on stage type
+- [x] **Times Tab Rewrite** - Displays all stages at once with unique UIs per type
+- [x] **SS Card Layout** - Start time, arrival time, total time per pilot
+- [x] **Lap Race Matrix** - Laps × pilots matrix with lap durations calculated
+- [x] **Liaison/Service Park** - Simple start/end time cards
+- [x] **Times Tab Clock Button Fix** - Now triggers total time calculation
+
+### Overlay Scenes (All Updated - December 2025)
+- [x] **Scene 1 (Live Stage)** - Supports SS and Lap Race with position display
+- [x] **Scene 2 (Timing Tower)** - Sorting by position for current stage type
+- [x] **Scene 3 (Leaderboard)** - SS overall standings OR Lap Race individual race results
+- [x] **Scene 4 (Pilot Focus)** - Shows all stage times with stage type icons
+
+### Branding Features (December 2025)
+- [x] **Pilot Car Numbers** - New field in pilot data model
+- [x] **Channel Logo** - Logo URL in Config tab, displayed on all overlay scenes
+- [x] **Stage Name Display** - Scene 1 always shows stage name (not event name)
+
 ### Core Application
-- [x] Setup page with tabs: Pilots, Categories, Stages, Times, Streams, Config
-- [x] **Setup.jsx Refactored** - Split into 6 sub-components for maintainability
-- [x] Overlay page with 4 scenes and keyboard shortcuts
+- [x] Setup page with tabs: Pilots, Categories, The Race, Times, Streams, Config
+- [x] Setup.jsx refactored into 6 sub-components
+- [x] Overlay page with 4 scenes and keyboard shortcuts (1-4)
 - [x] Heartbeat sync system between Setup and Overlay pages
-- [x] **WebSocket Live Sync** - Real-time sync using Ably (fully frontend)
+- [x] WebSocket Live Sync using Ably (fully frontend)
 - [x] JSON import/export functionality
 - [x] Chroma key background selection
 
 ### Scene 1 - Live Stage
 - [x] Multi-layout grid (1, 1x2, 2x1, 2x2, 3x2)
-- [x] Pilot selection checkboxes
-- [x] **Google Maps Integration** - Selectable in grid alongside pilot streams
-- [x] Drag-and-drop reordering (pilots and map)
-- [x] Live stream display with StreamPlayer
-- [x] Bottom ticker showing all pilots with status
+- [x] Pilot selection checkboxes with position indicators for Lap Race
+- [x] Google Maps integration as selectable grid item
+- [x] Drag-and-drop reordering
+- [x] Bottom ticker showing pilots sorted by position
+- [x] Stage name display (always stage name, not event name)
 
 ### Scene 2 - Timing Tower
-- [x] Vertical leaderboard with status sections (Racing, Finished, Will Start)
-- [x] Clickable pilots with row offset selection
-- [x] Embedded mini-streams
+- [x] Vertical leaderboard with status sections (Racing, Finished, Not Started)
+- [x] Supports both SS and Lap Race stage types
+- [x] Lap progress display for Lap Race stages
 - [x] Category color bars
 
 ### Scene 3 - Leaderboard
-- [x] Stage selector dropdown (SS stages only)
-- [x] Overall Standings view
-- [x] Overall time calculation sums all SS times up to selected stage
-- [x] Running time displayed in yellow when pilot is racing
-- [x] Stream thumbnails for active pilots
+- [x] Stage selector with sections: "Overall Rally Standings", "Special Stages", "Lap Races"
+- [x] SS: Overall time sums all SS times
+- [x] Lap Race: Shows laps completed and total time
 - [x] Gap calculation from leader
+- [x] Stage type icons in dropdown (Flag for SS, Rotate for Lap Race)
 
 ### Scene 4 - Pilot Focus
-- [x] Single pilot view with large stream
-- [x] All stage times display
-- [x] Stage selector
-- [x] Pilot profile section
+- [x] Single pilot view with stream
+- [x] All stage times with stage type icons
+- [x] Lap Race detail view showing individual lap times
+- [x] Pilot car number badge
 
 ### Streams Tab
-- [x] Grid display of pilot streams (~150px)
-- [x] Volume slider (0-100%)
-- [x] Solo button (mutes all others)
-- [x] Mute button
-- [x] Video adjustments (saturation, contrast, brightness 0-200%)
-- [x] Reset to Defaults button
-- [x] Persistence to localStorage
-- [x] Live sync via heartbeat to Overlay
-- [x] **Global Audio Control** - Master volume slider + Mute All button
-- [x] **Audio Level Meters** - Stereo VU meters with green/yellow/red zones (simulated)
+- [x] Grid display of pilot streams
+- [x] Volume, Solo, Mute controls
+- [x] Video adjustments (saturation, contrast, brightness)
+- [x] Global Audio Control with master volume
+- [x] Audio Level Meters (simulated)
 
-### Config Tab (Refactored)
-- [x] **Google Maps Integration** - URL input for embed maps
-- [x] **WebSocket Live Sync** - Key generation, connection status, shareable URLs
+### Config Tab
+- [x] Google Maps URL input
+- [x] Logo URL input (branding)
+- [x] WebSocket Live Sync configuration
 - [x] Keyboard shortcuts reference
 - [x] Data management (export/import/clear)
-- [x] Current summary statistics
-
-### StreamPlayer Component
-- [x] Centralized stream player
-- [x] Applies CSS filters for video adjustments
-- [x] URL params for volume/mute (VDO.Ninja)
-- [x] Solo mode support
-- [x] Muted indicator overlay
-- [x] Global audio integration (master volume multiplier)
-
-### WebSocket Live Sync
-- [x] **Ably integration** - Fully frontend, no backend required
-- [x] **Key generation** - Format: `1-{randomId}` for easy sharing
-- [x] **Setup page** - Generate key, view key, copy to clipboard, disconnect
-- [x] **Overlay page** - Paste key input, connect button, status indicator
-- [x] **Auto-detection** - Overlay page auto-switches from localStorage polling to WebSocket when connected
 
 ---
 
 ## Pending/Future Tasks
+
+### Backlog - User Requested
+- [ ] **Countdown Timer Feature** - When pilot start time is <1min away, show countdown in seconds; <10sec show with decimals
+- [ ] **Lap Race Start Time Display** - Show stage start time on overlay; new "actual start time" field for elapsed time calculation
+- [ ] **RallyX Point System** - Points calculation for RallyX events
 
 ### P1 - High Priority
 - [ ] Optimize stream loading: Keep streams loaded in background when switching scenes
 - [ ] Add keyboard shortcuts for global audio controls (M to mute, +/- for volume)
 
 ### P2 - Medium Priority
-- [ ] Scene 5 - Comparison view (currently hidden per user request)
-- [ ] Improve text readability (Scene 1): Add black text-shadow to timing overlays
-
-### P3 - Refactoring (Completed)
-- [x] ~~Break down Setup.jsx into sub-components~~ - DONE (February 2025)
+- [ ] Animated position changes for Lap Race stages (smooth transitions when positions change)
+- [ ] Improve text readability in Scene 1 with text shadows
 
 ---
 
 ## Known Issues
-- ESLint warnings in RallyContext.jsx about setState in useEffect (functional but not best practice)
-- VDO.Ninja streams require valid stream keys to display content
 - Audio meters show simulated levels (real audio from cross-origin iframes not accessible)
+- VDO.Ninja streams require valid stream keys to display content
 
-## Test Data Structure
-```javascript
-// Example pilot
-{
-  id: "p1",
-  name: "Carlos Sainz",
-  streamUrl: "https://vdo.ninja/?view=stream123",
-  categoryId: "cat1",
-  startOrder: 1,
-  isActive: true
-}
-
-// Example stream config
-{
-  "p1": {
-    volume: 100,
-    muted: false,
-    solo: false,
-    saturation: 100,
-    contrast: 100,
-    brightness: 100
-  }
-}
-
-// Example map URL
-"https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2885!2d7.42!3d43.73..."
-```
+## Test Reports
+- `/app/test_reports/iteration_5.json` - All stage-type features verified (100% pass rate)
