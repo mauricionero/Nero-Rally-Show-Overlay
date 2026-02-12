@@ -68,6 +68,19 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] **Language selector** - Dropdown in Config tab with flags and native language names
 - [x] **English translation** - Complete translation file (`/public/translations/en.yaml`)
 - [x] **Portuguese (Brazil) translation** - Complete translation file (`/public/translations/pt-BR.yaml`)
+- [x] **Full UI translation** - All components now use `t()` function:
+  - Setup.jsx (header, tabs, chroma key)
+  - PilotsTab.jsx (all labels and messages)
+  - CategoriesTab.jsx (all labels and messages)
+  - TheRaceTab.jsx (all labels, stage types, messages)
+  - TimesTab.jsx (all labels, time fields)
+  - StreamsTab.jsx (all audio controls)
+  - ConfigTab.jsx (all config sections)
+  - Overlay.jsx (scenes, buttons)
+  - Scene1LiveStage.jsx (layout, items)
+  - Scene2TimingTower.jsx (timing labels, status)
+  - Scene3Leaderboard.jsx (columns, gaps)
+  - Scene4PilotFocus.jsx (labels, sections)
 - [x] **Language persistence** - Selected language saved to localStorage
 - [x] **Fallback system** - Falls back to English if translation key not found
 - [x] **Pre-configured languages** - English, Portuguese (BR), Spanish, French, German, Italian
