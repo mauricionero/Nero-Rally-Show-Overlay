@@ -273,7 +273,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 {sortedSSStages.length > 0 && (
                   <>
                     <div className="px-2 py-1 text-xs text-zinc-500 uppercase border-t border-zinc-700 mt-1">
-                      Special Stages
+                      {t('scene3.specialStages')}
                     </div>
                     {sortedSSStages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
@@ -290,13 +290,13 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 {sortedLapRaceStages.length > 0 && (
                   <>
                     <div className="px-2 py-1 text-xs text-zinc-500 uppercase border-t border-zinc-700 mt-1">
-                      Lap Races
+                      {t('scene3.lapRaces')}
                     </div>
                     {sortedLapRaceStages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
                         <div className="flex items-center gap-2">
                           <RotateCcw className="w-4 h-4 text-[#FACC15]" />
-                          {stage.name} ({stage.numberOfLaps} laps)
+                          {stage.name} ({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})
                         </div>
                       </SelectItem>
                     ))}
@@ -327,11 +327,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
               ? (selectedStage.type === 'SS' && selectedStage.ssNumber 
                   ? `SS${selectedStage.ssNumber} - ${selectedStage.name}`
                   : selectedStage.name)
-              : 'Overall Standings'
+              : t('scene3.overallStandings')
             }
           </h1>
           {isLapRaceSelected && selectedStage && (
-            <p className="text-zinc-400 text-xl">{selectedStage.numberOfLaps} Laps</p>
+            <p className="text-zinc-400 text-xl">{selectedStage.numberOfLaps} {t('scene3.laps')}</p>
           )}
         </div>
 
