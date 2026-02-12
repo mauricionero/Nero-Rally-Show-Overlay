@@ -63,6 +63,15 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 
 ## Implemented Features (December 2025)
 
+### Translation/Internationalization System (NEW - December 2025)
+- [x] **Translation infrastructure** - YAML-based translation files for easy editing
+- [x] **Language selector** - Dropdown in Config tab with flags and native language names
+- [x] **English translation** - Complete translation file (`/public/translations/en.yaml`)
+- [x] **Portuguese (Brazil) translation** - Complete translation file (`/public/translations/pt-BR.yaml`)
+- [x] **Language persistence** - Selected language saved to localStorage
+- [x] **Fallback system** - Falls back to English if translation key not found
+- [x] **Pre-configured languages** - English, Portuguese (BR), Spanish, French, German, Italian
+
 ### Stage-Type-Driven Architecture (NEW - December 2025)
 - [x] **Per-stage type selection** - Each stage has its own type (SS, Lap Race, Liaison, Service Park)
 - [x] **"The Race" Tab** - Renamed from Stages, dynamic UI based on stage type
