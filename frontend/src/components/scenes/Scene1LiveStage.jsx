@@ -210,7 +210,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       <LeftControls>
         <div className="space-y-4">
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">Layout</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.layout')}</Label>
             <Select value={selectedLayout} onValueChange={setSelectedLayout}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
@@ -224,7 +224,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
           </div>
 
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">Select Items ({selectedSlotIds.length}/{layout.slots})</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.selectItems')} ({selectedSlotIds.length}/{layout.slots})</Label>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {/* Google Maps Option */}
               {mapUrl && (
