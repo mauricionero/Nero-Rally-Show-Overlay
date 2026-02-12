@@ -10,6 +10,7 @@ import { LanguageSelector } from '../LanguageSelector.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 
 export default function ConfigTab() {
+  const { t } = useTranslation();
   const {
     pilots,
     categories,
