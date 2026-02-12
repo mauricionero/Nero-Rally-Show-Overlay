@@ -150,7 +150,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         timeColor = 'text-[#22C55E]';
         statusColor = 'bg-[#22C55E]';
       } else if (isRacing) {
-        displayTime = `Lap ${completedLaps}/${currentStage?.numberOfLaps || 0}`;
+        displayTime = `${t('times.lap')} ${completedLaps}/${currentStage?.numberOfLaps || 0}`;
         timeColor = 'text-[#FACC15]';
         statusColor = 'bg-[#FACC15]';
       }
@@ -168,7 +168,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         timeColor = 'text-[#FF8C00]';
         statusColor = 'bg-[#FF8C00]';
       } else if (startTime) {
-        displayTime = `Start: ${startTime}`;
+        displayTime = `${t('status.start')}: ${startTime}`;
         timeColor = 'text-zinc-500';
       }
     }
