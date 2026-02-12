@@ -225,7 +225,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     return (
       <div className="flex items-center justify-center h-full" data-testid="scene-4-pilot-focus">
         <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-          No Pilot Selected
+          {t('scene4.noPilotSelected')}
         </p>
       </div>
     );
@@ -236,7 +236,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
       <LeftControls>
         <div className="space-y-4">
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">Select Pilot</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene4.selectPilot')}</Label>
             <Select value={selectedPilotId} onValueChange={setSelectedPilotId}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
@@ -252,7 +252,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           </div>
 
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">Select Stage</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene4.selectStage')}</Label>
             <Select value={selectedStageId} onValueChange={setSelectedStageId}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
