@@ -165,6 +165,9 @@ export default function Overlay() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Language Selector */}
+            <LanguageSelectorCompact />
+
             {/* Hide Streams Checkbox */}
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <Checkbox
