@@ -101,25 +101,19 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const isLapRace = selectedStage?.type === 'Lap Race';
   const isSSStage = selectedStage?.type === 'SS';
 
-  if (!focusPilot) {
-    return (
-      <div className="flex items-center justify-center h-full" data-testid="scene-4-pilot-focus">
-        <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-          No Pilot Selected
-        </p>
-      </div>
-    );
-  }
-
   // Get pilot's stage times with sorted stages
-  const sortedStages = [...stages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedStages = useMemo(() => {
+    return [...stages].sort((a, b) => {
+      if (!a.startTime) return 1;
+      if (!b.startTime) return -1;
+      return a.startTime.localeCompare(b.startTime);
+    });
+  }, [stages]);
 
   // Build pilot stage data based on stage type
   const pilotStageData = useMemo(() => {
+    if (!focusPilot) return [];
+    
     return sortedStages.map((stage) => {
       const isLap = stage.type === 'Lap Race';
       const isSS = stage.type === 'SS';
@@ -220,9 +214,20 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         };
       }
     });
-  }, [sortedStages, focusPilot.id, lapTimes, startTimes, times]);
+  }, [sortedStages, focusPilot, lapTimes, startTimes, times]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
+
+  // Early return after all hooks
+  if (!focusPilot) {
+    return (
+      <div className="flex items-center justify-center h-full" data-testid="scene-4-pilot-focus">
+        <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+          No Pilot Selected
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-4-pilot-focus">
