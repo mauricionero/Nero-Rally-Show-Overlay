@@ -358,7 +358,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                   </p>
                   {isLapRace && selectedPilotData && (
                     <p className="text-[#FACC15] text-lg font-mono">
-                      Lap {selectedPilotData.completedLaps || 0}/{currentStage?.numberOfLaps || 0}
+                      {t('times.lap')} {selectedPilotData.completedLaps || 0}/{currentStage?.numberOfLaps || 0}
                     </p>
                   )}
                 </div>
@@ -367,7 +367,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           </>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <p className="text-white text-xl">Select a pilot with an active stream</p>
+            <p className="text-white text-xl">{t('scene2.selectPilotWithStream')}</p>
           </div>
         )}
       </div>
