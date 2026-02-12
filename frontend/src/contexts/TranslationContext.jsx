@@ -52,7 +52,9 @@ export const TranslationProvider = ({ children }) => {
 
     try {
       const langConfig = getLanguageByCode(langCode);
-      const response = await fetch(`/translations/${langConfig.file}`);
+      // Use PUBLIC_URL for GitHub Pages compatibility
+      const basePath = process.env.PUBLIC_URL || '';
+      const response = await fetch(`${basePath}/translations/${langConfig.file}`);
       
       if (!response.ok) {
         console.warn(`Translation file not found for ${langCode}, falling back to English`);
