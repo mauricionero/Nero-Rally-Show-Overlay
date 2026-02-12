@@ -5,7 +5,9 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image, Globe } from 'lucide-react';
+import { LanguageSelector } from '../LanguageSelector.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 
 export default function ConfigTab() {
   const {
