@@ -237,7 +237,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   />
                   <label htmlFor="slot-map" className="text-white text-sm cursor-pointer flex items-center gap-2">
                     <Map className="w-4 h-4 text-[#FF4500]" />
-                    Google Maps
+                    {t('scene1.googleMaps')}
                   </label>
                 </div>
               )}
@@ -267,12 +267,12 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
           {selectedSlotIds.length > 0 && (
             <div>
-              <Label className="text-white text-xs uppercase mb-2 block">Reorder (Drag & Drop)</Label>
+              <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.reorderDragDrop')}</Label>
               <div className="space-y-1">
                 {selectedSlotIds.map((slotId, index) => {
                   const isMap = slotId === MAP_SLOT_ID;
                   const pilot = !isMap ? pilots.find(p => p.id === slotId) : null;
-                  const label = isMap ? 'Google Maps' : pilot?.name;
+                  const label = isMap ? t('scene1.googleMaps') : pilot?.name;
                   if (!label) return null;
                   
                   return (
