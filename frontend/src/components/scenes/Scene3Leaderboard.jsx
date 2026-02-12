@@ -256,7 +256,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       <LeftControls>
         <div className="space-y-4">
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">Select View</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene3.selectView')}</Label>
             <Select value={selectedStageId || 'overall'} onValueChange={(val) => setSelectedStageId(val === 'overall' ? null : val)}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
@@ -265,7 +265,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 <SelectItem value="overall">
                   <div className="flex items-center gap-2">
                     <Flag className="w-4 h-4 text-[#FF4500]" />
-                    Overall Rally Standings
+                    {t('scene3.overallRallyStandings')}
                   </div>
                 </SelectItem>
                 
