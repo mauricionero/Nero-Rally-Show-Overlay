@@ -144,6 +144,20 @@ export default function ConfigTab() {
         </CardContent>
       </Card>
 
+      {/* Language Selection */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Globe className="w-5 h-5" />
+            {t('config.language')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.selectLanguage')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LanguageSelector showLabel={false} />
+        </CardContent>
+      </Card>
+
       {/* Google Maps URL */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
