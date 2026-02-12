@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -9,14 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
 
-const STAGE_TYPES = [
-  { id: 'SS', name: 'SS (Special Stage)', description: 'Point-to-point timed stage', icon: Flag },
-  { id: 'Lap Race', name: 'Lap Race', description: 'Circuit racing with multiple laps', icon: RotateCcw },
-  { id: 'Liaison', name: 'Liaison', description: 'Transfer section between stages', icon: Car },
-  { id: 'Service Park', name: 'Service Park', description: 'Service/repair period', icon: Timer }
-];
-
 export default function TheRaceTab() {
+  const { t } = useTranslation();
   const {
     eventName,
     setEventName,
@@ -28,13 +23,20 @@ export default function TheRaceTab() {
     deleteStage
   } = useRally();
 
+  const STAGE_TYPES = [
+    { id: 'SS', name: t('theRace.stageTypes.ss'), description: 'Point-to-point timed stage', icon: Flag },
+    { id: 'Lap Race', name: t('theRace.stageTypes.lapRace'), description: 'Circuit racing with multiple laps', icon: RotateCcw },
+    { id: 'Liaison', name: t('theRace.stageTypes.liaison'), description: 'Transfer section between stages', icon: Car },
+    { id: 'Service Park', name: t('theRace.stageTypes.servicePark'), description: 'Service/repair period', icon: Timer }
+  ];
+
   const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', startTime: '', numberOfLaps: 5 });
   const [editingStage, setEditingStage] = useState(null);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
 
   const handleAddStage = () => {
     if (!newStage.name.trim()) {
-      toast.error('Stage name is required');
+      toast.error(t('theRace.stageName') + ' is required');
       return;
     }
     addStage(newStage);
@@ -44,7 +46,7 @@ export default function TheRaceTab() {
 
   const handleUpdateStage = () => {
     if (!editingStage.name.trim()) {
-      toast.error('Stage name is required');
+      toast.error(t('theRace.stageName') + ' is required');
       return;
     }
     updateStage(editingStage.id, editingStage);
@@ -85,14 +87,14 @@ export default function TheRaceTab() {
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             <Trophy className="w-5 h-5 text-[#FF4500]" />
-            Event Name
+            {t('theRace.eventName')}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Input
             value={eventName}
             onChange={(e) => setEventName(e.target.value)}
-            placeholder="e.g., Rally Monte Carlo 2025"
+            placeholder={t('theRace.eventNamePlaceholder')}
             className="bg-[#09090B] border-zinc-700 text-white text-lg"
             data-testid="input-event-name"
           />
@@ -104,13 +106,13 @@ export default function TheRaceTab() {
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             <Plus className="w-5 h-5" />
-            Add New Stage
+            {t('theRace.addNewStage')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Stage Type Selector */}
           <div>
-            <Label className="text-white mb-2 block">Stage Type</Label>
+            <Label className="text-white mb-2 block">{t('theRace.stageType')}</Label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {STAGE_TYPES.map((type) => {
                 const Icon = type.icon;
@@ -139,11 +141,11 @@ export default function TheRaceTab() {
           {/* Stage Details Form */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="md:col-span-2">
-              <Label className="text-white">Stage Name *</Label>
+              <Label className="text-white">{t('theRace.stageName')} *</Label>
               <Input
                 value={newStage.name}
                 onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
-                placeholder={isLapRaceType ? 'Heat 1' : 'Mountain Pass'}
+                placeholder={t('theRace.placeholder.stageName')}
                 className="bg-[#09090B] border-zinc-700 text-white"
                 data-testid="input-stage-name"
               />
@@ -151,11 +153,11 @@ export default function TheRaceTab() {
             
             {isSSType && (
               <div>
-                <Label className="text-white">SS Number</Label>
+                <Label className="text-white">{t('theRace.ssNumber')}</Label>
                 <Input
                   value={newStage.ssNumber}
                   onChange={(e) => setNewStage({ ...newStage, ssNumber: e.target.value })}
-                  placeholder="1"
+                  placeholder={t('theRace.placeholder.ssNumber')}
                   className="bg-[#09090B] border-zinc-700 text-white"
                 />
               </div>
@@ -163,24 +165,24 @@ export default function TheRaceTab() {
             
             {isLapRaceType && (
               <div>
-                <Label className="text-white">Number of Laps</Label>
+                <Label className="text-white">{t('theRace.numberOfLaps')}</Label>
                 <Input
                   type="number"
                   min="1"
                   value={newStage.numberOfLaps}
                   onChange={(e) => setNewStage({ ...newStage, numberOfLaps: parseInt(e.target.value) || 1 })}
-                  placeholder="5"
+                  placeholder={t('theRace.placeholder.laps')}
                   className="bg-[#09090B] border-zinc-700 text-white"
                 />
               </div>
             )}
             
             <div>
-              <Label className="text-white">{isLapRaceType ? 'Race Start Time' : 'Start Time'}</Label>
+              <Label className="text-white">{t('theRace.scheduledStart')}</Label>
               <Input
                 value={newStage.startTime}
                 onChange={(e) => setNewStage({ ...newStage, startTime: e.target.value })}
-                placeholder="09:00"
+                placeholder={t('theRace.placeholder.time')}
                 className="bg-[#09090B] border-zinc-700 text-white"
               />
             </div>
@@ -192,7 +194,7 @@ export default function TheRaceTab() {
                 data-testid="button-add-stage"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Stage
+                {t('theRace.addStage')}
               </Button>
             </div>
           </div>
@@ -203,16 +205,16 @@ export default function TheRaceTab() {
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
           <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            Current Stage (Live)
+            {t('scene1.currentStage')} (Live)
           </CardTitle>
           <CardDescription className="text-zinc-400">
-            Select the stage currently being raced - affects overlay display
+            {t('common.select')} - affects overlay display
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
             <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" data-testid="select-current-stage">
-              <SelectValue placeholder="Select current stage" />
+              <SelectValue placeholder={t('common.select')} />
             </SelectTrigger>
             <SelectContent>
               {sortedStages.map((stage) => {
@@ -223,7 +225,7 @@ export default function TheRaceTab() {
                       <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
                       {stage.type === 'SS' && stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}
                       {stage.name}
-                      {stage.type === 'Lap Race' && ` (${stage.numberOfLaps} laps)`}
+                      {stage.type === 'Lap Race' && ` (${stage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
                     </div>
                   </SelectItem>
                 );
@@ -234,7 +236,7 @@ export default function TheRaceTab() {
             <p className="mt-2 text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
               LIVE: {currentStage.type === 'SS' && currentStage.ssNumber ? `SS${currentStage.ssNumber} - ` : ''}{currentStage.name}
-              {currentStage.type === 'Lap Race' && ` (${currentStage.numberOfLaps} laps)`}
+              {currentStage.type === 'Lap Race' && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
             </p>
           )}
         </CardContent>
@@ -266,9 +268,9 @@ export default function TheRaceTab() {
                       </span>
                     </div>
                     <div className="flex gap-4 mt-1 text-sm text-zinc-400">
-                      {stage.startTime && <span>Start: {stage.startTime}</span>}
+                      {stage.startTime && <span>{t('status.start')}: {stage.startTime}</span>}
                       {stage.type === 'Lap Race' && (
-                        <span className="text-[#FACC15]">{stage.numberOfLaps} laps</span>
+                        <span className="text-[#FACC15]">{stage.numberOfLaps} {t('scene3.laps').toLowerCase()}</span>
                       )}
                     </div>
                   </div>
@@ -290,12 +292,12 @@ export default function TheRaceTab() {
                       </DialogTrigger>
                       <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
                         <DialogHeader>
-                          <DialogTitle className="text-white">Edit Stage</DialogTitle>
+                          <DialogTitle className="text-white">{t('common.edit')} Stage</DialogTitle>
                         </DialogHeader>
                         {editingStage && (
                           <div className="space-y-4">
                             <div>
-                              <Label className="text-white">Stage Type</Label>
+                              <Label className="text-white">{t('theRace.stageType')}</Label>
                               <Select value={editingStage.type} onValueChange={(val) => setEditingStage({ ...editingStage, type: val })}>
                                 <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
                                   <SelectValue />
@@ -308,7 +310,7 @@ export default function TheRaceTab() {
                               </Select>
                             </div>
                             <div>
-                              <Label className="text-white">Stage Name *</Label>
+                              <Label className="text-white">{t('theRace.stageName')} *</Label>
                               <Input
                                 value={editingStage.name}
                                 onChange={(e) => setEditingStage({ ...editingStage, name: e.target.value })}
@@ -317,7 +319,7 @@ export default function TheRaceTab() {
                             </div>
                             {editingStage.type === 'SS' && (
                               <div>
-                                <Label className="text-white">SS Number</Label>
+                                <Label className="text-white">{t('theRace.ssNumber')}</Label>
                                 <Input
                                   value={editingStage.ssNumber || ''}
                                   onChange={(e) => setEditingStage({ ...editingStage, ssNumber: e.target.value })}
@@ -327,7 +329,7 @@ export default function TheRaceTab() {
                             )}
                             {editingStage.type === 'Lap Race' && (
                               <div>
-                                <Label className="text-white">Number of Laps</Label>
+                                <Label className="text-white">{t('theRace.numberOfLaps')}</Label>
                                 <Input
                                   type="number"
                                   min="1"
@@ -338,11 +340,11 @@ export default function TheRaceTab() {
                               </div>
                             )}
                             <div>
-                              <Label className="text-white">{editingStage.type === 'Lap Race' ? 'Race Start Time' : 'Start Time'}</Label>
+                              <Label className="text-white">{t('theRace.scheduledStart')}</Label>
                               <Input
                                 value={editingStage.startTime || ''}
                                 onChange={(e) => setEditingStage({ ...editingStage, startTime: e.target.value })}
-                                placeholder="HH:MM"
+                                placeholder={t('theRace.placeholder.time')}
                                 className="bg-[#09090B] border-zinc-700 text-white"
                               />
                             </div>
@@ -350,7 +352,7 @@ export default function TheRaceTab() {
                         )}
                         <DialogFooter>
                           <Button onClick={handleUpdateStage} className="bg-[#FF4500] hover:bg-[#FF4500]/90">
-                            Update Stage
+                            {t('common.save')}
                           </Button>
                         </DialogFooter>
                       </DialogContent>
@@ -359,7 +361,7 @@ export default function TheRaceTab() {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        if (window.confirm('Delete this stage?')) {
+                        if (window.confirm(t('common.delete') + '?')) {
                           deleteStage(stage.id);
                           toast.success('Stage deleted');
                         }
@@ -379,7 +381,7 @@ export default function TheRaceTab() {
 
       {stages.length === 0 && (
         <div className="text-center py-12 text-zinc-500">
-          No stages registered. Add your first stage above.
+          {t('theRace.noStages')}
         </div>
       )}
     </div>
