@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag } from 'lucide-react';
