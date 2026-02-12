@@ -76,6 +76,7 @@ const formatTimeMs = (ms) => {
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, categories, logoUrl, lapTimes, stagePilots } = useRally();
+  const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [selectedStageType, setSelectedStageType] = useState('all'); // 'all', 'ss', 'lapRace'
   const [currentTime, setCurrentTime] = useState(new Date());
