@@ -71,6 +71,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     pilots, stages, currentStageId, startTimes, times, categories, 
     chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions 
   } = useRally();
+  const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedLayout, setSelectedLayout] = useState('2x2');
