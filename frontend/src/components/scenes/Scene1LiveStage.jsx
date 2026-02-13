@@ -303,8 +303,10 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               <div className="space-y-1">
                 {selectedSlotIds.map((slotId, index) => {
                   const isMap = slotId === MAP_SLOT_ID;
-                  const pilot = !isMap ? pilots.find(p => p.id === slotId) : null;
-                  const label = isMap ? t('scene1.googleMaps') : pilot?.name;
+                  const camera = !isMap ? cameras.find(c => c.id === slotId) : null;
+                  const pilot = !isMap && !camera ? pilots.find(p => p.id === slotId) : null;
+                  const label = isMap ? t('scene1.googleMaps') : (camera?.name || pilot?.name);
+                  const isCamera = !!camera;
                   if (!label) return null;
                   
                   return (
@@ -319,6 +321,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       <div className="flex items-center gap-2">
                         <span className="text-zinc-500 text-xs">{index + 1}.</span>
                         {isMap && <Map className="w-3 h-3 text-[#FF4500]" />}
+                        {isCamera && <Video className="w-3 h-3 text-[#FF4500]" />}
                         <span className="text-white text-sm">{label}</span>
                       </div>
                     </div>
