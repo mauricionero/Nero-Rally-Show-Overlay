@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
-import { ChevronLeft, ChevronRight, Map, Flag, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Map, Flag, RotateCcw, Video } from 'lucide-react';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
