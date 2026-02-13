@@ -112,6 +112,26 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     }
   }, [sortedPilotsData, selectedFeedId]);
 
+  // Build list of available feeds (cameras first, then pilots with streams)
+  // MUST be before any early returns to follow React Hook rules
+  const availableFeeds = useMemo(() => {
+    const feeds = [];
+    activeCameras.forEach(cam => {
+      feeds.push({ id: cam.id, name: cam.name, type: 'camera', streamUrl: cam.streamUrl });
+    });
+    pilots.filter(p => p.streamUrl).forEach(pilot => {
+      const pilotData = sortedPilotsData.find(d => d.pilot.id === pilot.id);
+      feeds.push({ 
+        id: pilot.id, 
+        name: pilot.name, 
+        type: 'pilot', 
+        streamUrl: pilot.streamUrl,
+        position: pilotData?.position 
+      });
+    });
+    return feeds;
+  }, [activeCameras, pilots, sortedPilotsData]);
+
   if (!currentStageId) {
     return (
       <div className="relative w-full h-full flex items-center justify-center" data-testid="scene-2-timing-tower">
