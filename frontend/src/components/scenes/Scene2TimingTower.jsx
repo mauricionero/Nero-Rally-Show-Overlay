@@ -286,25 +286,6 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const selectedPilotData = sortedPilotsData.find(d => d.pilot.id === selectedFeedId);
   const isSelectedCamera = !!selectedCamera;
 
-  // Build list of available feeds (cameras first, then pilots with streams)
-  const availableFeeds = useMemo(() => {
-    const feeds = [];
-    activeCameras.forEach(cam => {
-      feeds.push({ id: cam.id, name: cam.name, type: 'camera', streamUrl: cam.streamUrl });
-    });
-    pilots.filter(p => p.streamUrl).forEach(pilot => {
-      const pilotData = sortedPilotsData.find(d => d.pilot.id === pilot.id);
-      feeds.push({ 
-        id: pilot.id, 
-        name: pilot.name, 
-        type: 'pilot', 
-        streamUrl: pilot.streamUrl,
-        position: pilotData?.position 
-      });
-    });
-    return feeds;
-  }, [activeCameras, pilots, sortedPilotsData]);
-
   return (
     <div className="relative w-full h-full flex" data-testid="scene-2-timing-tower">
       {/* Left Side - Compact Timing Tower */}
