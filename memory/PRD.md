@@ -148,6 +148,11 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] All stage times with stage type icons
 - [x] Lap Race detail view showing individual lap times
 - [x] Pilot car number badge
+- [x] **Camera as Main Feed with Pilot PiP** (NEW - December 2025)
+  - [x] "Main Camera" dropdown selector in left panel
+  - [x] Option to use "None (Use Pilot Stream)" as default
+  - [x] When camera selected: camera is main, pilot stream is Picture-in-Picture
+  - [x] PiP: small, rounded corners, bottom-right, not touching sides (like race sports broadcasts)
 
 ### Streams Tab
 - [x] Grid display of pilot streams
