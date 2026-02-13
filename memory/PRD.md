@@ -121,12 +121,20 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] Drag-and-drop reordering
 - [x] Bottom ticker showing pilots sorted by position
 - [x] Stage name display (always stage name, not event name)
+- [x] **Camera Integration** (NEW - December 2025)
+  - [x] Cameras appear first in "Select Items" list (before Google Maps and pilots)
+  - [x] Cameras display in grid with Video icon overlay and name label
+  - [x] Camera streams can be drag-and-drop reordered
 
 ### Scene 2 - Timing Tower
 - [x] Vertical leaderboard with status sections (Racing, Finished, Not Started)
 - [x] Supports both SS and Lap Race stage types
 - [x] Lap progress display for Lap Race stages
 - [x] Category color bars
+- [x] **Camera Feed Selector** (NEW - December 2025)
+  - [x] Dropdown in header to select main display feed
+  - [x] Shows "Additional Cameras" and "Pilots" sections
+  - [x] Selected camera shows with Video icon label
 
 ### Scene 3 - Leaderboard
 - [x] Stage selector with sections: "Overall Rally Standings", "Special Stages", "Lap Races"
