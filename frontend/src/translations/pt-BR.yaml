@@ -251,6 +251,9 @@ scene2:
   notStarted: "Não Largou"
   noCurrentStage: "Nenhuma etapa atual selecionada"
   selectPilotWithStream: "Selecione um piloto com stream ativo"
+  mainFeed: "Feed Principal"
+  selectFeed: "Selecionar Feed"
+  noPilotsOrCameras: "Nenhum piloto ou câmera disponível"
 
 # ===========================================
 # CENA 3 - CLASSIFICAÇÃO
@@ -276,6 +279,7 @@ scene3:
 scene4:
   selectPilot: "Selecionar Piloto"
   selectStage: "Selecionar Etapa"
+  selectCamera: "Selecionar Câmera"
   noPilotSelected: "Nenhum Piloto Selecionado"
   noStreamAvailable: "Nenhum stream disponível"
   allStageTimes: "Tempos de Todas as Etapas"
@@ -283,6 +287,9 @@ scene4:
   lapTimes: "Tempos de Volta"
   total: "TOTAL"
   live: "AO VIVO"
+  mainCamera: "Câmera Principal"
+  noneUsesPilotStream: "Nenhuma (Usar Stream do Piloto)"
+  cameraAsMain: "Câmera como feed principal"
 
 # ===========================================
 # STATUS / ESTADOS
