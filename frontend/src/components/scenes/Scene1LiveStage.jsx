@@ -234,7 +234,28 @@ export default function Scene1LiveStage({ hideStreams = false }) {
           <div>
             <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.selectItems')} ({selectedSlotIds.length}/{layout.slots})</Label>
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {/* Google Maps Option */}
+              {/* Camera Options - First priority */}
+              {activeCameras.length > 0 && (
+                <div className="pb-2 border-b border-zinc-700 mb-2">
+                  <div className="text-xs text-zinc-500 uppercase mb-2">{t('streams.additionalCameras')}</div>
+                  {activeCameras.map((camera) => (
+                    <div key={camera.id} className="flex items-center space-x-2 mb-1">
+                      <Checkbox
+                        id={`camera-${camera.id}`}
+                        checked={selectedSlotIds.includes(camera.id)}
+                        onCheckedChange={() => toggleSlot(camera.id)}
+                        disabled={!selectedSlotIds.includes(camera.id) && selectedSlotIds.length >= layout.slots}
+                      />
+                      <label htmlFor={`camera-${camera.id}`} className="text-white text-sm cursor-pointer flex items-center gap-2">
+                        <Video className="w-4 h-4 text-[#FF4500]" />
+                        {camera.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Google Maps Option - Second priority */}
               {mapUrl && (
                 <div className="flex items-center space-x-2 pb-2 border-b border-zinc-700 mb-2">
                   <Checkbox
@@ -250,7 +271,10 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 </div>
               )}
               
-              {/* Pilot Options */}
+              {/* Pilot Options - Third priority */}
+              {activePilots.length > 0 && (
+                <div className="text-xs text-zinc-500 uppercase mb-2">{t('tabs.pilots')}</div>
+              )}
               {activePilots.map((pilot) => {
                 const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
                 return (
