@@ -103,6 +103,7 @@ export const RallyProvider = ({ children }) => {
     if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
     if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
     if (data.globalAudio) setGlobalAudio(data.globalAudio);
+    if (data.cameras) setCameras(data.cameras);
     
     // Re-enable publishing after a short delay
     setTimeout(() => {
