@@ -69,7 +69,8 @@ const calculateLapRacePositions = (pilots, stageId, lapTimes, stagePilots, numbe
 export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, times, categories, 
-    chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions 
+    chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions,
+    cameras
   } = useRally();
   const { t } = useTranslation();
   
@@ -84,6 +85,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRace = currentStage?.type === 'Lap Race';
   const isSSStage = currentStage?.type === 'SS';
+  const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
   
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
