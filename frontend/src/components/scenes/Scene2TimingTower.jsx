@@ -2,8 +2,9 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
-import { ChevronRight, Radio, RotateCcw, Flag } from 'lucide-react';
+import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 
 // Helper to calculate positions for Lap Race
 const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
