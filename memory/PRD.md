@@ -178,16 +178,17 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 
 ## Pending/Future Tasks
 
-### Backlog - User Requested
+### P1 - High Priority
+- [ ] **Independent Language Selection** (P2 Issue) - Setup and Overlay pages should have independent language selectors using separate localStorage keys (`setup_language`, `overlay_language`) instead of sharing one key
 - [ ] **Countdown Timer Feature** - When pilot start time is <1min away, show countdown in seconds; <10sec show with decimals
 - [ ] **Lap Race Start Time Display** - Show stage start time on overlay; new "actual start time" field for elapsed time calculation
-- [ ] **RallyX Point System** - Points calculation for RallyX events
 
-### P1 - High Priority
+### P2 - Medium Priority
+- [ ] **RallyX Point System** - Points calculation for RallyX events
 - [ ] Optimize stream loading: Keep streams loaded in background when switching scenes
 - [ ] Add keyboard shortcuts for global audio controls (M to mute, +/- for volume)
 
-### P2 - Medium Priority
+### P3 - Low Priority
 - [ ] Animated position changes for Lap Race stages (smooth transitions when positions change)
 - [ ] Improve text readability in Scene 1 with text shadows
 
