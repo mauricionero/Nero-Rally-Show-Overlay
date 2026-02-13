@@ -369,6 +369,28 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               );
             }
 
+            // Camera Item
+            if (item.type === 'camera') {
+              return (
+                <div key={item.id} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: chromaKey }}>
+                  <StreamPlayer
+                    pilotId={item.id}
+                    streamUrl={item.streamUrl}
+                    name={item.name}
+                    className="w-full h-full"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
+                    <div className="flex items-center gap-2">
+                      <Video className="w-5 h-5 text-[#FF4500]" />
+                      <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
+                        {item.name}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
             // Pilot Stream Item
             const pilot = item;
             const category = categories.find(c => c.id === pilot.categoryId);
