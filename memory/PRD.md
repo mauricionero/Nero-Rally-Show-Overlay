@@ -147,6 +147,11 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] Video adjustments (saturation, contrast, brightness)
 - [x] Global Audio Control with master volume
 - [x] Audio Level Meters (simulated)
+- [x] **Additional Cameras Section** (NEW - December 2025)
+  - [x] Add external camera feeds (drone, helicopter, finish line, etc.)
+  - [x] Camera name and stream URL input form
+  - [x] Camera cards with Active toggle, Edit/Delete buttons
+  - [x] Video preview and audio/video controls per camera
 
 ### Config Tab
 - [x] Google Maps URL input
