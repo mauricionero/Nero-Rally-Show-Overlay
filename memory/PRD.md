@@ -55,8 +55,9 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - `rally_positions` - Object mapping pilotId -> stageId -> position
 - `rally_logo_url` - Channel logo URL for branding
 - `rally_map_url` - Google Maps embed URL
-- `rally_stream_configs` - Stream configuration per pilot
+- `rally_stream_configs` - Stream configuration per pilot/camera
 - `rally_global_audio` - Global audio settings
+- `rally_cameras` - Array of camera objects `[{ id, name, streamUrl, isActive }]` (NEW - December 2025)
 - `rally_data_version` - Timestamp for heartbeat sync
 
 ---
@@ -121,12 +122,20 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] Drag-and-drop reordering
 - [x] Bottom ticker showing pilots sorted by position
 - [x] Stage name display (always stage name, not event name)
+- [x] **Camera Integration** (NEW - December 2025)
+  - [x] Cameras appear first in "Select Items" list (before Google Maps and pilots)
+  - [x] Cameras display in grid with Video icon overlay and name label
+  - [x] Camera streams can be drag-and-drop reordered
 
 ### Scene 2 - Timing Tower
 - [x] Vertical leaderboard with status sections (Racing, Finished, Not Started)
 - [x] Supports both SS and Lap Race stage types
 - [x] Lap progress display for Lap Race stages
 - [x] Category color bars
+- [x] **Camera Feed Selector** (NEW - December 2025)
+  - [x] Dropdown in header to select main display feed
+  - [x] Shows "Additional Cameras" and "Pilots" sections
+  - [x] Selected camera shows with Video icon label
 
 ### Scene 3 - Leaderboard
 - [x] Stage selector with sections: "Overall Rally Standings", "Special Stages", "Lap Races"
@@ -140,6 +149,11 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] All stage times with stage type icons
 - [x] Lap Race detail view showing individual lap times
 - [x] Pilot car number badge
+- [x] **Camera as Main Feed with Pilot PiP** (NEW - December 2025)
+  - [x] "Main Camera" dropdown selector in left panel
+  - [x] Option to use "None (Use Pilot Stream)" as default
+  - [x] When camera selected: camera is main, pilot stream is Picture-in-Picture
+  - [x] PiP: small, rounded corners, bottom-right, not touching sides (like race sports broadcasts)
 
 ### Streams Tab
 - [x] Grid display of pilot streams
@@ -147,6 +161,11 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [x] Video adjustments (saturation, contrast, brightness)
 - [x] Global Audio Control with master volume
 - [x] Audio Level Meters (simulated)
+- [x] **Additional Cameras Section** (NEW - December 2025)
+  - [x] Add external camera feeds (drone, helicopter, finish line, etc.)
+  - [x] Camera name and stream URL input form
+  - [x] Camera cards with Active toggle, Edit/Delete buttons
+  - [x] Video preview and audio/video controls per camera
 
 ### Config Tab
 - [x] Google Maps URL input
@@ -165,10 +184,16 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - [ ] **RallyX Point System** - Points calculation for RallyX events
 
 ### P1 - High Priority
+- [ ] **Independent Language Selection** (P2 Issue) - Setup and Overlay pages should have independent language selectors using separate localStorage keys (`setup_language`, `overlay_language`) instead of sharing one key
+- [ ] **Countdown Timer Feature** - When pilot start time is <1min away, show countdown in seconds; <10sec show with decimals
+- [ ] **Lap Race Start Time Display** - Show stage start time on overlay; new "actual start time" field for elapsed time calculation
+
+### P2 - Medium Priority
+- [ ] **RallyX Point System** - Points calculation for RallyX events
 - [ ] Optimize stream loading: Keep streams loaded in background when switching scenes
 - [ ] Add keyboard shortcuts for global audio controls (M to mute, +/- for volume)
 
-### P2 - Medium Priority
+### P3 - Low Priority
 - [ ] Animated position changes for Lap Race stages (smooth transitions when positions change)
 - [ ] Improve text readability in Scene 1 with text shadows
 
@@ -180,3 +205,4 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 
 ## Test Reports
 - `/app/test_reports/iteration_5.json` - All stage-type features verified (100% pass rate)
+- `/app/test_reports/iteration_6.json` - Additional Cameras feature verified (100% pass rate)

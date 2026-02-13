@@ -40,6 +40,7 @@ export const RallyProvider = ({ children }) => {
   const [logoUrl, setLogoUrl] = useState(() => loadFromStorage('rally_logo_url', ''));
   const [streamConfigs, setStreamConfigs] = useState(() => loadFromStorage('rally_stream_configs', {}));
   const [globalAudio, setGlobalAudio] = useState(() => loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
+  const [cameras, setCameras] = useState(() => loadFromStorage('rally_cameras', []));
   const [currentScene, setCurrentScene] = useState(1);
   const [dataVersion, setDataVersion] = useState(() => {
     const stored = loadFromStorage('rally_data_version', Date.now());
@@ -72,6 +73,7 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl(loadFromStorage('rally_logo_url', ''));
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
+    setCameras(loadFromStorage('rally_cameras', []));
     const newVersion = loadFromStorage('rally_data_version', Date.now());
     setDataVersion(typeof newVersion === 'number' ? newVersion : Date.now());
   }, []);
@@ -101,6 +103,7 @@ export const RallyProvider = ({ children }) => {
     if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
     if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
     if (data.globalAudio) setGlobalAudio(data.globalAudio);
+    if (data.cameras) setCameras(data.cameras);
     
     // Re-enable publishing after a short delay
     setTimeout(() => {
@@ -141,11 +144,12 @@ export const RallyProvider = ({ children }) => {
       logoUrl,
       streamConfigs,
       globalAudio,
+      cameras,
       timestamp: Date.now()
     };
     
     await wsProvider.current.publish(data);
-  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, streamConfigs, globalAudio]);
+  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, streamConfigs, globalAudio, cameras]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey) => {
@@ -293,6 +297,11 @@ export const RallyProvider = ({ children }) => {
     updateDataVersion();
   }, [globalAudio]);
 
+  useEffect(() => {
+    localStorage.setItem('rally_cameras', JSON.stringify(cameras));
+    updateDataVersion();
+  }, [cameras]);
+
   const addPilot = (pilot) => {
     const newPilot = {
       id: Date.now().toString(),
@@ -327,6 +336,36 @@ export const RallyProvider = ({ children }) => {
 
   const togglePilotActive = (id) => {
     setPilots(prev => prev.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
+  };
+
+  // Camera CRUD operations
+  const addCamera = (camera) => {
+    const newCamera = {
+      id: `cam_${Date.now().toString()}`,
+      name: camera.name,
+      streamUrl: camera.streamUrl || '',
+      isActive: true,
+      ...camera
+    };
+    setCameras(prev => [...prev, newCamera]);
+  };
+
+  const updateCamera = (id, updates) => {
+    setCameras(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  const deleteCamera = (id) => {
+    setCameras(prev => prev.filter(c => c.id !== id));
+    // Also remove stream config for this camera
+    setStreamConfigs(prev => {
+      const newConfigs = { ...prev };
+      delete newConfigs[id];
+      return newConfigs;
+    });
+  };
+
+  const toggleCameraActive = (id) => {
+    setCameras(prev => prev.map(c => c.id === id ? { ...c, isActive: !c.isActive } : c));
   };
 
   const addCategory = (category) => {
@@ -629,6 +668,7 @@ export const RallyProvider = ({ children }) => {
       startTimes,
       streamConfigs,
       globalAudio,
+      cameras,
       currentStageId,
       chromaKey,
       mapUrl,
@@ -650,6 +690,7 @@ export const RallyProvider = ({ children }) => {
       if (data.startTimes) setStartTimes(data.startTimes);
       if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
+      if (data.cameras) setCameras(data.cameras);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
@@ -678,6 +719,7 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes({});
     setStartTimes({});
     setStreamConfigs({});
+    setCameras([]);
     setGlobalAudio({ volume: 100, muted: false });
     setCurrentStageId(null);
     setChromaKey('#000000');
@@ -701,6 +743,7 @@ export const RallyProvider = ({ children }) => {
     startTimes,
     streamConfigs,
     globalAudio,
+    cameras,
     currentStageId,
     chromaKey,
     mapUrl,
@@ -725,6 +768,11 @@ export const RallyProvider = ({ children }) => {
     updatePilot,
     deletePilot,
     togglePilotActive,
+    // Camera operations
+    addCamera,
+    updateCamera,
+    deleteCamera,
+    toggleCameraActive,
     addCategory,
     updateCategory,
     deleteCategory,

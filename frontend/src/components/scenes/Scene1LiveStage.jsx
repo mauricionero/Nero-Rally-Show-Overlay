@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
-import { ChevronLeft, ChevronRight, Map, Flag, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Map, Flag, RotateCcw, Video } from 'lucide-react';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -69,7 +69,8 @@ const calculateLapRacePositions = (pilots, stageId, lapTimes, stagePilots, numbe
 export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, times, categories, 
-    chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions 
+    chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions,
+    cameras
   } = useRally();
   const { t } = useTranslation();
   
@@ -84,6 +85,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRace = currentStage?.type === 'Lap Race';
   const isSSStage = currentStage?.type === 'SS';
+  const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
   
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
@@ -172,6 +174,12 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     if (slotId === MAP_SLOT_ID) {
       return { type: 'map', id: MAP_SLOT_ID };
     }
+    // Check if it's a camera
+    const camera = cameras.find(c => c.id === slotId);
+    if (camera) {
+      return { type: 'camera', ...camera };
+    }
+    // Otherwise it's a pilot
     const pilot = pilots.find(p => p.id === slotId);
     return pilot ? { type: 'pilot', ...pilot } : null;
   };
@@ -226,7 +234,28 @@ export default function Scene1LiveStage({ hideStreams = false }) {
           <div>
             <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.selectItems')} ({selectedSlotIds.length}/{layout.slots})</Label>
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {/* Google Maps Option */}
+              {/* Camera Options - First priority */}
+              {activeCameras.length > 0 && (
+                <div className="pb-2 border-b border-zinc-700 mb-2">
+                  <div className="text-xs text-zinc-500 uppercase mb-2">{t('streams.additionalCameras')}</div>
+                  {activeCameras.map((camera) => (
+                    <div key={camera.id} className="flex items-center space-x-2 mb-1">
+                      <Checkbox
+                        id={`camera-${camera.id}`}
+                        checked={selectedSlotIds.includes(camera.id)}
+                        onCheckedChange={() => toggleSlot(camera.id)}
+                        disabled={!selectedSlotIds.includes(camera.id) && selectedSlotIds.length >= layout.slots}
+                      />
+                      <label htmlFor={`camera-${camera.id}`} className="text-white text-sm cursor-pointer flex items-center gap-2">
+                        <Video className="w-4 h-4 text-[#FF4500]" />
+                        {camera.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Google Maps Option - Second priority */}
               {mapUrl && (
                 <div className="flex items-center space-x-2 pb-2 border-b border-zinc-700 mb-2">
                   <Checkbox
@@ -242,7 +271,10 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 </div>
               )}
               
-              {/* Pilot Options */}
+              {/* Pilot Options - Third priority */}
+              {activePilots.length > 0 && (
+                <div className="text-xs text-zinc-500 uppercase mb-2">{t('tabs.pilots')}</div>
+              )}
               {activePilots.map((pilot) => {
                 const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
                 return (
@@ -271,8 +303,10 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               <div className="space-y-1">
                 {selectedSlotIds.map((slotId, index) => {
                   const isMap = slotId === MAP_SLOT_ID;
-                  const pilot = !isMap ? pilots.find(p => p.id === slotId) : null;
-                  const label = isMap ? t('scene1.googleMaps') : pilot?.name;
+                  const camera = !isMap ? cameras.find(c => c.id === slotId) : null;
+                  const pilot = !isMap && !camera ? pilots.find(p => p.id === slotId) : null;
+                  const label = isMap ? t('scene1.googleMaps') : (camera?.name || pilot?.name);
+                  const isCamera = !!camera;
                   if (!label) return null;
                   
                   return (
@@ -287,6 +321,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       <div className="flex items-center gap-2">
                         <span className="text-zinc-500 text-xs">{index + 1}.</span>
                         {isMap && <Map className="w-3 h-3 text-[#FF4500]" />}
+                        {isCamera && <Video className="w-3 h-3 text-[#FF4500]" />}
                         <span className="text-white text-sm">{label}</span>
                       </div>
                     </div>
@@ -327,6 +362,28 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       <Map className="w-5 h-5 text-[#FF4500]" />
                       <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
                         {t('scene1.rallyMap')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Camera Item
+            if (item.type === 'camera') {
+              return (
+                <div key={item.id} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: chromaKey }}>
+                  <StreamPlayer
+                    pilotId={item.id}
+                    streamUrl={item.streamUrl}
+                    name={item.name}
+                    className="w-full h-full"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
+                    <div className="flex items-center gap-2">
+                      <Video className="w-5 h-5 text-[#FF4500]" />
+                      <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
+                        {item.name}
                       </p>
                     </div>
                   </div>

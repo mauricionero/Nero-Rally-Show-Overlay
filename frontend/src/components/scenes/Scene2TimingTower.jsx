@@ -2,8 +2,9 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
-import { ChevronRight, Radio, RotateCcw, Flag } from 'lucide-react';
+import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 
 // Helper to calculate positions for Lap Race
 const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
@@ -64,17 +65,18 @@ const formatTime = (ms) => {
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots 
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras 
   } = useRally();
   const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedPilotId, setSelectedPilotId] = useState(null);
+  const [selectedFeedId, setSelectedFeedId] = useState(null); // Can be pilotId or cameraId
   const [expandedPilotId, setExpandedPilotId] = useState(null);
   
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRace = currentStage?.type === 'Lap Race';
   const isSSStage = currentStage?.type === 'SS';
+  const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
@@ -104,11 +106,31 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times]);
 
   useEffect(() => {
-    if (!selectedPilotId && sortedPilotsData.length > 0) {
+    if (!selectedFeedId && sortedPilotsData.length > 0) {
       const activePilot = sortedPilotsData.find(d => d.pilot.isActive && d.pilot.streamUrl);
-      if (activePilot) setSelectedPilotId(activePilot.pilot.id);
+      if (activePilot) setSelectedFeedId(activePilot.pilot.id);
     }
-  }, [sortedPilotsData, selectedPilotId]);
+  }, [sortedPilotsData, selectedFeedId]);
+
+  // Build list of available feeds (cameras first, then pilots with streams)
+  // MUST be before any early returns to follow React Hook rules
+  const availableFeeds = useMemo(() => {
+    const feeds = [];
+    activeCameras.forEach(cam => {
+      feeds.push({ id: cam.id, name: cam.name, type: 'camera', streamUrl: cam.streamUrl });
+    });
+    pilots.filter(p => p.streamUrl).forEach(pilot => {
+      const pilotData = sortedPilotsData.find(d => d.pilot.id === pilot.id);
+      feeds.push({ 
+        id: pilot.id, 
+        name: pilot.name, 
+        type: 'pilot', 
+        streamUrl: pilot.streamUrl,
+        position: pilotData?.position 
+      });
+    });
+    return feeds;
+  }, [activeCameras, pilots, sortedPilotsData]);
 
   if (!currentStageId) {
     return (
@@ -126,7 +148,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const handleArrowClick = (e, pilotId) => {
     e.stopPropagation();
     if (expandedPilotId === pilotId) setExpandedPilotId(null);
-    setSelectedPilotId(pilotId);
+    setSelectedFeedId(pilotId);
   };
 
   const handleRowClick = (pilotId) => {
@@ -259,8 +281,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     );
   };
 
-  const selectedPilot = pilots.find(p => p.id === selectedPilotId);
-  const selectedPilotData = sortedPilotsData.find(d => d.pilot.id === selectedPilotId);
+  const selectedPilot = pilots.find(p => p.id === selectedFeedId);
+  const selectedCamera = cameras.find(c => c.id === selectedFeedId);
+  const selectedPilotData = sortedPilotsData.find(d => d.pilot.id === selectedFeedId);
+  const isSelectedCamera = !!selectedCamera;
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-2-timing-tower">
@@ -295,6 +319,44 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 {currentStage.name}
                 {isLapRace && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
               </span>
+            </div>
+          )}
+          
+          {/* Feed Selector */}
+          {availableFeeds.length > 0 && (
+            <div className="mt-3 relative z-10">
+              <Select value={selectedFeedId || ''} onValueChange={setSelectedFeedId}>
+                <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-xs h-8">
+                  <SelectValue placeholder={t('scene2.selectFeed')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeCameras.length > 0 && (
+                    <div className="px-2 py-1 text-xs text-zinc-500 uppercase">{t('streams.additionalCameras')}</div>
+                  )}
+                  {activeCameras.map(cam => (
+                    <SelectItem key={cam.id} value={cam.id}>
+                      <div className="flex items-center gap-2">
+                        <Video className="w-3 h-3 text-[#FF4500]" />
+                        {cam.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                  {pilots.filter(p => p.streamUrl).length > 0 && (
+                    <div className="px-2 py-1 text-xs text-zinc-500 uppercase">{t('tabs.pilots')}</div>
+                  )}
+                  {pilots.filter(p => p.streamUrl).map(pilot => {
+                    const pilotData = sortedPilotsData.find(d => d.pilot.id === pilot.id);
+                    return (
+                      <SelectItem key={pilot.id} value={pilot.id}>
+                        <div className="flex items-center gap-2">
+                          {pilotData && <span className="text-[#FF4500] text-xs font-bold">P{pilotData.position}</span>}
+                          {pilot.name}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
           )}
         </div>
@@ -337,7 +399,26 @@ export default function Scene2TimingTower({ hideStreams = false }) {
 
       {/* Right Side - Main Stream */}
       <div className="flex-1 relative" style={{ backgroundColor: chromaKey }}>
-        {selectedPilot && selectedPilot.streamUrl && !hideStreams ? (
+        {/* Camera Feed */}
+        {isSelectedCamera && selectedCamera?.streamUrl && !hideStreams ? (
+          <>
+            <StreamPlayer
+              pilotId={selectedCamera.id}
+              streamUrl={selectedCamera.streamUrl}
+              name={selectedCamera.name}
+              className="w-full h-full"
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
+              <div className="flex items-center gap-4">
+                <Video className="w-8 h-8 text-[#FF4500]" />
+                <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {selectedCamera.name}
+                </p>
+              </div>
+            </div>
+          </>
+        ) : selectedPilot && selectedPilot.streamUrl && !hideStreams ? (
+          /* Pilot Feed */
           <>
             <StreamPlayer
               pilotId={selectedPilot.id}
@@ -367,7 +448,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           </>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <p className="text-white text-xl">{t('scene2.selectPilotWithStream')}</p>
+            <p className="text-white text-xl">{t('scene2.noPilotsOrCameras')}</p>
           </div>
         )}
       </div>

@@ -141,6 +141,10 @@ streams:
   muteAll: "Mute All"
   unmuteAll: "Unmute All"
   pilotStreams: "Pilot Streams"
+  additionalCameras: "Additional Cameras"
+  addCamera: "Add Camera"
+  cameraName: "Camera Name"
+  noCameras: "No additional cameras. Add cameras to use in the overlay."
   volume: "Volume"
   solo: "Solo"
   mute: "Mute"
@@ -149,6 +153,9 @@ streams:
   brightness: "Brightness"
   resetDefaults: "Reset to Defaults"
   noActiveStreams: "No active pilot streams. Activate pilots in the Pilots tab."
+  placeholder:
+    cameraName: "Finish Line Camera"
+    streamUrl: "https://vdo.ninja/..."
 
 # ===========================================
 # CONFIG TAB
@@ -244,6 +251,9 @@ scene2:
   notStarted: "Not Started"
   noCurrentStage: "No current stage selected"
   selectPilotWithStream: "Select a pilot with an active stream"
+  mainFeed: "Main Feed"
+  selectFeed: "Select Feed"
+  noPilotsOrCameras: "No pilots or cameras available"
 
 # ===========================================
 # SCENE 3 - LEADERBOARD
@@ -269,6 +279,7 @@ scene3:
 scene4:
   selectPilot: "Select Pilot"
   selectStage: "Select Stage"
+  selectCamera: "Select Camera"
   noPilotSelected: "No Pilot Selected"
   noStreamAvailable: "No stream available"
   allStageTimes: "All Stage Times"
@@ -276,6 +287,9 @@ scene4:
   lapTimes: "Lap Times"
   total: "TOTAL"
   live: "LIVE"
+  mainCamera: "Main Camera"
+  noneUsesPilotStream: "None (Use Pilot Stream)"
+  cameraAsMain: "Camera as main feed"
 
 # ===========================================
 # STATUS / STATES

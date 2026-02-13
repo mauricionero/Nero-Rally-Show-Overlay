@@ -3,158 +3,170 @@ The user wants to build a WRC (World Rally Championship) style dashboard overlay
 
 **PRODUCT REQUIREMENTS:**
 1.  **Two Main Pages:**  (for configuration) and  (for live display).
-2.  **Setup Page Features:**
-    *   Manage Pilots, Categories, and Stages.
-    *   A time-entry matrix.
-    *   Chroma key background configuration.
-    *   JSON import/export for all data.
-    *   A Streams tab to manage all pilot video streams, including individual volume/video adjustments, solo/mute controls, and a new global master audio control.
-    *   A configuration option for a Google Maps URL.
-3.  **Overlay (Live) Page Features:**
-    *   Real-time data updates from the Setup page, with options for both  polling and a new WebSocket (Ably) connection.
-    *   Scene switching via a top navigation bar.
-    *   A Hide Streams option to replace video feeds with the chroma key background or pilot avatars.
-    *   A shareable URL that includes the WebSocket key for auto-connection on the live page.
-    *   The Made with Emergent badge must be hidden.
-4.  **Scene-Specific Requirements:**
-    *   **Scene 1 (Live Stage):** A grid layout for selected pilot streams or a new Google Maps view.
-    *   **Scene 2 (Timing Tower):** Redesigned with a sports broadcast aesthetic, showing a compact timing list and a larger, focused view for a selected pilot. Interactions include expanding rows to show a larger, unmuted stream.
-    *   **Scene 3 (Leaderboard):** An overall standings table.
-    *   **Scene 4 (Pilot Focus):** A view dedicated to a single pilot.
+2.  **Stage-Type Architecture:** The system must support different types of stages (SS, Lap Race, Liaison, etc.), with the UI and logic adapting dynamically.
+3.  **Setup Page Features:**
+    *   Manage Event Name, Stages, Pilots (including Car Number), and Categories.
+    *   A dynamic Times tab that shows different time-entry UIs based on stage type.
+    *   A Config tab for JSON import/export, chroma key, Google Maps URL, and a channel logo URL.
+    *   A Streams tab to manage pilot stream settings.
+4.  **Overlay Page Features:**
+    *   Display a branding logo on all scenes.
+    *   Animate pilot position changes.
+    *   Scene 1 (Live Stage): Show current stage activity.
+    *   Scene 2 (Timing Tower): Show live rankings for the current stage.
+    *   Scene 3 (Leaderboard): Show overall and per-stage results.
+    *   Scene 4 (Pilot Focus): Focus on a single pilot's stream and data.
+5.  **Internationalization (i18n):** The entire application must be translatable. The user should be able to easily add new languages by editing simple text files (YAML). The Setup and Overlay pages should have independent language selectors.
+6.  **Additional Cameras:**
+    *   The user must be able to add and manage generic camera streams (e.g., drone shots, external cameras) in the Streams tab.
+    *   These cameras should be selectable items in the overlay scenes, often with higher priority than pilot cameras.
+    *   Scene 1: Cameras appear in the selection list before Google Maps and pilots.
+    *   Scene 2: A camera can be shown in the main display area.
+    *   Scene 4: A camera can be the main feed, with the focused pilot's stream appearing as a Picture-in-Picture (PiP) overlay.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A complete, client-side React application using  for data persistence. The app has a comprehensive  page (Pilots, Categories, Stages, Times) and a new  tab with individual and global audio/video controls. The  page features real-time data sync via  polling or a newly implemented Ably WebSocket connection, complete with a key generation and sharing system. The build process is configured to output to a  directory for easy deployment to GitHub Pages, and routing is handled dynamically to work in both development and production environments. Most user-requested visual and functional enhancements have been implemented, including a complete redesign of Scene 2.
+The project is a complex, frontend-only React application. The stage-type driven architecture is fully implemented and tested. A complete internationalization (i18n) system has been built using  and React Context, and the entire UI has been updated to use translation keys. Independent language selectors exist on both the Setup and Overlay pages.
+
+The agent has just begun implementing the Additional Cameras feature. The data model () has been updated to include a  array with corresponding CRUD functions, the translation files have been updated with new keys, and the  UI has been modified to allow managing these new cameras. Work has started on  to integrate cameras into the display logic.
 
 **Last working item**:
--   **Last item agent was working:** The user requested the ability to add a Google Maps URL on the config tab and display it as an option in the Scene 1 grid.
--   **Status:** NOT STARTED
+-   **Last item agent was working:** The agent was implementing the Additional Cameras feature. It was in the middle of updating  to integrate the new cameras into the item selection list and the main display grid.
+-   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
 -   **Which testing method agent to use?** frontend testing agent
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-There are no pending bugs or issues. The current focus is on implementing the new Google Maps feature.
+-   **Issue 1: Shared Language State (P2)**
+    -   **Description:** The independent language selectors on the Setup and Overlay pages both write to the same  key (). This causes them to sync, which may be unintended. When a user changes the language on the Setup page, it also changes on the Overlay page, and vice-versa.
+    -   **Next debug checklist:**
+        1.  In , modify the  hook that saves the language to .
+        2.  Introduce a parameter or a separate context provider instance to differentiate between the 'setup' and 'overlay' contexts.
+        3.  Use two different  keys, e.g.,  and .
+    -   **Why fix this issue and what will be achieved with the fix?** To provide true independence for the language selection on the two main pages, as requested by the user.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Frontend
 
 **In progress Task List**:
--   **Task 1 (P0): Implement Google Maps Integration**
+-   **Task 1 (P0): Complete Additional Cameras Feature Implementation**
     -   **Where to resume:**
-        1.  Modify  to add state for . Include it in the , , and  functions.
-        2.  Update  to add a new input field in the Config tab for the Google Maps URL.
-        3.  Modify  to add Google Maps as a selectable option in the pilot/stream grid. When selected, render the map URL in an iframe.
-    -   **What will be achieved with this?** Users will be able to display a live rally map from Google Maps within the Scene 1 grid, alongside or instead of pilot video streams.
-    -   **Status:** NOT STARTED
+        1.  Complete the modifications in . The data source has been updated, but the rendering, selection, and drag-and-drop logic for cameras needs to be finalized and verified.
+        2.  Update  to allow selecting a camera feed to be displayed in the main view area.
+        3.  Update  to allow selecting a camera as the main feed, which should trigger the focused pilot's stream to be displayed in a Picture-in-Picture (PiP) overlay.
+        4.  Perform thorough testing of the new camera functionality across all relevant scenes.
+    -   **What will be achieved with this?** The user will be able to add external camera feeds and display them in various ways on the live overlay, significantly enhancing production capabilities.
+    -   **Status:** IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** Frontend
 
 **Upcoming and Future Tasks**
+-   **Upcoming Tasks:**
+    -   **P1: Implement Countdown Timer:** In timing displays, show a countdown in seconds when < 1 minute to start, and with decimals when < 10 seconds.
+    -   **P2: Lap Race Start Time Logic:** Add a separate actual start time field for Lap Races to accurately calculate elapsed time.
 -   **Future Tasks:**
-    -   **P1: Optimize Stream Loading:** Implement a method to keep video stream elements loaded in the background when switching between scenes to prevent the lag/delay of re-initializing the stream.
-    -   **P2: Add Keyboard Shortcuts:** Implement keyboard shortcuts for global audio controls (e.g., 'M' to toggle global mute, +/- to adjust master volume).
-    -   **P3: Refactor Setup.jsx:** The  component is now very large and complex. It should be broken down into sub-components for each tab (Pilots, Stages, Times, Streams, Config) to improve maintainability.
+    -   **P3: Implement RallyX Point System.**
+    -   **P4: Optimize Stream Loading:** Keep video stream elements loaded in the background to prevent re-initialization lag when switching scenes.
+    -   **P5: Add Keyboard Shortcuts:** For global audio controls.
 
 **Completed work in this session**
--   **Scene 3 Leaderboard Fix:** Corrected the overall time calculation to properly include running times for active stages.
--   **Stream Setup Tab:** Implemented a new Streams tab on the Setup page with controls for individual stream volume, solo/mute, and video adjustments (saturation, contrast, brightness).
--   **Global Audio Controls:** Added a master audio slider and Mute All button to the Streams tab.
--   **Visual Audio Meters:** Added simulated VU meters for both master and individual streams.
--   **WebSocket Live Sync:** Integrated Ably for real-time, frontend-only data synchronization as an alternative to  polling. This included:
-    -   UI for generating, copying, and connecting with a shareable key.
-    -   Auto-connection on the Overlay page via a URL parameter ().
--   **GitHub Pages Deployment:**
-    -   Configured the build process (, ) to output to a  folder.
-    -   Made routing dynamic ( in ) to support both local development and deployment in a subdirectory on GitHub Pages.
-    -   Added a  redirect script to handle client-side routing refreshes.
--   **Hide Streams Feature:** Added a checkbox on the Overlay page to replace all video streams with the chroma key background or pilot avatars, saving resources and offering more overlay flexibility.
--   **Scene 2 Redesign:** Completely overhauled Scene 2 (Timing Tower) with a sports broadcast aesthetic, including a compact live timing list, a wider main stream display, and new interactions for expanding pilot rows.
--   **UX/UI Refinements:**
-    -   Fixed the heartbeat indicator display to have a fixed width.
-    -   Ensured small streams on Scene 2 are muted by default and do not show a mute icon.
-    -   Hid the Made with Emergent badge on the  page.
+-   **Stage-Type Architecture Completion:**
+    -   Updated  and  to support Lap Race and SS types.
+    -   Fixed  bug where the clock button didn't trigger total time recalculation.
+    -   Fixed a React Hook rule violation in .
+    -   Passed comprehensive tests via the testing agent for the refactor.
+-   **Full Internationalization (i18n) System:**
+    -   Integrated  and created a  to manage languages.
+    -   Created  and  translation files.
+    -   Replaced hardcoded strings with  calls across the entire application (Setup and Overlay pages).
+    -   Added a  component to the Setup page's Config tab.
+    -   Added an independent, compact language selector to the Overlay page's top bar.
+-   **Deployment Fix:**
+    -   Fixed an issue where translation files failed to load on GitHub Pages by correctly using  in the fetch path.
 
 **Earlier issues found/mentioned but not fixed**
 None.
 
 **Known issue recurrence from previous fork**
--   **Issue recurrence in previous fork:** .
--   **Recurrence count:** 2
--   **Status:** RESOLVED. The issue did not recur in this session, but the next agent should remain cautious about dependency order in  hooks.
+None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
 -   **Frontend:** React, Tailwind CSS, Shadcn/UI
--   **State Management:** React Context API () persisting to .
--   **Data Synchronization:**
-    -   **Primary:** WebSocket (Ably) for real-time pub/sub updates.
-    -   **Fallback:**  polling (heartbeat system).
--   **Deployment:** Build process configured via  and  scripts to generate a static site in the  folder for GitHub Pages.
--   **Routing:** React Router with a dynamic  to support both root-level development and subdirectory-based production deployment.
+-   **State Management:** React Context API (, ) persisting to .
+-   **Internationalization (i18n):** Runtime language switching by fetching and parsing YAML files ().
+-   **Architecture:** Stage-type driven logic; Component-based UI.
+-   **Data Sync:** WebSocket (Ably) and  polling fallback.
 
 **key DB schema**
-Not applicable. The application uses . The main data object in  now includes , , , and  in addition to , , , and 0m0.000s 0m0.000s
-0m0.000s 0m0.000s.
+The application uses . The key data structures now include:
+-   : 
+-   :  (e.g., 'en', 'pt-BR') - **Note: This key is currently shared by two independent UIs.**
+-   (Other keys like , , 0m0.000s 0m0.000s
+0m0.000s 0m0.000s, , , etc. remain as before).
 
 **changes in tech stack**
--   **Added:**  and  for WebSocket functionality (though Pusher was abandoned, the dependency may remain).
--   **Build:**  is used to customize the Create React App build process.
+-   Added  dependency for parsing translation files.
 
 **All files of reference**
--   : The core of the application logic. Handles all state, , and WebSocket connections.
--   : Contains the UI for all configuration, including the new Streams and WebSocket controls.
--   : Manages scene display, the Hide Streams toggle, and the WebSocket connection UI for the live page.
--   : The most heavily modified scene, completely redesigned for a sports broadcast feel.
--   : New reusable component for rendering video streams with all new configuration options (volume, mute, video filters, etc.).
--   : Abstraction layer for the Ably WebSocket connection.
--   : Contains the  script for GitHub Pages deployment.
--   : Configures the React Router  for dynamic pathing.
+-   **Currently being modified:**
+    -   
+    -   
+    -   
+-   **Next to be modified:**
+    -   
+    -   
+-   **New core files:**
+    -   
+    -   
+    -   
 
 **Areas that need refactoring**:
--   The  component is now over 1400 lines and urgently needs to be refactored into smaller sub-components for each configuration tab to improve maintainability.
--   Time calculation logic could still be centralized in  to avoid duplication across scenes.
+-   The language persistence logic in  should be reviewed to address the Shared Language State issue mentioned in the pending issues list. Using separate  keys for the Setup and Overlay pages would be a clean solution.
 
 **key api endpoints**
-Not applicable. The application is 100% frontend. An initial attempt to create a backend for Pusher was reverted after user clarification.
+Not applicable. The application is 100% frontend.
 
 **Critical Info for New Agent**
--   **Frontend-Only:** Do not attempt to add or use a backend. The user is firm on this requirement. The WebSocket implementation via Ably was chosen specifically because it supports a frontend-only publishing model.
--   **Dual Environment:** The app is designed to run in two modes: local development (at root ) and GitHub Pages (at a subdirectory like ). This is handled by the  environment variable, which is set only during the  script. Use  from  for all internal navigation to respect the .
--   **WebSocket Integration:** The Ably integration requires an API key in  (). The core logic is in  and .
--   **State Persistence:** Test data can be cleared between browser sessions during development/testing. Be prepared to re-populate data on the Setup page to test the Overlay page features.
+-   You are resuming work in the middle of the **Additional Cameras** feature implementation. The data model and setup UI are done. Your first task is to complete the integration of cameras into , then proceed to implement camera functionality in  and  as per the user's requirements.
+-   The internationalization (i18n) system is complete. Any new UI text you add **must** use the  function from the  hook. Remember to add new translation keys to both  and .
+-   Be aware of the pending issue regarding the shared  key for language selection. While not a blocker for the current task, it's a known issue that should be addressed soon.
 
 **documents and test reports created in this job**
 -   
--    (created and updated multiple times)
+-    (updated)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User:** Requests Scene 2 redesign: hide expanded stream when not in use, make main stream wider, and add cool sports-like visuals. (Completed)
-2.  **User:** Reports small streams in Scene 2 still have volume and a mute button. Asks for them to be truly muted and for the avatar to remain visible when the row is expanded. (Completed)
-3.  **User:** Requests new feature: add a Google Maps URL field in Config and an option to display it in the Scene 1 grid. (Pending - this is the current task)
-4.  **Agent:** Clarifies implementation plan for Google Maps feature. (Last agent action)
-5.  **User:** Asks for  to be run. (Completed)
-6.  **User:** States that  has been run and pushed, but the GitHub Pages URL still shows a blank page. (Completed)
-7.  **Agent:** Identifies the routing issue and implements a fix using . (Completed)
-8.  **User:** Confirms the GitHub pages fix worked and provides the next set of visual/usability requirements for the Hide Streams feature. (Completed)
-9.  **Agent:** Implements the Hide Streams feature. (Completed)
-10. **User:** Requests a fix for the resizing heartbeat indicator and a redesign of Scene 2 interactions (mute streams by default, click to expand). (Completed)
+1.  **User:** Requests translation for the entire application. (COMPLETED)
+2.  **Agent:** Acknowledges and begins translating the Setup page. (COMPLETED)
+3.  **Agent:** Continues translating Setup page tabs. (COMPLETED)
+4.  **Agent:** Begins translating the Overlay page components. (COMPLETED)
+5.  **User:** you can continue. (COMPLETED)
+6.  **Agent:** Continues translating Scene 3 and Scene 4. (COMPLETED)
+7.  **Agent:** Continues translating Scene 1 and Scene 2. (COMPLETED)
+8.  **Agent:** Summarizes the completion of the full translation system. (COMPLETED)
+9.  **User:** Reports two new issues: 1) Overlay page needs its own language selector, and 2) Translations are broken on GitHub pages deployment. (COMPLETED)
+10. **User:** Requests a major new feature: Additional Cameras, providing detailed requirements for their management and display in Scenes 1, 2, and 4. (IN PROGRESS)
 
 **Project Health Check:**
--   **Broken:** None.
--   **Mocked:** The audio meters are simulated, as real audio data from cross-origin iframes is not accessible. This is documented in the UI.
+-   **Broken:** The Additional Cameras feature is incomplete. The application will run, but the functionality is not fully implemented in the overlay scenes.
+-   **Mocked:** Audio meters are still using simulated data.
 
 **3rd Party Integrations**
--   **Ably:** Used for WebSocket-based live data synchronization. Requires a  in .
+-   **Ably:** For WebSocket-based live data synchronization.
+-   **js-yaml:** Used to parse YAML translation files at runtime.
 
 **Testing status**
--   **Testing agent used after significant changes:** YES
+-   **Testing agent used after significant changes:** YES, after the major stage-type architecture refactor.
 -   **Troubleshoot agent used after agent stuck in loop:** NO
--   **Test files created:** None.
--   **Known regressions:** None in this session.
+-   **Test files created:** None
+-   **Known regressions:** None from previous work, but the new Cameras feature is not yet functional on the overlay.
 
 **Credentials to test flow:**
-The application requires an Ably API key to be set in  for the WebSocket functionality to work.
-
+An Ably API key is pre-configured in . No other credentials are required.
 
 **What agent forgot to execute**
--   The agent initially misunderstood the frontend-only constraint and started building a backend server to support Pusher. This was corrected immediately upon user feedback, and the implementation was switched to Ably, which supports client-side publishing. This highlights the importance of adhering strictly to the frontend-only architecture.</analysis>
+The agent is in the middle of a large feature request and has not forgotten any steps, but the implementation is not yet complete. The agent correctly identified a potential issue with the shared  key for language selection but has not yet addressed it, as it is a lower priority than the active feature request.</analysis>
