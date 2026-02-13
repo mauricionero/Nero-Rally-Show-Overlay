@@ -297,6 +297,11 @@ export const RallyProvider = ({ children }) => {
     updateDataVersion();
   }, [globalAudio]);
 
+  useEffect(() => {
+    localStorage.setItem('rally_cameras', JSON.stringify(cameras));
+    updateDataVersion();
+  }, [cameras]);
+
   const addPilot = (pilot) => {
     const newPilot = {
       id: Date.now().toString(),
