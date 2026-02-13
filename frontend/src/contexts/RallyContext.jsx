@@ -73,6 +73,7 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl(loadFromStorage('rally_logo_url', ''));
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
+    setCameras(loadFromStorage('rally_cameras', []));
     const newVersion = loadFromStorage('rally_data_version', Date.now());
     setDataVersion(typeof newVersion === 'number' ? newVersion : Date.now());
   }, []);
