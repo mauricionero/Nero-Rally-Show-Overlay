@@ -141,6 +141,10 @@ streams:
   muteAll: "Mute All"
   unmuteAll: "Unmute All"
   pilotStreams: "Pilot Streams"
+  additionalCameras: "Additional Cameras"
+  addCamera: "Add Camera"
+  cameraName: "Camera Name"
+  noCameras: "No additional cameras. Add cameras to use in the overlay."
   volume: "Volume"
   solo: "Solo"
   mute: "Mute"
@@ -149,6 +153,9 @@ streams:
   brightness: "Brightness"
   resetDefaults: "Reset to Defaults"
   noActiveStreams: "No active pilot streams. Activate pilots in the Pilots tab."
+  placeholder:
+    cameraName: "Finish Line Camera"
+    streamUrl: "https://vdo.ninja/..."
 
 # ===========================================
 # CONFIG TAB
