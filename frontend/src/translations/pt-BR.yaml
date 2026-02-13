@@ -141,6 +141,10 @@ streams:
   muteAll: "Mutar Todos"
   unmuteAll: "Desmutar Todos"
   pilotStreams: "Streams dos Pilotos"
+  additionalCameras: "Câmeras Adicionais"
+  addCamera: "Adicionar Câmera"
+  cameraName: "Nome da Câmera"
+  noCameras: "Nenhuma câmera adicional. Adicione câmeras para usar no overlay."
   volume: "Volume"
   solo: "Solo"
   mute: "Mudo"
@@ -149,6 +153,9 @@ streams:
   brightness: "Brilho"
   resetDefaults: "Restaurar Padrões"
   noActiveStreams: "Nenhum stream de piloto ativo. Ative pilotos na aba Pilotos."
+  placeholder:
+    cameraName: "Câmera de Chegada"
+    streamUrl: "https://vdo.ninja/..."
 
 # ===========================================
 # ABA CONFIG
