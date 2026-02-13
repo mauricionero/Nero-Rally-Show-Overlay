@@ -65,17 +65,18 @@ const formatTime = (ms) => {
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots 
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras 
   } = useRally();
   const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedPilotId, setSelectedPilotId] = useState(null);
+  const [selectedFeedId, setSelectedFeedId] = useState(null); // Can be pilotId or cameraId
   const [expandedPilotId, setExpandedPilotId] = useState(null);
   
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRace = currentStage?.type === 'Lap Race';
   const isSSStage = currentStage?.type === 'SS';
+  const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
