@@ -106,11 +106,11 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times]);
 
   useEffect(() => {
-    if (!selectedPilotId && sortedPilotsData.length > 0) {
+    if (!selectedFeedId && sortedPilotsData.length > 0) {
       const activePilot = sortedPilotsData.find(d => d.pilot.isActive && d.pilot.streamUrl);
-      if (activePilot) setSelectedPilotId(activePilot.pilot.id);
+      if (activePilot) setSelectedFeedId(activePilot.pilot.id);
     }
-  }, [sortedPilotsData, selectedPilotId]);
+  }, [sortedPilotsData, selectedFeedId]);
 
   if (!currentStageId) {
     return (
