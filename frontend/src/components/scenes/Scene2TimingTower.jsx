@@ -128,7 +128,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const handleArrowClick = (e, pilotId) => {
     e.stopPropagation();
     if (expandedPilotId === pilotId) setExpandedPilotId(null);
-    setSelectedPilotId(pilotId);
+    setSelectedFeedId(pilotId);
   };
 
   const handleRowClick = (pilotId) => {
