@@ -6,7 +6,7 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
-import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
+import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
 
 // Helper to get stage type icon
 const getStageIcon = (type) => {
