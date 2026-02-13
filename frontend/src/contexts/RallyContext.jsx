@@ -668,6 +668,7 @@ export const RallyProvider = ({ children }) => {
       startTimes,
       streamConfigs,
       globalAudio,
+      cameras,
       currentStageId,
       chromaKey,
       mapUrl,
