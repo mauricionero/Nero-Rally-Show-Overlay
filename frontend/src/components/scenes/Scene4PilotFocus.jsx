@@ -276,12 +276,98 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Camera Selection */}
+          {activeCameras.length > 0 && (
+            <div>
+              <Label className="text-white text-xs uppercase mb-2 block">{t('scene4.mainCamera')}</Label>
+              <Select value={selectedCameraId || 'none'} onValueChange={(val) => setSelectedCameraId(val === 'none' ? null : val)}>
+                <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <span className="text-zinc-400">{t('scene4.noneUsesPilotStream')}</span>
+                  </SelectItem>
+                  {activeCameras.map((camera) => (
+                    <SelectItem key={camera.id} value={camera.id}>
+                      <div className="flex items-center gap-2">
+                        <Video className="w-4 h-4 text-[#FF4500]" />
+                        {camera.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </LeftControls>
 
       {/* Stream Display */}
       <div className="flex-1 p-8">
-        {focusPilot.streamUrl && !hideStreams ? (
+        {selectedCameraId && activeCameras.find(c => c.id === selectedCameraId) ? (
+          /* Camera as main feed with pilot PiP */
+          <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
+            {!hideStreams && (
+              <StreamPlayer
+                pilotId={selectedCameraId}
+                streamUrl={activeCameras.find(c => c.id === selectedCameraId)?.streamUrl}
+                name={activeCameras.find(c => c.id === selectedCameraId)?.name}
+                className="w-full h-full"
+              />
+            )}
+            
+            {/* Camera Label */}
+            <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
+              <Video className="w-4 h-4 text-[#FF4500]" />
+              <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {activeCameras.find(c => c.id === selectedCameraId)?.name}
+              </span>
+            </div>
+            
+            {/* Stage Info */}
+            {selectedStageData && (
+              <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                <div className="flex items-center gap-2 mb-1">
+                  {React.createElement(getStageIcon(selectedStage?.type), { 
+                    className: 'w-4 h-4',
+                    style: { color: getStageTypeColor(selectedStage?.type) }
+                  })}
+                  <p className="text-zinc-400 text-xs uppercase">
+                    {selectedStage?.type === 'SS' && selectedStage?.ssNumber ? `SS${selectedStage.ssNumber}` : selectedStage?.name}
+                  </p>
+                </div>
+                <p className={`text-2xl font-mono font-bold ${
+                  selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                  selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                  'text-zinc-500'
+                }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  {selectedStageData.time}
+                </p>
+              </div>
+            )}
+            
+            {/* Pilot PiP - Bottom right, rounded, not touching sides */}
+            {focusPilot.streamUrl && !hideStreams && (
+              <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
+                <StreamPlayer
+                  pilotId={focusPilot.id}
+                  streamUrl={focusPilot.streamUrl}
+                  name={focusPilot.name}
+                  className="w-full h-full"
+                />
+                {/* Pilot name overlay on PiP */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+                  <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {focusPilot.name}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : focusPilot.streamUrl && !hideStreams ? (
+          /* Pilot stream as main (original behavior) */
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
             <StreamPlayer
               pilotId={focusPilot.id}
@@ -310,7 +396,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               </div>
             )}
           </div>
-        ) : hideStreams && focusPilot.streamUrl ? (
+        ) : hideStreams && (focusPilot.streamUrl || selectedCameraId) ? (
           <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
             {selectedStageData && (
               <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
