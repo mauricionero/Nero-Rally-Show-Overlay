@@ -174,6 +174,12 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     if (slotId === MAP_SLOT_ID) {
       return { type: 'map', id: MAP_SLOT_ID };
     }
+    // Check if it's a camera
+    const camera = cameras.find(c => c.id === slotId);
+    if (camera) {
+      return { type: 'camera', ...camera };
+    }
+    // Otherwise it's a pilot
     const pilot = pilots.find(p => p.id === slotId);
     return pilot ? { type: 'pilot', ...pilot } : null;
   };
