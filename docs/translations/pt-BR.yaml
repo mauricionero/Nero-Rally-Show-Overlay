@@ -141,6 +141,10 @@ streams:
   muteAll: "Mutar Todos"
   unmuteAll: "Desmutar Todos"
   pilotStreams: "Streams dos Pilotos"
+  additionalCameras: "Câmeras Adicionais"
+  addCamera: "Adicionar Câmera"
+  cameraName: "Nome da Câmera"
+  noCameras: "Nenhuma câmera adicional. Adicione câmeras para usar no overlay."
   volume: "Volume"
   solo: "Solo"
   mute: "Mudo"
@@ -149,6 +153,9 @@ streams:
   brightness: "Brilho"
   resetDefaults: "Restaurar Padrões"
   noActiveStreams: "Nenhum stream de piloto ativo. Ative pilotos na aba Pilotos."
+  placeholder:
+    cameraName: "Câmera de Chegada"
+    streamUrl: "https://vdo.ninja/..."
 
 # ===========================================
 # ABA CONFIG
@@ -244,6 +251,9 @@ scene2:
   notStarted: "Não Largou"
   noCurrentStage: "Nenhuma etapa atual selecionada"
   selectPilotWithStream: "Selecione um piloto com stream ativo"
+  mainFeed: "Feed Principal"
+  selectFeed: "Selecionar Feed"
+  noPilotsOrCameras: "Nenhum piloto ou câmera disponível"
 
 # ===========================================
 # CENA 3 - CLASSIFICAÇÃO
@@ -269,6 +279,7 @@ scene3:
 scene4:
   selectPilot: "Selecionar Piloto"
   selectStage: "Selecionar Etapa"
+  selectCamera: "Selecionar Câmera"
   noPilotSelected: "Nenhum Piloto Selecionado"
   noStreamAvailable: "Nenhum stream disponível"
   allStageTimes: "Tempos de Todas as Etapas"
@@ -276,6 +287,9 @@ scene4:
   lapTimes: "Tempos de Volta"
   total: "TOTAL"
   live: "AO VIVO"
+  mainCamera: "Câmera Principal"
+  noneUsesPilotStream: "Nenhuma (Usar Stream do Piloto)"
+  cameraAsMain: "Câmera como feed principal"
 
 # ===========================================
 # STATUS / ESTADOS
