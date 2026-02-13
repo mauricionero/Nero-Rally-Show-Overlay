@@ -338,6 +338,36 @@ export const RallyProvider = ({ children }) => {
     setPilots(prev => prev.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
   };
 
+  // Camera CRUD operations
+  const addCamera = (camera) => {
+    const newCamera = {
+      id: `cam_${Date.now().toString()}`,
+      name: camera.name,
+      streamUrl: camera.streamUrl || '',
+      isActive: true,
+      ...camera
+    };
+    setCameras(prev => [...prev, newCamera]);
+  };
+
+  const updateCamera = (id, updates) => {
+    setCameras(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  const deleteCamera = (id) => {
+    setCameras(prev => prev.filter(c => c.id !== id));
+    // Also remove stream config for this camera
+    setStreamConfigs(prev => {
+      const newConfigs = { ...prev };
+      delete newConfigs[id];
+      return newConfigs;
+    });
+  };
+
+  const toggleCameraActive = (id) => {
+    setCameras(prev => prev.map(c => c.id === id ? { ...c, isActive: !c.isActive } : c));
+  };
+
   const addCategory = (category) => {
     const newCategory = {
       id: Date.now().toString(),
