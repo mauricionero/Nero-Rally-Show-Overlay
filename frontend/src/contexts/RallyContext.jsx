@@ -144,6 +144,7 @@ export const RallyProvider = ({ children }) => {
       logoUrl,
       streamConfigs,
       globalAudio,
+      cameras,
       timestamp: Date.now()
     };
     
