@@ -55,8 +55,9 @@ Build a dashboard overlay interface similar to WRC (World Rally Championship) tr
 - `rally_positions` - Object mapping pilotId -> stageId -> position
 - `rally_logo_url` - Channel logo URL for branding
 - `rally_map_url` - Google Maps embed URL
-- `rally_stream_configs` - Stream configuration per pilot
+- `rally_stream_configs` - Stream configuration per pilot/camera
 - `rally_global_audio` - Global audio settings
+- `rally_cameras` - Array of camera objects `[{ id, name, streamUrl, isActive }]` (NEW - December 2025)
 - `rally_data_version` - Timestamp for heartbeat sync
 
 ---
