@@ -1,0 +1,289 @@
+# Rally Dashboard - English Translation
+# This file contains all translatable strings for the application
+# Copy this file and translate to add a new language
+
+# ===========================================
+# COMMON / SHARED
+# ===========================================
+common:
+  save: "Save"
+  cancel: "Cancel"
+  delete: "Delete"
+  edit: "Edit"
+  add: "Add"
+  clear: "Clear"
+  reset: "Reset"
+  close: "Close"
+  confirm: "Confirm"
+  loading: "Loading..."
+  noData: "No data available"
+  search: "Search"
+  select: "Select"
+  none: "None"
+  all: "All"
+  apply: "Apply"
+  custom: "Custom"
+  yes: "Yes"
+  no: "No"
+
+# ===========================================
+# HEADER / NAVIGATION
+# ===========================================
+header:
+  title: "Rally Dashboard"
+  subtitle: "Setup & Configuration"
+  goLive: "Go Live"
+  hideStreams: "Hide Streams"
+  connect: "Connect"
+  disconnect: "Disconnect"
+  updated: "Updated"
+  local: "Local"
+
+# ===========================================
+# SETUP PAGE - TABS
+# ===========================================
+tabs:
+  pilots: "Pilots"
+  categories: "Categories"
+  theRace: "The Race"
+  times: "Times"
+  streams: "Streams"
+  config: "Config"
+
+# ===========================================
+# PILOTS TAB
+# ===========================================
+pilots:
+  addNewPilot: "Add New Pilot"
+  pilotName: "Pilot Name"
+  carNumber: "Car #"
+  startOrder: "Start Order"
+  category: "Category"
+  pictureUrl: "Picture URL"
+  streamUrl: "Stream URL"
+  addPilot: "Add Pilot"
+  noPilots: "No pilots registered. Add your first pilot above."
+  activePilots: "Active Pilots"
+  placeholder:
+    name: "John Doe"
+    carNumber: "42"
+    startOrder: "1"
+    pictureUrl: "https://..."
+    streamUrl: "https://ninja.vdo/..."
+
+# ===========================================
+# CATEGORIES TAB
+# ===========================================
+categories:
+  addNewCategory: "Add New Category"
+  categoryName: "Category Name"
+  color: "Color"
+  addCategory: "Add Category"
+  noCategories: "No categories registered. Add your first category above."
+  placeholder:
+    name: "WRC"
+
+# ===========================================
+# THE RACE TAB (STAGES)
+# ===========================================
+theRace:
+  eventName: "Event Name"
+  eventNamePlaceholder: "e.g., Rally Championship 2025"
+  stages: "Stages"
+  addStage: "Add Stage"
+  addNewStage: "Add New Stage"
+  stageName: "Stage Name"
+  stageType: "Stage Type"
+  ssNumber: "SS Number"
+  numberOfLaps: "Number of Laps"
+  scheduledStart: "Scheduled Start"
+  noStages: "No stages registered. Add your first stage above."
+  stageTypes:
+    ss: "SS (Special Stage)"
+    lapRace: "Lap Race"
+    liaison: "Liaison"
+    servicePark: "Service Park"
+  placeholder:
+    stageName: "Shakedown"
+    ssNumber: "1"
+    laps: "5"
+    time: "HH:MM"
+
+# ===========================================
+# TIMES TAB
+# ===========================================
+times:
+  startTime: "Start Time"
+  arrivalTime: "Arrival Time"
+  totalTime: "Total Time"
+  endTime: "End Time"
+  raceStartTime: "Race Start Time"
+  pilotsInRace: "Pilots in this race"
+  selectPilots: "Select pilots to record lap times"
+  lap: "Lap"
+  duration: "Duration"
+  time: "Time"
+  scheduled: "Scheduled"
+  now: "Now"
+  addPilotsFirst: "Add pilots first in the Pilots tab to record times."
+  addStagesFirst: "Add stages first in The Race tab to record times."
+  placeholder:
+    time: "HH:MM:SS.000"
+    shortTime: "HH:MM"
+    totalTime: "MM:SS.000"
+
+# ===========================================
+# STREAMS TAB
+# ===========================================
+streams:
+  globalAudioControl: "Global Audio Control"
+  masterVolume: "Master Volume"
+  muteAll: "Mute All"
+  unmuteAll: "Unmute All"
+  pilotStreams: "Pilot Streams"
+  volume: "Volume"
+  solo: "Solo"
+  mute: "Mute"
+  saturation: "Saturation"
+  contrast: "Contrast"
+  brightness: "Brightness"
+  resetDefaults: "Reset to Defaults"
+  noActiveStreams: "No active pilot streams. Activate pilots in the Pilots tab."
+
+# ===========================================
+# CONFIG TAB
+# ===========================================
+config:
+  backgroundChromaKey: "Background Color (Chroma Key)"
+  selectBackground: "Select background color for video overlay"
+  black: "Black"
+  greenScreen: "Green Screen"
+  blueScreen: "Blue Screen"
+  applyCustom: "Apply Custom"
+  
+  googleMapsIntegration: "Google Maps Integration"
+  googleMapsDesc: "Add a Google Maps embed URL to display in Scene 1"
+  mapsUrlPlaceholder: "https://www.google.com/maps/embed?pb=..."
+  
+  branding: "Branding"
+  logoUrl: "Channel Logo URL"
+  logoUrlPlaceholder: "https://example.com/logo.png"
+  
+  language: "Language"
+  selectLanguage: "Select Language"
+  
+  liveSync: "Live Sync (WebSocket)"
+  liveSyncDesc: "Share your dashboard data in real-time with the overlay page"
+  generateKey: "Generate Key"
+  yourChannelKey: "Your Channel Key"
+  copyKey: "Copy Key"
+  shareKeyInfo: "Share this key with the overlay page to enable live sync"
+  pasteKeyToConnect: "Paste the channel key from Setup page to connect"
+  channelKeyPlaceholder: "Paste channel key here..."
+  connectionStatus: "Connection Status"
+  connected: "Connected"
+  disconnected: "Disconnected"
+  connecting: "Connecting..."
+  error: "Error"
+  provider: "Provider"
+  
+  keyboardShortcuts: "Keyboard Shortcuts"
+  keyboardShortcutsDesc: "Available on the Overlay page"
+  switchToScene: "Switch to Scene"
+  
+  dataManagement: "Data Management"
+  exportJson: "Export JSON"
+  importJson: "Import JSON"
+  clearAllData: "Clear All Data"
+  clearDataConfirm: "Are you sure you want to clear all data? This cannot be undone."
+  
+  currentSummary: "Current Summary"
+  pilotsCount: "Pilots"
+  categoriesCount: "Categories"
+  stagesCount: "Stages"
+
+# ===========================================
+# OVERLAY PAGE - SCENES
+# ===========================================
+scenes:
+  liveStage: "Live Stage"
+  timingTower: "Timing Tower"
+  leaderboard: "Leaderboard"
+  pilotFocus: "Pilot Focus"
+
+# ===========================================
+# SCENE 1 - LIVE STAGE
+# ===========================================
+scene1:
+  layout: "Layout"
+  selectItems: "Select Items"
+  reorderDragDrop: "Reorder (Drag & Drop)"
+  noItemsSelected: "No Items Selected"
+  selectPilotsOrMaps: "Select pilots or Google Maps from the left panel"
+  currentStage: "Current Stage"
+  race: "Race"
+  rallyMap: "Rally Map"
+  googleMaps: "Google Maps"
+  finished: "FINISHED"
+  layouts:
+    oneStream: "1 Stream"
+    oneByTwo: "1x2 Vertical"
+    twoByOne: "2x1 Horizontal"
+    twoByTwo: "2x2 Grid"
+    threeByTwo: "3x2 Grid"
+
+# ===========================================
+# SCENE 2 - TIMING TOWER
+# ===========================================
+scene2:
+  liveTiming: "Live Timing"
+  onStage: "On Stage"
+  racing: "Racing"
+  finished: "Finished"
+  willStart: "Will Start"
+  notStarted: "Not Started"
+  noCurrentStage: "No current stage selected"
+  selectPilotWithStream: "Select a pilot with an active stream"
+
+# ===========================================
+# SCENE 3 - LEADERBOARD
+# ===========================================
+scene3:
+  selectView: "Select View"
+  overallRallyStandings: "Overall Rally Standings"
+  overallStandings: "Overall Standings"
+  specialStages: "Special Stages"
+  lapRaces: "Lap Races"
+  pos: "Pos"
+  pilot: "Pilot"
+  ssTime: "SS Time"
+  overall: "Overall"
+  totalTime: "Total Time"
+  laps: "Laps"
+  gap: "Gap"
+  leader: "LEADER"
+
+# ===========================================
+# SCENE 4 - PILOT FOCUS
+# ===========================================
+scene4:
+  selectPilot: "Select Pilot"
+  selectStage: "Select Stage"
+  noPilotSelected: "No Pilot Selected"
+  noStreamAvailable: "No stream available"
+  allStageTimes: "All Stage Times"
+  noStagesRegistered: "No stages registered"
+  lapTimes: "Lap Times"
+  total: "TOTAL"
+  live: "LIVE"
+
+# ===========================================
+# STATUS / STATES
+# ===========================================
+status:
+  racing: "Racing"
+  finished: "Finished"
+  notStarted: "Not Started"
+  start: "Start"
+  active: "Active"
+  inactive: "Inactive"
