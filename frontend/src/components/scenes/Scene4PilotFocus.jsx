@@ -66,13 +66,16 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots
+    lapTimes, stagePilots, cameras
   } = useRally();
   const { t } = useTranslation();
   
   const [selectedPilotId, setSelectedPilotId] = useState(pilots[0]?.id || null);
   const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
+  const [selectedCameraId, setSelectedCameraId] = useState(null); // null = use pilot stream as main
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
