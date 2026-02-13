@@ -149,7 +149,7 @@ export const RallyProvider = ({ children }) => {
     };
     
     await wsProvider.current.publish(data);
-  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, streamConfigs, globalAudio]);
+  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, streamConfigs, globalAudio, cameras]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey) => {
