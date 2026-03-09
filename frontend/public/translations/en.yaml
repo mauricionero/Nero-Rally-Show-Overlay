@@ -168,8 +168,11 @@ config:
   blueScreen: "Blue Screen"
   applyCustom: "Apply Custom"
   
-  googleMapsIntegration: "Google Maps Integration"
-  googleMapsDesc: "Add a Google Maps embed URL to display in Scene 1"
+  externalMedia: "External Media"
+  externalMediaDesc: "Add any iframe-able media (Google Maps, VDO.ninja, etc.)"
+  mediaName: "Name"
+  mediaUrl: "URL"
+  addMedia: "Add Media"
   mapsUrlPlaceholder: "https://www.google.com/maps/embed?pb=..."
   
   branding: "Branding"
@@ -231,6 +234,7 @@ scene1:
   race: "Race"
   rallyMap: "Rally Map"
   googleMaps: "Google Maps"
+  externalMedia: "External Media"
   finished: "FINISHED"
   layouts:
     oneStream: "1 Stream"

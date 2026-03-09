@@ -8,6 +8,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { toast } from 'sonner';
 import { Play, Palette } from 'lucide-react';
 
+// app version constant
+import { VERSION } from '../config/version.js';
+
 // Tab Components
 import PilotsTab from '../components/setup/PilotsTab.jsx';
 import CategoriesTab from '../components/setup/CategoriesTab.jsx';
@@ -45,15 +48,19 @@ export default function Setup() {
             <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
           </div>
           
-          <div className="flex gap-3">
-            <Button
-              onClick={handleGoLive}
-              className="bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
-              data-testid="go-to-overlay-button"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              {t('header.goLive')}
-            </Button>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex gap-3">
+              <Button
+                onClick={handleGoLive}
+                className="bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
+                data-testid="go-to-overlay-button"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {t('header.goLive')}
+              </Button>
+            </div>
+            {/* version tag */}
+            <div className="text-xs text-zinc-500">v{VERSION}</div>
           </div>
         </div>
 

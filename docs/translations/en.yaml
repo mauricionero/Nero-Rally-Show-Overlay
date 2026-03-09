@@ -168,9 +168,11 @@ config:
   blueScreen: "Blue Screen"
   applyCustom: "Apply Custom"
   
-  googleMapsIntegration: "Google Maps Integration"
-  googleMapsDesc: "Add a Google Maps embed URL to display in Scene 1"
-  mapsUrlPlaceholder: "https://www.google.com/maps/embed?pb=..."
+  externalMedia: "External Media"
+  externalMediaDesc: "Add any iframe-able media (Google Maps, VDO.ninja, etc.)"
+  mediaName: "Name"
+  mediaUrl: "URL"
+  addMedia: "Add Media"
   
   branding: "Branding"
   logoUrl: "Channel Logo URL"
@@ -227,6 +229,7 @@ scene1:
   reorderDragDrop: "Reorder (Drag & Drop)"
   noItemsSelected: "No Items Selected"
   selectPilotsOrMaps: "Select pilots or Google Maps from the left panel"
+  selectPilotsOrMedia: "Select pilots or external media from the left panel"
   currentStage: "Current Stage"
   race: "Race"
   rallyMap: "Rally Map"

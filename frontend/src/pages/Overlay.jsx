@@ -12,6 +12,9 @@ import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
 
+// version constant
+import { VERSION } from '../config/version.js';
+
 export default function Overlay() {
   const [searchParams] = useSearchParams();
   const { t } = useTranslation();
@@ -165,6 +168,9 @@ export default function Overlay() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* version display */}
+            <div className="text-xs text-zinc-400">v{VERSION}</div>
+
             {/* Language Selector */}
             <LanguageSelectorCompact />
 
