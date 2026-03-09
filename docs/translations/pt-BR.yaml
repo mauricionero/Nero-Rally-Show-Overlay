@@ -234,6 +234,7 @@ scene1:
   race: "Corrida"
   rallyMap: "Mapa do Rally"
   googleMaps: "Google Maps"
+  externalMedia: "Mídia Externa"
   finished: "FINALIZADO"
   layouts:
     oneStream: "1 Stream"
