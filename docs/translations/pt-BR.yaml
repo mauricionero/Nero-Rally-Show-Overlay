@@ -168,9 +168,11 @@ config:
   blueScreen: "Tela Azul"
   applyCustom: "Aplicar Personalizado"
   
-  googleMapsIntegration: "Integração Google Maps"
-  googleMapsDesc: "Adicione uma URL de embed do Google Maps para exibir na Cena 1"
-  mapsUrlPlaceholder: "https://www.google.com/maps/embed?pb=..."
+  externalMedia: "Mídia Externa"
+  externalMediaDesc: "Adicione qualquer mídia que possa ser incorporada via iframe (Google Maps, VDO.ninja, etc.)"
+  mediaName: "Nome"
+  mediaUrl: "URL"
+  addMedia: "Adicionar Mídia"
   
   branding: "Marca"
   logoUrl: "URL do Logo do Canal"
@@ -227,6 +229,7 @@ scene1:
   reorderDragDrop: "Reordenar (Arrastar e Soltar)"
   noItemsSelected: "Nenhum Item Selecionado"
   selectPilotsOrMaps: "Selecione pilotos ou Google Maps no painel lateral"
+  selectPilotsOrMedia: "Selecione pilotos ou mídia externa no painel lateral"
   currentStage: "Etapa Atual"
   race: "Corrida"
   rallyMap: "Mapa do Rally"

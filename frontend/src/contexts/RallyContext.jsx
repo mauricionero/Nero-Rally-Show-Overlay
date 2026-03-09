@@ -38,6 +38,7 @@ export const RallyProvider = ({ children }) => {
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
   const [mapUrl, setMapUrl] = useState(() => loadFromStorage('rally_map_url', ''));
   const [logoUrl, setLogoUrl] = useState(() => loadFromStorage('rally_logo_url', ''));
+  const [externalMedia, setExternalMedia] = useState(() => loadFromStorage('rally_external_media', []));
   const [streamConfigs, setStreamConfigs] = useState(() => loadFromStorage('rally_stream_configs', {}));
   const [globalAudio, setGlobalAudio] = useState(() => loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
   const [cameras, setCameras] = useState(() => loadFromStorage('rally_cameras', []));
@@ -71,6 +72,7 @@ export const RallyProvider = ({ children }) => {
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
     setMapUrl(loadFromStorage('rally_map_url', ''));
     setLogoUrl(loadFromStorage('rally_logo_url', ''));
+    setExternalMedia(loadFromStorage('rally_external_media', []));
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
     setCameras(loadFromStorage('rally_cameras', []));
@@ -101,6 +103,7 @@ export const RallyProvider = ({ children }) => {
     if (data.chromaKey) setChromaKey(data.chromaKey);
     if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
     if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
+    if (data.externalMedia) setExternalMedia(data.externalMedia);
     if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
     if (data.globalAudio) setGlobalAudio(data.globalAudio);
     if (data.cameras) setCameras(data.cameras);
@@ -142,6 +145,7 @@ export const RallyProvider = ({ children }) => {
       chromaKey,
       mapUrl,
       logoUrl,
+      externalMedia,
       streamConfigs,
       globalAudio,
       cameras,
@@ -149,7 +153,7 @@ export const RallyProvider = ({ children }) => {
     };
     
     await wsProvider.current.publish(data);
-  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, streamConfigs, globalAudio, cameras]);
+  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, externalMedia, streamConfigs, globalAudio, cameras]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey) => {
@@ -301,6 +305,31 @@ export const RallyProvider = ({ children }) => {
     localStorage.setItem('rally_cameras', JSON.stringify(cameras));
     updateDataVersion();
   }, [cameras]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_external_media', JSON.stringify(externalMedia));
+    updateDataVersion();
+  }, [externalMedia]);
+
+  // CRUD for external media items
+  const addExternalMedia = (item) => {
+    const newItem = {
+      id: `media_${Date.now().toString()}`,
+      name: item.name || '',
+      url: item.url || '',
+      icon: item.icon || 'Map',
+      ...item
+    };
+    setExternalMedia(prev => [...prev, newItem]);
+  };
+
+  const updateExternalMedia = (id, updates) => {
+    setExternalMedia(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+  };
+
+  const deleteExternalMedia = (id) => {
+    setExternalMedia(prev => prev.filter(m => m.id !== id));
+  };
 
   const addPilot = (pilot) => {
     const newPilot = {
@@ -669,6 +698,7 @@ export const RallyProvider = ({ children }) => {
       streamConfigs,
       globalAudio,
       cameras,
+      externalMedia,
       currentStageId,
       chromaKey,
       mapUrl,
@@ -691,6 +721,7 @@ export const RallyProvider = ({ children }) => {
       if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.cameras) setCameras(data.cameras);
+      if (data.externalMedia) setExternalMedia(data.externalMedia);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
@@ -717,9 +748,10 @@ export const RallyProvider = ({ children }) => {
     setStages([]);
     setTimes({});
     setArrivalTimes({});
-    setStartTimes({});
+    setStartTimes([]);
     setStreamConfigs({});
     setCameras([]);
+    setExternalMedia([]);
     setGlobalAudio({ volume: 100, muted: false });
     setCurrentStageId(null);
     setChromaKey('#000000');
@@ -806,6 +838,10 @@ export const RallyProvider = ({ children }) => {
     exportData,
     importData,
     clearAllData,
+    externalMedia,
+    addExternalMedia,
+    updateExternalMedia,
+    deleteExternalMedia,
     reloadData,
     // WebSocket functions
     connectWebSocket,

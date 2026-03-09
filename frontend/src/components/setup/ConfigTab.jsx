@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image, Globe } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image, Globe, Trash2 } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
 
 export default function ConfigTab() {
@@ -19,6 +19,10 @@ export default function ConfigTab() {
     setMapUrl,
     logoUrl,
     setLogoUrl,
+    externalMedia,
+    addExternalMedia,
+    updateExternalMedia,
+    deleteExternalMedia,
     exportData,
     importData,
     clearAllData,
@@ -37,6 +41,17 @@ export default function ConfigTab() {
   const [newKey, setNewKey] = useState('');
 
   const activePilots = pilots.filter(p => p.isActive);
+  const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
+
+  const handleAddMedia = () => {
+    if (!newMedia.name.trim() || !newMedia.url.trim()) {
+      toast.error(t('config.mediaName') + ' & ' + t('config.mediaUrl') + ' are required');
+      return;
+    }
+    addExternalMedia(newMedia);
+    setNewMedia({ name: '', url: '', icon: 'Map' });
+    toast.success('Media added successfully');
+  };
 
   const handleExport = () => {
     const data = exportData();
@@ -158,28 +173,81 @@ export default function ConfigTab() {
         </CardContent>
       </Card>
 
-      {/* Google Maps URL */}
+      {/* External Media list (replaces Google Maps section) */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            <Map className="w-5 h-5" />
-            {t('config.googleMapsIntegration')}
+            <Globe className="w-5 h-5" />
+            {t('config.externalMedia')}
           </CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.googleMapsDesc')}</CardDescription>
+          <CardDescription className="text-zinc-400">{t('config.externalMediaDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            <Label className="text-white">Google Maps Embed URL</Label>
-            <Input
-              value={mapUrl || ''}
-              onChange={(e) => setMapUrl(e.target.value)}
-              placeholder={t('config.mapsUrlPlaceholder')}
-              className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
-              data-testid="input-map-url"
-            />
-            <p className="text-xs text-zinc-500">
-              Tip: Go to Google Maps → Share → Embed a map → Copy the src URL from the iframe code
-            </p>
+          <div className="space-y-4">
+            {externalMedia.map((m) => (
+              <div key={m.id} className="flex items-center gap-2">
+                <Input
+                  value={m.name}
+                  onChange={(e) => updateExternalMedia(m.id, { ...m, name: e.target.value })}
+                  placeholder={t('config.mediaName')}
+                  className="bg-[#09090B] border-zinc-700 text-white text-sm"
+                />
+                <Input
+                  value={m.url}
+                  onChange={(e) => updateExternalMedia(m.id, { ...m, url: e.target.value })}
+                  placeholder={t('config.mediaUrl')}
+                  className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
+                />
+                <select
+                  value={m.icon || 'Map'}
+                  onChange={(e) => updateExternalMedia(m.id, { ...m, icon: e.target.value })}
+                  className="bg-[#09090B] border-zinc-700 text-white text-sm p-1"
+                >
+                  <option value="Map">Map</option>
+                  <option value="Globe">Globe</option>
+                  <option value="Video">Video</option>
+                </select>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => deleteExternalMedia(m.id)}
+                  className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+
+            <div className="flex items-center gap-2">
+              <Input
+                value={newMedia.name}
+                onChange={(e) => setNewMedia({ ...newMedia, name: e.target.value })}
+                placeholder={t('config.mediaName')}
+                className="bg-[#09090B] border-zinc-700 text-white text-sm"
+              />
+              <Input
+                value={newMedia.url}
+                onChange={(e) => setNewMedia({ ...newMedia, url: e.target.value })}
+                placeholder={t('config.mediaUrl')}
+                className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
+              />
+              <select
+                value={newMedia.icon}
+                onChange={(e) => setNewMedia({ ...newMedia, icon: e.target.value })}
+                className="bg-[#09090B] border-zinc-700 text-white text-sm p-1"
+              >
+                <option value="Map">Map</option>
+                <option value="Globe">Globe</option>
+                <option value="Video">Video</option>
+              </select>
+              <Button
+                onClick={handleAddMedia}
+                className="bg-[#FF4500] hover:bg-[#FF4500]/90"
+                data-testid="button-add-media"
+              >
+                {t('config.addMedia')}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

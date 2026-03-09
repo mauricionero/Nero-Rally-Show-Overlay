@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
-import { ChevronLeft, ChevronRight, Map, Flag, RotateCcw, Video } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Map, Flag, RotateCcw, Video, Globe } from 'lucide-react';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -17,7 +17,6 @@ const LAYOUTS = [
   { id: '3x2', name: '3x2 Grid', cols: 3, rows: 2, slots: 6 }
 ];
 
-const MAP_SLOT_ID = '__google_maps__';
 
 // Helper to calculate position for Lap Race based on lap times
 const calculateLapRacePositions = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
@@ -70,12 +69,21 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, times, categories, 
     chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions,
-    cameras
+    cameras, externalMedia
   } = useRally();
   const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedLayout, setSelectedLayout] = useState('2x2');
+
+  // helper to render an icon for a media item
+  const renderIcon = (iconName) => {
+    switch (iconName) {
+      case 'Globe': return <Globe className="w-5 h-5 text-[#FF4500]" />;
+      case 'Video': return <Video className="w-5 h-5 text-[#FF4500]" />;
+      default: return <Map className="w-5 h-5 text-[#FF4500]" />;
+    }
+  };
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
   const [bottomScroll, setBottomScroll] = useState(0);
   const [maxScroll, setMaxScroll] = useState(0);
@@ -83,6 +91,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const bottomContainerRef = useRef(null);
   
   const currentStage = stages.find(s => s.id === currentStageId);
+  const activeMedia = externalMedia.filter(m => m.url);
   const isLapRace = currentStage?.type === 'Lap Race';
   const isSSStage = currentStage?.type === 'SS';
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
@@ -171,13 +180,16 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   };
 
   const getDisplayItem = (slotId) => {
-    if (slotId === MAP_SLOT_ID) {
-      return { type: 'map', id: MAP_SLOT_ID };
-    }
     // Check if it's a camera
     const camera = cameras.find(c => c.id === slotId);
     if (camera) {
       return { type: 'camera', ...camera };
+    }
+    // Check external media
+    if (slotId.startsWith('media-')) {
+      const mid = slotId.replace('media-', '');
+      const media = externalMedia.find(m => m.id === mid);
+      if (media) return { type: 'media', ...media };
     }
     // Otherwise it's a pilot
     const pilot = pilots.find(p => p.id === slotId);
@@ -255,19 +267,27 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 </div>
               )}
 
-              {/* Google Maps Option - Second priority */}
-              {mapUrl && (
-                <div className="flex items-center space-x-2 pb-2 border-b border-zinc-700 mb-2">
-                  <Checkbox
-                    id="slot-map"
-                    checked={selectedSlotIds.includes(MAP_SLOT_ID)}
-                    onCheckedChange={() => toggleSlot(MAP_SLOT_ID)}
-                    disabled={!selectedSlotIds.includes(MAP_SLOT_ID) && selectedSlotIds.length >= layout.slots}
-                  />
-                  <label htmlFor="slot-map" className="text-white text-sm cursor-pointer flex items-center gap-2">
-                    <Map className="w-4 h-4 text-[#FF4500]" />
-                    {t('scene1.googleMaps')}
-                  </label>
+              {/* External Media options - second priority */}
+              {activeMedia.length > 0 && (
+                <div className="pb-2 border-b border-zinc-700 mb-2">
+                  <div className="text-xs text-zinc-500 uppercase mb-2">{t('scene1.externalMedia')}</div>
+                  {activeMedia.map((m) => {
+                    const slotId = `media-${m.id}`;
+                    return (
+                      <div key={m.id} className="flex items-center space-x-2 mb-1">
+                        <Checkbox
+                          id={`media-${m.id}`}
+                          checked={selectedSlotIds.includes(slotId)}
+                          onCheckedChange={() => toggleSlot(slotId)}
+                          disabled={!selectedSlotIds.includes(slotId) && selectedSlotIds.length >= layout.slots}
+                        />
+                        <label htmlFor={`media-${m.id}`} className="text-white text-sm cursor-pointer flex items-center gap-2">
+                          {renderIcon(m.icon)}
+                          {m.name}
+                        </label>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               
@@ -302,13 +322,18 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.reorderDragDrop')}</Label>
               <div className="space-y-1">
                 {selectedSlotIds.map((slotId, index) => {
-                  const isMap = slotId === MAP_SLOT_ID;
-                  const camera = !isMap ? cameras.find(c => c.id === slotId) : null;
-                  const pilot = !isMap && !camera ? pilots.find(p => p.id === slotId) : null;
-                  const label = isMap ? t('scene1.googleMaps') : (camera?.name || pilot?.name);
+                  const camera = cameras.find(c => c.id === slotId);
+                  const media = slotId.startsWith('media-')
+                    ? externalMedia.find(m => m.id === slotId.replace('media-', ''))
+                    : null;
+                  const pilot = !camera && !media ? pilots.find(p => p.id === slotId) : null;
+                  let label = '';
+                  if (media) label = media.name;
+                  else if (camera) label = camera.name;
+                  else if (pilot) label = pilot.name;
                   const isCamera = !!camera;
                   if (!label) return null;
-                  
+
                   return (
                     <div
                       key={slotId}
@@ -320,7 +345,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-zinc-500 text-xs">{index + 1}.</span>
-                        {isMap && <Map className="w-3 h-3 text-[#FF4500]" />}
+                        {media && renderIcon(media.icon)}
                         {isCamera && <Video className="w-3 h-3 text-[#FF4500]" />}
                         <span className="text-white text-sm">{label}</span>
                       </div>
@@ -340,30 +365,28 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                 {t('scene1.noItemsSelected')}
               </p>
-              <p className="text-zinc-400 mt-2">{t('scene1.selectPilotsOrMaps')}</p>
+              <p className="text-zinc-400 mt-2">{t('scene1.selectPilotsOrMedia')}</p>
             </div>
           </div>
         ) : (
           displayItems.map((item) => {
-            // Google Maps Item
-            if (item.type === 'map') {
+            // External media item
+            if (item.type === 'media') {
               return (
-                <div key={MAP_SLOT_ID} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: chromaKey }}>
+                <div key={item.id} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: chromaKey }}>
                   <iframe
-                    src={mapUrl}
+                    src={item.url}
                     className="w-full h-full border-0"
                     allowFullScreen
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
-                    title={t('scene1.rallyMap')}
+                    title={item.name}
                   />
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
-                    <div className="flex items-center gap-2">
-                      <Map className="w-5 h-5 text-[#FF4500]" />
-                      <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
-                        {t('scene1.rallyMap')}
-                      </p>
-                    </div>
+                    {renderIcon(item.icon)}
+                    <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
+                      {item.name}
+                    </p>
                   </div>
                 </div>
               );
