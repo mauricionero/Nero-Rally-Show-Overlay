@@ -9,6 +9,73 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
+import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
+import {
+  getStageNumberLabel,
+  getStageTitle,
+  isLapRaceStageType,
+  isSpecialStageType,
+  isTransitStageType,
+  SUPER_PRIME_STAGE_TYPE
+} from '../../utils/stageTypes.js';
+
+const formatScheduledStartInput = (value) => {
+  const digits = value.replace(/\D/g, '').slice(-4);
+
+  if (!digits) return '';
+  if (digits.length <= 2) return digits;
+  if (digits.length === 3) return `0${digits[0]}:${digits.slice(1)}`;
+
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+};
+
+const getTodayDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultStageDate = (stages) => {
+  const lastFilledDate = [...stages].reverse().find((stage) => stage.date)?.date;
+  return lastFilledDate || getTodayDateString();
+};
+
+const formatEditableDateInput = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+
+  if (!digits) return '';
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+};
+
+const formatDateForEditing = (value) => {
+  if (!value) return '';
+
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+
+  return formatEditableDateInput(value);
+};
+
+const normalizeEditedDate = (value) => {
+  if (!value) return '';
+
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return value;
+
+  const displayMatch = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (displayMatch) {
+    return `${displayMatch[3]}-${displayMatch[2]}-${displayMatch[1]}`;
+  }
+
+  return null;
+};
 
 export default function TheRaceTab() {
   const { t } = useTranslation();
@@ -25,12 +92,15 @@ export default function TheRaceTab() {
 
   const STAGE_TYPES = [
     { id: 'SS', name: t('theRace.stageTypes.ss'), description: 'Point-to-point timed stage', icon: Flag },
+    { id: SUPER_PRIME_STAGE_TYPE, name: t('theRace.stageTypes.superPrime'), description: 'Head-to-head timed stage with manual starts', icon: Flag },
     { id: 'Lap Race', name: t('theRace.stageTypes.lapRace'), description: 'Circuit racing with multiple laps', icon: RotateCcw },
     { id: 'Liaison', name: t('theRace.stageTypes.liaison'), description: 'Transfer section between stages', icon: Car },
     { id: 'Service Park', name: t('theRace.stageTypes.servicePark'), description: 'Service/repair period', icon: Timer }
   ];
 
-  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', startTime: '', numberOfLaps: 5 });
+  const defaultStageDate = getDefaultStageDate(stages);
+
+  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', endTime: '', numberOfLaps: 5 });
   const [editingStage, setEditingStage] = useState(null);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
 
@@ -40,7 +110,7 @@ export default function TheRaceTab() {
       return;
     }
     addStage(newStage);
-    setNewStage({ name: '', type: 'SS', ssNumber: '', startTime: '', numberOfLaps: 5 });
+    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', endTime: '', numberOfLaps: 5 });
     toast.success('Stage added successfully');
   };
 
@@ -49,21 +119,52 @@ export default function TheRaceTab() {
       toast.error(t('theRace.stageName') + ' is required');
       return;
     }
-    updateStage(editingStage.id, editingStage);
+
+    const normalizedDate = normalizeEditedDate(editingStage.date || '');
+    if (editingStage.date && !normalizedDate) {
+      toast.error('Date must be in DD/MM/YYYY format');
+      return;
+    }
+
+    updateStage(editingStage.id, {
+      ...editingStage,
+      date: normalizedDate || ''
+    });
     setEditingStage(null);
     setStageDialogOpen(false);
     toast.success('Updated successfully');
   };
 
-  const sortedStages = [...stages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedStages = [...stages].sort(compareStagesBySchedule);
 
   const currentStage = stages.find(s => s.id === currentStageId);
-  const isLapRaceType = newStage.type === 'Lap Race';
-  const isSSType = newStage.type === 'SS';
+  const isLapRaceType = isLapRaceStageType(newStage.type);
+  const isSSType = isSpecialStageType(newStage.type);
+  const supportsEndTime = isTransitStageType(newStage.type);
+
+  const getDisplayedStageSchedule = (stage) => {
+    if (!stage) return '';
+    if (isTransitStageType(stage.type)) {
+      return formatStageScheduleRange(stage);
+    }
+    return stage.startTime || '';
+  };
+
+  const handleNewStageTypeChange = (type) => {
+    setNewStage((prev) => ({
+      ...prev,
+      type,
+      endTime: isTransitStageType(type) ? prev.endTime : ''
+    }));
+  };
+
+  const handleEditingStageTypeChange = (type) => {
+    setEditingStage((prev) => prev ? ({
+      ...prev,
+      type,
+      endTime: isTransitStageType(type) ? (prev.endTime || '') : ''
+    }) : prev);
+  };
 
   const getStageTypeIcon = (type) => {
     const stageType = STAGE_TYPES.find(t => t.id === type);
@@ -73,6 +174,7 @@ export default function TheRaceTab() {
   const getStageTypeColor = (type) => {
     switch (type) {
       case 'SS': return 'text-[#FF4500]';
+      case SUPER_PRIME_STAGE_TYPE: return 'text-orange-400';
       case 'Lap Race': return 'text-[#FACC15]';
       case 'Liaison': return 'text-blue-400';
       case 'Service Park': return 'text-green-400';
@@ -113,13 +215,13 @@ export default function TheRaceTab() {
           {/* Stage Type Selector */}
           <div>
             <Label className="text-white mb-2 block">{t('theRace.stageType')}</Label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               {STAGE_TYPES.map((type) => {
                 const Icon = type.icon;
                 return (
                   <button
                     key={type.id}
-                    onClick={() => setNewStage({ ...newStage, type: type.id })}
+                    onClick={() => handleNewStageTypeChange(type.id)}
                     className={`p-3 rounded-lg border-2 text-left transition-all ${
                       newStage.type === type.id
                         ? 'border-[#FF4500] bg-[#FF4500]/10'
@@ -129,7 +231,7 @@ export default function TheRaceTab() {
                   >
                     <div className="flex items-center gap-2">
                       <Icon className={`w-4 h-4 ${getStageTypeColor(type.id)}`} />
-                      <span className="font-bold text-sm text-white">{type.id}</span>
+                      <span className="font-bold text-sm text-white">{type.name}</span>
                     </div>
                     <p className="text-xs text-zinc-400 mt-1">{type.description}</p>
                   </button>
@@ -139,7 +241,7 @@ export default function TheRaceTab() {
           </div>
 
           {/* Stage Details Form */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
             <div className="md:col-span-2">
               <Label className="text-white">{t('theRace.stageName')} *</Label>
               <Input
@@ -176,16 +278,51 @@ export default function TheRaceTab() {
                 />
               </div>
             )}
+
+            <div>
+              <Label className="text-white">{t('theRace.date')}</Label>
+              <Input
+                type="date"
+                value={newStage.date}
+                onChange={(e) => setNewStage({ ...newStage, date: e.target.value })}
+                className="bg-[#09090B] border-zinc-700 text-white"
+              />
+            </div>
+
+            <div>
+              <Label className="text-white">{t('theRace.distance')}</Label>
+              <Input
+                value={newStage.distance}
+                onChange={(e) => setNewStage({ ...newStage, distance: e.target.value })}
+                placeholder={t('theRace.placeholder.distance')}
+                className="bg-[#09090B] border-zinc-700 text-white"
+                inputMode="decimal"
+              />
+            </div>
             
             <div>
               <Label className="text-white">{t('theRace.scheduledStart')}</Label>
               <Input
                 value={newStage.startTime}
-                onChange={(e) => setNewStage({ ...newStage, startTime: e.target.value })}
+                onChange={(e) => setNewStage({ ...newStage, startTime: formatScheduledStartInput(e.target.value) })}
                 placeholder={t('theRace.placeholder.time')}
                 className="bg-[#09090B] border-zinc-700 text-white"
+                inputMode="numeric"
               />
             </div>
+
+            {supportsEndTime && (
+              <div>
+                <Label className="text-white">{t('theRace.endTime')}</Label>
+                <Input
+                  value={newStage.endTime}
+                  onChange={(e) => setNewStage({ ...newStage, endTime: formatScheduledStartInput(e.target.value) })}
+                  placeholder={t('theRace.placeholder.time')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  inputMode="numeric"
+                />
+              </div>
+            )}
             
             <div className="flex items-end">
               <Button
@@ -223,9 +360,8 @@ export default function TheRaceTab() {
                   <SelectItem key={stage.id} value={stage.id}>
                     <div className="flex items-center gap-2">
                       <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
-                      {stage.type === 'SS' && stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}
-                      {stage.name}
-                      {stage.type === 'Lap Race' && ` (${stage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
+                      {getStageTitle(stage)}
+                      {isLapRaceStageType(stage.type) && ` (${stage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
                     </div>
                   </SelectItem>
                 );
@@ -235,8 +371,8 @@ export default function TheRaceTab() {
           {currentStage && (
             <p className="mt-2 text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
-              LIVE: {currentStage.type === 'SS' && currentStage.ssNumber ? `SS${currentStage.ssNumber} - ` : ''}{currentStage.name}
-              {currentStage.type === 'Lap Race' && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
+              LIVE: {getStageTitle(currentStage)}
+              {isLapRaceStageType(currentStage.type) && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
             </p>
           )}
         </CardContent>
@@ -260,7 +396,7 @@ export default function TheRaceTab() {
                     <div className="flex items-center gap-2">
                       <Icon className={`w-5 h-5 ${getStageTypeColor(stage.type)}`} />
                       <h3 className="font-bold text-xl uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {stage.type === 'SS' && stage.ssNumber && <span className="text-[#FF4500]">SS{stage.ssNumber} </span>}
+                        {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)} </span>}
                         {stage.name}
                       </h3>
                       <span className={`text-xs px-2 py-0.5 rounded ${getStageTypeColor(stage.type)} bg-white/5`}>
@@ -268,8 +404,10 @@ export default function TheRaceTab() {
                       </span>
                     </div>
                     <div className="flex gap-4 mt-1 text-sm text-zinc-400">
-                      {stage.startTime && <span>{t('status.start')}: {stage.startTime}</span>}
-                      {stage.type === 'Lap Race' && (
+                      {stage.date && <span>{stage.date}</span>}
+                      {stage.distance && <span>{stage.distance} km</span>}
+                      {getDisplayedStageSchedule(stage) && <span>{getDisplayedStageSchedule(stage)}</span>}
+                      {isLapRaceStageType(stage.type) && (
                         <span className="text-[#FACC15]">{stage.numberOfLaps} {t('scene3.laps').toLowerCase()}</span>
                       )}
                     </div>
@@ -283,7 +421,7 @@ export default function TheRaceTab() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setEditingStage({ ...stage })}
+                          onClick={() => setEditingStage({ ...stage, date: formatDateForEditing(stage.date) })}
                           className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
                           data-testid={`button-edit-stage-${stage.id}`}
                         >
@@ -298,7 +436,7 @@ export default function TheRaceTab() {
                           <div className="space-y-4">
                             <div>
                               <Label className="text-white">{t('theRace.stageType')}</Label>
-                              <Select value={editingStage.type} onValueChange={(val) => setEditingStage({ ...editingStage, type: val })}>
+                              <Select value={editingStage.type} onValueChange={handleEditingStageTypeChange}>
                                 <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
                                   <SelectValue />
                                 </SelectTrigger>
@@ -317,7 +455,7 @@ export default function TheRaceTab() {
                                 className="bg-[#09090B] border-zinc-700 text-white"
                               />
                             </div>
-                            {editingStage.type === 'SS' && (
+                            {isSpecialStageType(editingStage.type) && (
                               <div>
                                 <Label className="text-white">{t('theRace.ssNumber')}</Label>
                                 <Input
@@ -327,7 +465,7 @@ export default function TheRaceTab() {
                                 />
                               </div>
                             )}
-                            {editingStage.type === 'Lap Race' && (
+                            {isLapRaceStageType(editingStage.type) && (
                               <div>
                                 <Label className="text-white">{t('theRace.numberOfLaps')}</Label>
                                 <Input
@@ -340,14 +478,47 @@ export default function TheRaceTab() {
                               </div>
                             )}
                             <div>
+                              <Label className="text-white">{t('theRace.date')}</Label>
+                              <Input
+                                value={editingStage.date || ''}
+                                onChange={(e) => setEditingStage({ ...editingStage, date: formatEditableDateInput(e.target.value) })}
+                                placeholder="DD/MM/YYYY"
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                                inputMode="numeric"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('theRace.distance')}</Label>
+                              <Input
+                                value={editingStage.distance || ''}
+                                onChange={(e) => setEditingStage({ ...editingStage, distance: e.target.value })}
+                                placeholder={t('theRace.placeholder.distance')}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                                inputMode="decimal"
+                              />
+                            </div>
+                            <div>
                               <Label className="text-white">{t('theRace.scheduledStart')}</Label>
                               <Input
                                 value={editingStage.startTime || ''}
-                                onChange={(e) => setEditingStage({ ...editingStage, startTime: e.target.value })}
+                                onChange={(e) => setEditingStage({ ...editingStage, startTime: formatScheduledStartInput(e.target.value) })}
                                 placeholder={t('theRace.placeholder.time')}
                                 className="bg-[#09090B] border-zinc-700 text-white"
+                                inputMode="numeric"
                               />
                             </div>
+                            {isTransitStageType(editingStage.type) && (
+                              <div>
+                                <Label className="text-white">{t('theRace.endTime')}</Label>
+                                <Input
+                                  value={editingStage.endTime || ''}
+                                  onChange={(e) => setEditingStage({ ...editingStage, endTime: formatScheduledStartInput(e.target.value) })}
+                                  placeholder={t('theRace.placeholder.time')}
+                                  className="bg-[#09090B] border-zinc-700 text-white"
+                                  inputMode="numeric"
+                                />
+                              </div>
+                            )}
                           </div>
                         )}
                         <DialogFooter>

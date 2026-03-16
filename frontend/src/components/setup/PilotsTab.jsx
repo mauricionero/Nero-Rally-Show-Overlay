@@ -24,7 +24,7 @@ export default function PilotsTab() {
     togglePilotActive
   } = useRally();
 
-  const [newPilot, setNewPilot] = useState({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
+  const [newPilot, setNewPilot] = useState({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '', timeOffsetMinutes: '' });
   const [editingPilot, setEditingPilot] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
 
@@ -35,10 +35,11 @@ export default function PilotsTab() {
     }
     const pilotData = {
       ...newPilot,
-      startOrder: parseInt(newPilot.startOrder) || 999
+      startOrder: parseInt(newPilot.startOrder) || 999,
+      timeOffsetMinutes: parseInt(newPilot.timeOffsetMinutes) || 0
     };
     addPilot(pilotData);
-    setNewPilot({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '' });
+    setNewPilot({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '', timeOffsetMinutes: '' });
     toast.success('Pilot added successfully');
   };
 
@@ -49,7 +50,8 @@ export default function PilotsTab() {
     }
     const pilotData = {
       ...editingPilot,
-      startOrder: parseInt(editingPilot.startOrder) || 999
+      startOrder: parseInt(editingPilot.startOrder) || 999,
+      timeOffsetMinutes: parseInt(editingPilot.timeOffsetMinutes) || 0
     };
     updatePilot(editingPilot.id, pilotData);
     setEditingPilot(null);
@@ -70,7 +72,7 @@ export default function PilotsTab() {
           <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('pilots.addNewPilot')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
             <div>
               <Label htmlFor="pilot-name" className="text-white">{t('pilots.pilotName')} *</Label>
               <Input
@@ -103,6 +105,18 @@ export default function PilotsTab() {
                 placeholder={t('pilots.placeholder.startOrder')}
                 className="bg-[#09090B] border-zinc-700 text-white"
                 data-testid="input-pilot-order"
+              />
+            </div>
+            <div>
+              <Label htmlFor="pilot-offset" className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
+              <Input
+                id="pilot-offset"
+                type="number"
+                value={newPilot.timeOffsetMinutes}
+                onChange={(e) => setNewPilot({ ...newPilot, timeOffsetMinutes: e.target.value })}
+                placeholder={t('pilots.placeholder.timeOffsetMinutes')}
+                className="bg-[#09090B] border-zinc-700 text-white"
+                data-testid="input-pilot-offset"
               />
             </div>
             <div>
@@ -170,6 +184,7 @@ export default function PilotsTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 text-sm">#{pilot.startOrder || '?'}</span>
+                    <span className="text-zinc-400 text-xs">+{pilot.timeOffsetMinutes || 0}m</span>
                     {pilot.carNumber && (
                       <span className="bg-[#FF4500] text-white text-xs font-bold px-1.5 py-0.5 rounded">
                         {pilot.carNumber}
@@ -237,6 +252,16 @@ export default function PilotsTab() {
                               type="number"
                               value={editingPilot.startOrder || ''}
                               onChange={(e) => setEditingPilot({ ...editingPilot, startOrder: e.target.value })}
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
+                            <Input
+                              type="number"
+                              value={editingPilot.timeOffsetMinutes ?? ''}
+                              onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value })}
+                              placeholder={t('pilots.placeholder.timeOffsetMinutes')}
                               className="bg-[#09090B] border-zinc-700 text-white"
                             />
                           </div>

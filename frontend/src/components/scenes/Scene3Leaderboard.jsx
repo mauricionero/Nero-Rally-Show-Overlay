@@ -5,8 +5,10 @@ import { LeftControls } from '../LeftControls.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { parseTime, getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
+import { parseTime, getPilotStatus, getReferenceNow, getRunningTime } from '../../utils/rallyHelpers';
+import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
+import { getStageTitle, isLapRaceStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 
 // Helper to calculate Lap Race positions and data
 const calculateLapRaceLeaderboard = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
@@ -74,31 +76,40 @@ const formatTimeMs = (ms) => {
   return `${mins}:${secs.padStart(6, '0')}`;
 };
 
+// Format cumulative rally time from seconds, switching to HH:MM:SS.fff above 1 hour
+const formatOverallTime = (totalSeconds) => {
+  if (!totalSeconds) return '-';
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = (totalSeconds % 60).toFixed(3).padStart(6, '0');
+
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${seconds}`;
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  return `${String(totalMinutes).padStart(2, '0')}:${seconds}`;
+};
+
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, categories, logoUrl, lapTimes, stagePilots } = useRally();
+  const { pilots, stages, times, startTimes, categories, logoUrl, lapTimes, stagePilots, debugDate } = useRally();
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [selectedStageType, setSelectedStageType] = useState('all'); // 'all', 'ss', 'lapRace'
   const [currentTime, setCurrentTime] = useState(new Date());
+  const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   
   const selectedStage = stages.find(s => s.id === selectedStageId);
   
   // Filter stages by type
-  const ssStages = stages.filter(s => s.type === 'SS');
-  const lapRaceStages = stages.filter(s => s.type === 'Lap Race');
+  const ssStages = stages.filter(s => isSpecialStageType(s.type));
+  const lapRaceStages = stages.filter(s => isLapRaceStageType(s.type));
   
   // Sort stages by start time
-  const sortedSSStages = [...ssStages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedSSStages = [...ssStages].sort(compareStagesBySchedule);
 
-  const sortedLapRaceStages = [...lapRaceStages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedLapRaceStages = [...lapRaceStages].sort(compareStagesBySchedule);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
@@ -109,13 +120,13 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   const leaderboard = useMemo(() => {
     // If a specific stage is selected
     if (selectedStageId && selectedStage) {
-      if (selectedStage.type === 'Lap Race') {
+      if (isLapRaceStageType(selectedStage.type)) {
         // Lap Race leaderboard
         return calculateLapRaceLeaderboard(pilots, selectedStageId, lapTimes, stagePilots, selectedStage.numberOfLaps || 5);
-      } else if (selectedStage.type === 'SS') {
-        // Single SS stage leaderboard
+      } else if (isSpecialStageType(selectedStage.type)) {
+        // Single special stage leaderboard
         return pilots.map(pilot => {
-          const status = getPilotStatus(pilot.id, selectedStageId, startTimes, times);
+          const status = getPilotStatus(pilot.id, selectedStageId, startTimes, times, selectedStage?.date, sceneNow);
           const startTime = startTimes[pilot.id]?.[selectedStageId];
           const finishTime = times[pilot.id]?.[selectedStageId];
           
@@ -124,7 +135,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           let sortTime = Infinity;
           
           if (status === 'racing' && startTime) {
-            displayTime = getRunningTime(startTime);
+            displayTime = getRunningTime(startTime, selectedStage?.date, sceneNow);
             timeColor = 'text-[#FACC15]';
             sortTime = parseTime(displayTime) || Infinity;
           } else if (status === 'finished' && finishTime) {
@@ -145,10 +156,10 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
               overallTime += parseTime(stageFinishTime);
               completedStages++;
             } else if (stage.id === selectedStageId) {
-              const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times);
+              const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times, stage.date, sceneNow);
               const stageStartTime = startTimes[pilot.id]?.[stage.id];
               if (stageStatus === 'racing' && stageStartTime) {
-                const runningTime = getRunningTime(stageStartTime);
+                const runningTime = getRunningTime(stageStartTime, stage.date, sceneNow);
                 overallTime += parseTime(runningTime) || 0;
                 hasRunningInOverall = true;
               }
@@ -157,9 +168,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             if (stage.id === selectedStageId) break;
           }
           
-          const overallMinutes = Math.floor(overallTime / 60);
-          const overallSeconds = (overallTime % 60).toFixed(3).padStart(6, '0');
-          const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? `${overallMinutes}:${overallSeconds}` : '-';
+          const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? formatOverallTime(overallTime) : '-';
           const overallColor = hasRunningInOverall ? 'text-[#FACC15]' : 'text-white';
           
           return {
@@ -194,19 +203,17 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           totalTime += parseTime(finishTime);
           completedStages++;
         } else {
-          const status = getPilotStatus(pilot.id, stage.id, startTimes, times);
+          const status = getPilotStatus(pilot.id, stage.id, startTimes, times, stage.date, sceneNow);
           const startTime = startTimes[pilot.id]?.[stage.id];
           if (status === 'racing' && startTime && !hasRunningStage) {
-            const runningTime = getRunningTime(startTime);
+            const runningTime = getRunningTime(startTime, stage.date, sceneNow);
             totalTime += parseTime(runningTime);
             hasRunningStage = true;
           }
         }
       });
 
-      const totalMinutes = Math.floor(totalTime / 60);
-      const totalSeconds = (totalTime % 60).toFixed(3).padStart(6, '0');
-      const displayTime = (completedStages > 0 || hasRunningStage) ? `${totalMinutes}:${totalSeconds}` : '-';
+      const displayTime = (completedStages > 0 || hasRunningStage) ? formatOverallTime(totalTime) : '-';
 
       return {
         ...pilot,
@@ -224,15 +231,16 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       if (!b.hasTime) return -1;
       return a.sortTime - b.sortTime;
     });
-  }, [selectedStageId, selectedStage, pilots, times, startTimes, lapTimes, stagePilots, sortedSSStages]);
+  }, [selectedStageId, selectedStage, pilots, times, startTimes, lapTimes, stagePilots, sortedSSStages, sceneNow]);
 
   const leader = leaderboard.find(p => p.hasTime);
-  const isLapRaceSelected = selectedStage?.type === 'Lap Race';
+  const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
 
   // Get stage icon based on type
   const getStageIcon = (type) => {
     switch (type) {
       case 'SS': return Flag;
+      case SUPER_PRIME_STAGE_TYPE: return Flag;
       case 'Lap Race': return RotateCcw;
       case 'Liaison': return Car;
       case 'Service Park': return Timer;
@@ -278,8 +286,8 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                     {sortedSSStages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
                         <div className="flex items-center gap-2">
-                          <Flag className="w-4 h-4 text-[#FF4500]" />
-                          {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
+                          <Flag className={`w-4 h-4 ${stage.type === SUPER_PRIME_STAGE_TYPE ? 'text-orange-400' : 'text-[#FF4500]'}`} />
+                          {getStageTitle(stage)}
                         </div>
                       </SelectItem>
                     ))}
@@ -315,7 +323,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             {selectedStage ? (
               <>
                 {React.createElement(getStageIcon(selectedStage.type), { 
-                  className: `w-10 h-10 ${selectedStage.type === 'Lap Race' ? 'text-[#FACC15]' : 'text-[#FF4500]'}` 
+                  className: `w-10 h-10 ${selectedStage.type === 'Lap Race' ? 'text-[#FACC15]' : selectedStage.type === SUPER_PRIME_STAGE_TYPE ? 'text-orange-400' : 'text-[#FF4500]'}` 
                 })}
               </>
             ) : (
@@ -324,9 +332,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           </div>
           <h1 className="text-6xl font-bold uppercase text-[#FF4500] mb-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             {selectedStage 
-              ? (selectedStage.type === 'SS' && selectedStage.ssNumber 
-                  ? `SS${selectedStage.ssNumber} - ${selectedStage.name}`
-                  : selectedStage.name)
+              ? getStageTitle(selectedStage)
               : t('scene3.overallStandings')
             }
           </h1>

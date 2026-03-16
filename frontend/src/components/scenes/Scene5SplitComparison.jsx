@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { parseTime } from '../../utils/rallyHelpers';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { getStageTitle } from '../../utils/stageTypes.js';
 
 export default function Scene5SplitComparison() {
   const { pilots, stages, times } = useRally();
@@ -38,7 +39,7 @@ export default function Scene5SplitComparison() {
               <SelectContent>
                 {stages.map((stage) => (
                   <SelectItem key={stage.id} value={stage.id}>
-                    {stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}{stage.name}
+                    {getStageTitle(stage)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -124,7 +125,7 @@ export default function Scene5SplitComparison() {
         {selectedStage && (
           <div className="mt-8 text-center">
             <p className="text-zinc-400 text-sm">
-              Comparing times for {selectedStage.ssNumber ? `SS${selectedStage.ssNumber} - ` : ''}{selectedStage.name}
+              Comparing times for {getStageTitle(selectedStage)}
             </p>
           </div>
         )}

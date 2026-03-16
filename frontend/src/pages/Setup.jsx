@@ -1,12 +1,9 @@
 import React from 'react';
-import { useRally } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
-import { Play, Palette } from 'lucide-react';
+import { Play } from 'lucide-react';
 
 // app version constant
 import { VERSION } from '../config/version.js';
@@ -18,17 +15,10 @@ import TheRaceTab from '../components/setup/TheRaceTab.jsx';
 import TimesTab from '../components/setup/TimesTab.jsx';
 import StreamsTab from '../components/setup/StreamsTab.jsx';
 import ConfigTab from '../components/setup/ConfigTab.jsx';
+import DebugTab from '../components/setup/DebugTab.jsx';
 
 export default function Setup() {
-  const { chromaKey, setChromaKey } = useRally();
   const { t } = useTranslation();
-  const [customChroma, setCustomChroma] = React.useState('#000000');
-
-  const CHROMA_PRESETS = [
-    { name: t('config.black'), value: '#000000', label: 'K' },
-    { name: t('config.greenScreen'), value: '#00B140', label: 'G' },
-    { name: t('config.blueScreen'), value: '#0047BB', label: 'B' }
-  ];
 
   const handleGoLive = () => {
     const basePath = process.env.PUBLIC_URL || '';
@@ -64,53 +54,6 @@ export default function Setup() {
           </div>
         </div>
 
-        {/* Chroma Key Selector */}
-        <Card className="mb-6 bg-[#18181B] border-zinc-800">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              <Palette className="w-5 h-5" />
-              {t('config.backgroundChromaKey')}
-            </CardTitle>
-            <CardDescription className="text-zinc-400">{t('config.selectBackground')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              {CHROMA_PRESETS.map((preset) => (
-                <button
-                  key={preset.value}
-                  onClick={() => setChromaKey(preset.value)}
-                  className={`px-4 py-2 rounded border-2 transition-all hover:scale-105 ${
-                    chromaKey === preset.value ? 'border-[#FF4500]' : 'border-zinc-700'
-                  }`}
-                  style={{ backgroundColor: preset.value }}
-                  data-testid={`chroma-${preset.label.toLowerCase()}-button`}
-                >
-                  <span className="text-white font-bold" style={{ textShadow: '0 0 4px rgba(0,0,0,0.8)' }}>
-                    {preset.name}
-                  </span>
-                </button>
-              ))}
-              <div className="flex gap-2 items-center">
-                <Input
-                  type="color"
-                  value={customChroma}
-                  onChange={(e) => setCustomChroma(e.target.value)}
-                  className="w-16 h-10 cursor-pointer"
-                  data-testid="custom-chroma-picker"
-                />
-                <Button
-                  onClick={() => setChromaKey(customChroma)}
-                  variant="outline"
-                  className="border-zinc-700 text-white"
-                  data-testid="apply-custom-chroma-button"
-                >
-                  {t('config.applyCustom')}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <Tabs defaultValue="pilots" className="space-y-6">
           <TabsList className="bg-[#18181B] border border-zinc-800">
             <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">{t('tabs.pilots')}</TabsTrigger>
@@ -119,6 +62,7 @@ export default function Setup() {
             <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">{t('tabs.times')}</TabsTrigger>
             <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">{t('tabs.streams')}</TabsTrigger>
             <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">{t('tabs.config')}</TabsTrigger>
+            <TabsTrigger value="debug" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-debug">{t('tabs.debug')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pilots">
@@ -143,6 +87,10 @@ export default function Setup() {
 
           <TabsContent value="config">
             <ConfigTab />
+          </TabsContent>
+
+          <TabsContent value="debug">
+            <DebugTab />
           </TabsContent>
         </Tabs>
       </div>
