@@ -7,9 +7,10 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Image, Globe, Trash2 } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Copy, Check, Image, Globe, Trash2, Palette } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
 import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 export default function ConfigTab() {
   const { t } = useTranslation();
@@ -17,6 +18,9 @@ export default function ConfigTab() {
     pilots,
     categories,
     stages,
+    cameras,
+    chromaKey,
+    setChromaKey,
     mapUrl,
     setMapUrl,
     logoUrl,
@@ -41,9 +45,16 @@ export default function ConfigTab() {
   const fileInputRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const [newKey, setNewKey] = useState('');
+  const [customChroma, setCustomChroma] = useState('#000000');
 
-  const activePilots = pilots.filter(p => p.isActive);
   const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
+  const CHROMA_PRESETS = [
+    { name: t('config.black'), value: '#000000', label: 'K' },
+    { name: t('config.greenScreen'), value: '#00B140', label: 'G' },
+    { name: t('config.blueScreen'), value: '#0047BB', label: 'B' }
+  ];
+  const countedStages = stages.filter((stage) => isSpecialStageType(stage.type) || isLapRaceStageType(stage.type));
+  const streamSourceCount = pilots.filter((pilot) => pilot.streamUrl).length + cameras.filter((camera) => camera.streamUrl).length;
 
   const renderMediaIconValue = (iconValue) => {
     const option = EXTERNAL_MEDIA_ICON_OPTIONS.find((item) => item.value === iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
@@ -355,34 +366,6 @@ export default function ConfigTab() {
         </CardContent>
       </Card>
 
-      {/* Keyboard Shortcuts */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('config.keyboardShortcuts')}</CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.keyboardShortcutsDesc')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">1</kbd> {t('config.switchToScene')} 1</span>
-              <span className="text-zinc-500">{t('scenes.liveStage')}</span>
-            </div>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">2</kbd> {t('config.switchToScene')} 2</span>
-              <span className="text-zinc-500">{t('scenes.timingTower')}</span>
-            </div>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">3</kbd> {t('config.switchToScene')} 3</span>
-              <span className="text-zinc-500">{t('scenes.leaderboard')}</span>
-            </div>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">4</kbd> {t('config.switchToScene')} 4</span>
-              <span className="text-zinc-500">{t('scenes.pilotFocus')}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Data Management */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
@@ -435,6 +418,81 @@ export default function ConfigTab() {
         </CardContent>
       </Card>
 
+      {/* Chroma Key */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Palette className="w-5 h-5" />
+            {t('config.backgroundChromaKey')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.selectBackground')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-3">
+            {CHROMA_PRESETS.map((preset) => (
+              <button
+                key={preset.value}
+                onClick={() => setChromaKey(preset.value)}
+                className={`px-4 py-2 rounded border-2 transition-all hover:scale-105 ${
+                  chromaKey === preset.value ? 'border-[#FF4500]' : 'border-zinc-700'
+                }`}
+                style={{ backgroundColor: preset.value }}
+                data-testid={`chroma-${preset.label.toLowerCase()}-button`}
+              >
+                <span className="text-white font-bold" style={{ textShadow: '0 0 4px rgba(0,0,0,0.8)' }}>
+                  {preset.name}
+                </span>
+              </button>
+            ))}
+            <div className="flex gap-2 items-center">
+              <Input
+                type="color"
+                value={customChroma}
+                onChange={(e) => setCustomChroma(e.target.value)}
+                className="w-16 h-10 cursor-pointer"
+                data-testid="custom-chroma-picker"
+              />
+              <Button
+                onClick={() => setChromaKey(customChroma)}
+                variant="outline"
+                className="border-zinc-700 text-white"
+                data-testid="apply-custom-chroma-button"
+              >
+                {t('config.applyCustom')}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Keyboard Shortcuts */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('config.keyboardShortcuts')}</CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.keyboardShortcutsDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">1</kbd> {t('config.switchToScene')} 1</span>
+              <span className="text-zinc-500">{t('scenes.liveStage')}</span>
+            </div>
+            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">2</kbd> {t('config.switchToScene')} 2</span>
+              <span className="text-zinc-500">{t('scenes.timingTower')}</span>
+            </div>
+            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">3</kbd> {t('config.switchToScene')} 3</span>
+              <span className="text-zinc-500">{t('scenes.leaderboard')}</span>
+            </div>
+            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
+              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">4</kbd> {t('config.switchToScene')} 4</span>
+              <span className="text-zinc-500">{t('scenes.pilotFocus')}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Current Summary */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
@@ -451,12 +509,12 @@ export default function ConfigTab() {
               <div className="text-sm text-zinc-400">{t('config.categoriesCount')}</div>
             </div>
             <div className="bg-[#09090B] p-4 rounded">
-              <div className="text-3xl font-bold text-[#FF4500]">{stages.length}</div>
+              <div className="text-3xl font-bold text-[#FF4500]">{countedStages.length}</div>
               <div className="text-sm text-zinc-400">{t('config.stagesCount')}</div>
             </div>
             <div className="bg-[#09090B] p-4 rounded">
-              <div className="text-3xl font-bold text-[#22C55E]">{activePilots.length}</div>
-              <div className="text-sm text-zinc-400">{t('streams.pilotStreams')}</div>
+              <div className="text-3xl font-bold text-[#22C55E]">{streamSourceCount}</div>
+              <div className="text-sm text-zinc-400">{t('config.liveSourcesCount')}</div>
             </div>
           </div>
         </CardContent>

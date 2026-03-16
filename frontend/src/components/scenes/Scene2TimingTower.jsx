@@ -4,10 +4,11 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { getPilotStatus, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
+import { getPilotStatus, getReferenceNow, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { getStageNumberLabel, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 // Helper to calculate positions for Lap Race
 const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
@@ -68,7 +69,7 @@ const formatTime = (ms) => {
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, debugDate
   } = useRally();
   const { t } = useTranslation();
   
@@ -77,8 +78,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const [expandedPilotId, setExpandedPilotId] = useState(null);
   
   const currentStage = stages.find(s => s.id === currentStageId);
-  const isLapRace = currentStage?.type === 'Lap Race';
-  const isSSStage = currentStage?.type === 'SS';
+  const isLapRace = isLapRaceStageType(currentStage?.type);
+  const isSSStage = isSpecialStageType(currentStage?.type);
+  const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
     return () => clearInterval(interval);
@@ -93,9 +95,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     }
     
     // SS Stage - use existing logic
-    const sortedPilots = sortPilotsByStatus(pilots, currentStageId, startTimes, times);
+    const sortedPilots = sortPilotsByStatus(pilots, currentStageId, startTimes, times, currentStage?.date, sceneNow);
     return sortedPilots.map((pilot, index) => {
-      const status = getPilotStatus(pilot.id, currentStageId, startTimes, times);
+      const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, currentStage?.date, sceneNow);
       return {
         pilot,
         position: index + 1,
@@ -104,7 +106,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         isRacing: status === 'racing'
       };
     });
-  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times]);
+  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, sceneNow]);
 
   useEffect(() => {
     if (!selectedFeedValue && sortedPilotsData.length > 0) {
@@ -187,7 +189,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         timeColor = 'text-[#22C55E]';
         statusColor = 'bg-[#22C55E]';
       } else if (isRacing && startTime) {
-        displayTime = getRunningTime(startTime);
+        displayTime = getRunningTime(startTime, currentStage?.date, sceneNow);
         timeColor = 'text-[#FF8C00]';
         statusColor = 'bg-[#FF8C00]';
       } else if (startTime) {
@@ -343,7 +345,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           {currentStage && (
             <div className="flex items-center gap-2 mt-1 relative z-10">
               <span className="text-zinc-400 text-xs font-bold uppercase">
-                {isSSStage && currentStage.ssNumber ? `SS${currentStage.ssNumber} ` : ''}
+                {isSSStage && currentStage.ssNumber ? `${getStageNumberLabel(currentStage)} ` : ''}
                 {currentStage.name}
                 {isLapRace && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
               </span>

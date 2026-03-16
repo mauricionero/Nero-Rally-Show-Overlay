@@ -49,6 +49,7 @@ tabs:
   times: "Tempos"
   streams: "Streams"
   config: "Config"
+  debug: "Debug"
 
 # ===========================================
 # ABA PILOTOS
@@ -98,12 +99,14 @@ theRace:
   stageType: "Tipo de Etapa"
   ssNumber: "Número SS"
   numberOfLaps: "Número de Voltas"
+  date: "Data"
   distance: "Distância"
   scheduledStart: "Horário Previsto"
   endTime: "Horário Final"
   noStages: "Nenhuma etapa cadastrada. Adicione sua primeira etapa acima."
   stageTypes:
     ss: "SS (Especial)"
+    superPrime: "Super Prime"
     lapRace: "Corrida de Voltas"
     liaison: "Deslocamento"
     servicePark: "Parque de Serviço"
@@ -215,6 +218,20 @@ config:
   pilotsCount: "Pilotos"
   categoriesCount: "Categorias"
   stagesCount: "Etapas"
+  liveSourcesCount: "Fontes ao Vivo"
+
+# ===========================================
+# ABA DEBUG
+# ===========================================
+debug:
+  title: "Data de Debug"
+  description: "Sobrescreve o dia atual para testar a logica de tempo e status das etapas."
+  simulatedDate: "Data Simulada"
+  help: "Usa a data selecionada junto com o horario atual real."
+  clearDebugDate: "Usar Data Real"
+  activeDate: "Data Debug Ativa"
+  usingRealDate: "Usando data atual real"
+  syncNote: "Este valor e salvo localmente e sincronizado por WebSocket, mas nao entra na exportacao."
 
 # ===========================================
 # PÁGINA OVERLAY - CENAS

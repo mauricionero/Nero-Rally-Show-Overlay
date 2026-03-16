@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getWebSocketProvider, generateChannelKey, parseChannelKey, PROVIDER_NAME } from '../utils/websocketProvider';
 import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
+import { isLapRaceStageType, isManualStartStageType } from '../utils/stageTypes.js';
 
 const RallyContext = createContext();
 
@@ -36,6 +37,7 @@ export const RallyProvider = ({ children }) => {
   const [arrivalTimes, setArrivalTimes] = useState(() => loadFromStorage('rally_arrival_times', {}));
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
+  const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
   const [mapUrl, setMapUrl] = useState(() => loadFromStorage('rally_map_url', ''));
   const [logoUrl, setLogoUrl] = useState(() => loadFromStorage('rally_logo_url', ''));
@@ -70,6 +72,7 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
     setStartTimes(loadFromStorage('rally_start_times', {}));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
+    setDebugDate(loadFromStorage('rally_debug_date', ''));
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
     setMapUrl(loadFromStorage('rally_map_url', ''));
     setLogoUrl(loadFromStorage('rally_logo_url', ''));
@@ -101,6 +104,7 @@ export const RallyProvider = ({ children }) => {
     if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
     if (data.startTimes) setStartTimes(data.startTimes);
     if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
+    if (data.debugDate !== undefined) setDebugDate(data.debugDate);
     if (data.chromaKey) setChromaKey(data.chromaKey);
     if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
     if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
@@ -143,6 +147,7 @@ export const RallyProvider = ({ children }) => {
       arrivalTimes,
       startTimes,
       currentStageId,
+      debugDate,
       chromaKey,
       mapUrl,
       logoUrl,
@@ -154,7 +159,7 @@ export const RallyProvider = ({ children }) => {
     };
     
     await wsProvider.current.publish(data);
-  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, chromaKey, mapUrl, logoUrl, externalMedia, streamConfigs, globalAudio, cameras]);
+  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, debugDate, chromaKey, mapUrl, logoUrl, externalMedia, streamConfigs, globalAudio, cameras]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey) => {
@@ -274,6 +279,11 @@ export const RallyProvider = ({ children }) => {
   }, [startTimes]);
 
   useEffect(() => {
+    localStorage.setItem('rally_debug_date', JSON.stringify(debugDate));
+    updateDataVersion();
+  }, [debugDate]);
+
+  useEffect(() => {
     setStartTimes((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -283,11 +293,15 @@ export const RallyProvider = ({ children }) => {
         let pilotChanged = false;
 
         stages.forEach((stage) => {
-          if (stage.type === 'Lap Race') {
+          if (isLapRaceStageType(stage.type)) {
             if (nextPilotTimes[stage.id]) {
               delete nextPilotTimes[stage.id];
               pilotChanged = true;
             }
+            return;
+          }
+
+          if (isManualStartStageType(stage.type)) {
             return;
           }
 
@@ -470,9 +484,10 @@ export const RallyProvider = ({ children }) => {
       id: Date.now().toString(),
       name: stage.name,
       type: stage.type || 'SS',
-      ssNumber: stage.ssNumber || '', // Only for SS type
+      ssNumber: stage.ssNumber || '', // For SS / Super Prime stage types
+      date: stage.date || '',
       distance: stage.distance || '',
-      startTime: stage.startTime || '', // For SS/Liaison/Service Park: schedule time. For Lap Race: race start time
+      startTime: stage.startTime || '', // For SS/Super Prime/Liaison/Service Park: schedule time. For Lap Race: race start time
       endTime: stage.endTime || '',
       numberOfLaps: stage.numberOfLaps || 5, // For Lap Race type
       ...stage
@@ -480,7 +495,7 @@ export const RallyProvider = ({ children }) => {
     setStages(prev => [...prev, newStage]);
     
     // For Lap Race, initialize with all pilots selected by default
-    if (stage.type === 'Lap Race') {
+    if (isLapRaceStageType(stage.type)) {
       setStagePilots(prev => ({
         ...prev,
         [newStage.id]: pilots.map(p => p.id)
@@ -799,6 +814,7 @@ export const RallyProvider = ({ children }) => {
     setTimes({});
     setArrivalTimes({});
     setStartTimes([]);
+    setDebugDate('');
     setStreamConfigs({});
     setCameras([]);
     setExternalMedia([]);
@@ -823,6 +839,7 @@ export const RallyProvider = ({ children }) => {
     times,
     arrivalTimes,
     startTimes,
+    debugDate,
     streamConfigs,
     globalAudio,
     cameras,
@@ -840,6 +857,7 @@ export const RallyProvider = ({ children }) => {
     // Setters
     setEventName,
     setCurrentScene,
+    setDebugDate,
     setChromaKey,
     setMapUrl,
     setLogoUrl,

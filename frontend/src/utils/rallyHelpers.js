@@ -1,6 +1,39 @@
 // Helper functions for pilot status and timing
 
-export const getPilotStatus = (pilotId, stageId, startTimes, times) => {
+export const getReferenceNow = (debugDate, now = new Date()) => {
+  if (!debugDate) return now;
+
+  const match = debugDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return now;
+
+  const referenceNow = new Date(now);
+  referenceNow.setFullYear(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return referenceNow;
+};
+
+export const getStageDateTime = (stageDate, clockTime) => {
+  if (!clockTime) return null;
+
+  const parts = clockTime.split(':');
+  if (parts.length < 2) return null;
+
+  const [hours, minutes] = parts.map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+
+  const date = stageDate ? new Date(`${stageDate}T00:00:00`) : new Date();
+  if (Number.isNaN(date.getTime())) return null;
+
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+};
+
+export const hasStageDateTimePassed = (clockTime, stageDate, now = new Date()) => {
+  const stageDateTime = getStageDateTime(stageDate, clockTime);
+  if (!stageDateTime) return false;
+  return now >= stageDateTime;
+};
+
+export const getPilotStatus = (pilotId, stageId, startTimes, times, stageDate, now = new Date()) => {
   const startTime = startTimes[pilotId]?.[stageId];
   const finishTime = times[pilotId]?.[stageId];
   
@@ -12,26 +45,19 @@ export const getPilotStatus = (pilotId, stageId, startTimes, times) => {
     return 'not_started';
   }
   
-  const now = new Date();
-  const [hours, minutes] = startTime.split(':').map(Number);
-  const startDate = new Date();
-  startDate.setHours(hours, minutes, 0, 0);
-  
-  if (now >= startDate) {
+  if (hasStageDateTimePassed(startTime, stageDate, now)) {
     return 'racing';
   }
   
   return 'not_started';
 };
 
-export const getRunningTime = (startTime) => {
+export const getRunningTime = (startTime, stageDate, now = new Date()) => {
   if (!startTime) return '00:00.000';
   
   try {
-    const now = new Date();
-    const [hours, minutes] = startTime.split(':').map(Number);
-    const startDate = new Date();
-    startDate.setHours(hours, minutes, 0, 0);
+    const startDate = getStageDateTime(stageDate, startTime);
+    if (!startDate) return '00:00.000';
     
     if (now < startDate) return '00:00.000';
     
@@ -63,12 +89,12 @@ export const parseTime = (timeStr) => {
   }
 };
 
-export const sortPilotsByStatus = (pilots, stageId, startTimes, times) => {
+export const sortPilotsByStatus = (pilots, stageId, startTimes, times, stageDate, now = new Date()) => {
   const statusOrder = { racing: 0, finished: 1, not_started: 2 };
   
   return [...pilots].sort((a, b) => {
-    const statusA = getPilotStatus(a.id, stageId, startTimes, times);
-    const statusB = getPilotStatus(b.id, stageId, startTimes, times);
+    const statusA = getPilotStatus(a.id, stageId, startTimes, times, stageDate, now);
+    const statusB = getPilotStatus(b.id, stageId, startTimes, times, stageDate, now);
     
     if (statusOrder[statusA] !== statusOrder[statusB]) {
       return statusOrder[statusA] - statusOrder[statusB];

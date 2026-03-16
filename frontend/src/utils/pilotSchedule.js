@@ -1,3 +1,9 @@
+import {
+  isLapRaceStageType,
+  isManualStartStageType,
+  isTransitStageType
+} from './stageTypes.js';
+
 export const getPilotTimeOffsetMinutes = (pilot) => {
   const parsed = parseInt(pilot?.timeOffsetMinutes, 10);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -22,11 +28,11 @@ export const addMinutesToClockTime = (timeStr, minutesToAdd) => {
 };
 
 export const getPilotScheduledStartTime = (stage, pilot) => {
-  if (!stage || stage.type === 'Lap Race' || !stage.startTime) return '';
+  if (!stage || isLapRaceStageType(stage.type) || isManualStartStageType(stage.type) || !stage.startTime) return '';
   return addMinutesToClockTime(stage.startTime, getPilotTimeOffsetMinutes(pilot));
 };
 
 export const getPilotScheduledEndTime = (stage, pilot) => {
-  if (!stage || (stage.type !== 'Liaison' && stage.type !== 'Service Park') || !stage.endTime) return '';
+  if (!stage || !isTransitStageType(stage.type) || !stage.endTime) return '';
   return addMinutesToClockTime(stage.endTime, getPilotTimeOffsetMinutes(pilot));
 };

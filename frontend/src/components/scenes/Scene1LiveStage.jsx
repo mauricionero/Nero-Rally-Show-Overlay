@@ -6,9 +6,10 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
-import { getPilotStatus, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
+import { getPilotStatus, getReferenceNow, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
 import { ChevronLeft, ChevronRight, Flag, RotateCcw, Video } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -70,7 +71,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, times, categories, 
     chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions,
-    cameras, externalMedia
+    cameras, externalMedia, debugDate
   } = useRally();
   const { t } = useTranslation();
   
@@ -90,8 +91,8 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   
   const currentStage = stages.find(s => s.id === currentStageId);
   const activeMedia = externalMedia.filter(m => m.url);
-  const isLapRace = currentStage?.type === 'Lap Race';
-  const isSSStage = currentStage?.type === 'SS';
+  const isLapRace = isLapRaceStageType(currentStage?.type);
+  const isSSStage = isSpecialStageType(currentStage?.type);
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
   
   useEffect(() => {
@@ -101,6 +102,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
+  const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   
   // Calculate sorted pilots based on stage type
   const sortedPilotsWithPositions = useMemo(() => {
@@ -113,9 +115,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     }
     
     // For SS and other types, use the existing sort
-    const sorted = sortPilotsByStatus(pilots, currentStageId, startTimes, times);
+    const sorted = sortPilotsByStatus(pilots, currentStageId, startTimes, times, currentStage?.date, sceneNow);
     return sorted.map((pilot, index) => ({ pilot, position: index + 1 }));
-  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times]);
+  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, sceneNow]);
 
   // Track position changes for animation
   useEffect(() => {
@@ -196,8 +198,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
   const displayItems = selectedSlotIds.map(id => getDisplayItem(id)).filter(Boolean);
 
-  const getGridClass = () => {
-    return `grid-cols-${layout.cols} grid-rows-${layout.rows}`;
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`
   };
 
   // Get pilot position and lap info for Lap Race
@@ -215,11 +218,11 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   // Get stage display name - always show stage name, not event name
   const getStageDisplayName = () => {
     if (!currentStage) return '';
-    
-    if (isSSStage && currentStage.ssNumber) {
-      return `SS${currentStage.ssNumber} ${currentStage.name}`;
+
+    if (isSSStage) {
+      return getStageTitle(currentStage, ' ');
     }
-    
+
     return currentStage.name;
   };
 
@@ -356,7 +359,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
         </div>
       </LeftControls>
 
-      <div className={`grid ${getGridClass()} gap-4 h-[calc(100%-200px)]`}>
+      <div className="grid gap-4 h-[calc(100%-200px)]" style={gridStyle}>
         {displayItems.length === 0 ? (
           <div className="flex items-center justify-center h-full col-span-full">
             <div className="text-center">
@@ -437,12 +440,12 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               }
             } else if (isSSStage) {
               // SS Stage display (original logic)
-              const status = getPilotStatus(pilot.id, currentStageId, startTimes, times);
+              const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, currentStage?.date, sceneNow);
               const startTime = startTimes[pilot.id]?.[currentStageId];
               const finishTime = times[pilot.id]?.[currentStageId];
               
               if (status === 'racing' && startTime) {
-                displayTime = getRunningTime(startTime);
+                displayTime = getRunningTime(startTime, currentStage?.date, sceneNow);
                 timeColor = 'text-[#FF8C00]';
               } else if (status === 'finished' && finishTime) {
                 displayTime = finishTime;
@@ -550,7 +553,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       timeColor = 'text-[#FACC15]';
                     }
                   } else if (isSSStage) {
-                    const status = getPilotStatus(pilot.id, currentStageId, startTimes, times);
+                    const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, currentStage?.date, sceneNow);
                     const startTime = startTimes[pilot.id]?.[currentStageId];
                     const finishTime = times[pilot.id]?.[currentStageId];
                     
@@ -560,7 +563,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       timeColor = 'text-[#22C55E]';
                     } else if (status === 'racing' && startTime) {
                       borderColor = 'border-[#FF8C00]';
-                      timeDisplay = getRunningTime(startTime);
+                      timeDisplay = getRunningTime(startTime, currentStage?.date, sceneNow);
                       timeColor = 'text-[#FF8C00]';
                     } else if (startTime) {
                       timeDisplay = `Start: ${startTime}`;

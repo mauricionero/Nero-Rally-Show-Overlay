@@ -49,6 +49,7 @@ tabs:
   times: "Times"
   streams: "Streams"
   config: "Config"
+  debug: "Debug"
 
 # ===========================================
 # PILOTS TAB
@@ -98,12 +99,14 @@ theRace:
   stageType: "Stage Type"
   ssNumber: "SS Number"
   numberOfLaps: "Number of Laps"
+  date: "Date"
   distance: "Distance"
   scheduledStart: "Scheduled Start"
   endTime: "End Time"
   noStages: "No stages registered. Add your first stage above."
   stageTypes:
     ss: "SS (Special Stage)"
+    superPrime: "Super Prime"
     lapRace: "Lap Race"
     liaison: "Liaison"
     servicePark: "Service Park"
@@ -215,6 +218,20 @@ config:
   pilotsCount: "Pilots"
   categoriesCount: "Categories"
   stagesCount: "Stages"
+  liveSourcesCount: "Live Sources"
+
+# ===========================================
+# DEBUG TAB
+# ===========================================
+debug:
+  title: "Debug Date"
+  description: "Override the current day for testing stage timing and status logic."
+  simulatedDate: "Simulated Date"
+  help: "Uses the selected date together with the real current clock time."
+  clearDebugDate: "Use Real Date"
+  activeDate: "Active Debug Date"
+  usingRealDate: "Using real current date"
+  syncNote: "This value is saved locally and synced by WebSocket, but it is not included in exports."
 
 # ===========================================
 # OVERLAY PAGE - SCENES

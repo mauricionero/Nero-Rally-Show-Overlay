@@ -6,17 +6,25 @@ import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
-import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
+import { getPilotStatus, getReferenceNow, getRunningTime, hasStageDateTimePassed } from '../../utils/rallyHelpers';
 import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getPilotScheduledEndTime } from '../../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
+import {
+  getStageNumberLabel,
+  getStageTitle,
+  isLapRaceStageType,
+  isSpecialStageType,
+  SUPER_PRIME_STAGE_TYPE
+} from '../../utils/stageTypes.js';
 
 // Helper to get stage type icon
 const getStageIcon = (type) => {
   switch (type) {
     case 'SS': return Flag;
+    case SUPER_PRIME_STAGE_TYPE: return Flag;
     case 'Lap Race': return RotateCcw;
     case 'Liaison': return Car;
     case 'Service Park': return Timer;
@@ -28,6 +36,7 @@ const getStageIcon = (type) => {
 const getStageTypeColor = (type) => {
   switch (type) {
     case 'SS': return '#FF4500';
+    case SUPER_PRIME_STAGE_TYPE: return '#FB923C';
     case 'Lap Race': return '#FACC15';
     case 'Liaison': return '#3B82F6';
     case 'Service Park': return '#22C55E';
@@ -71,7 +80,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia
+    lapTimes, stagePilots, cameras, externalMedia, debugDate
   } = useRally();
   const { t } = useTranslation();
   
@@ -79,6 +88,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
   const [selectedMainFeedValue, setSelectedMainFeedValue] = useState('none');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
@@ -106,8 +116,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
 
   const focusPilot = pilots.find(p => p.id === selectedPilotId);
   const selectedStage = stages.find(s => s.id === selectedStageId);
-  const isLapRace = selectedStage?.type === 'Lap Race';
-  const isSSStage = selectedStage?.type === 'SS';
+  const isLapRace = isLapRaceStageType(selectedStage?.type);
 
   // Get pilot's stage times with sorted stages
   const sortedStages = useMemo(() => {
@@ -119,8 +128,8 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     if (!focusPilot) return [];
     
     return sortedStages.map((stage) => {
-      const isLap = stage.type === 'Lap Race';
-      const isSS = stage.type === 'SS';
+      const isLap = isLapRaceStageType(stage.type);
+      const isSS = isSpecialStageType(stage.type);
       
       if (isLap) {
         // Lap Race data
@@ -175,13 +184,13 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         };
       } else if (isSS) {
         // SS Stage data
-        const status = getPilotStatus(focusPilot.id, stage.id, startTimes, times);
+        const status = getPilotStatus(focusPilot.id, stage.id, startTimes, times, stage.date, sceneNow);
         const startTime = startTimes[focusPilot.id]?.[stage.id];
         const finishTime = times[focusPilot.id]?.[stage.id];
         
         let displayTime = '-';
         if (status === 'racing' && startTime) {
-          displayTime = getRunningTime(startTime);
+          displayTime = getRunningTime(startTime, stage.date, sceneNow);
         } else if (status === 'finished' && finishTime) {
           displayTime = finishTime;
         } else if (status === 'not_started' && startTime) {
@@ -198,7 +207,6 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         // Liaison / Service Park
         const startTime = startTimes[focusPilot.id]?.[stage.id];
         const endTime = getPilotScheduledEndTime(stage, focusPilot);
-        const nowTime = currentTime.toTimeString().slice(0, 5);
 
         let displayTime = `${startTime || ''} -> ${endTime || ''}`.trim();
         let status = 'not_started';
@@ -207,9 +215,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           displayTime = '-';
         }
 
-        if (endTime && nowTime >= endTime) {
+        if (endTime && hasStageDateTimePassed(endTime, stage.date, sceneNow)) {
           status = 'finished';
-        } else if (startTime && nowTime >= startTime) {
+        } else if (startTime && hasStageDateTimePassed(startTime, stage.date, sceneNow)) {
           status = 'racing';
         }
 
@@ -221,7 +229,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         };
       }
     });
-  }, [sortedStages, focusPilot, lapTimes, startTimes, times, currentTime]);
+  }, [sortedStages, focusPilot, lapTimes, startTimes, times, sceneNow]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
   const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia }), [pilots, cameras, externalMedia]);
@@ -284,8 +292,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     <SelectItem key={stage.id} value={stage.id}>
                       <div className="flex items-center gap-2">
                         <Icon className="w-4 h-4" style={{ color: getStageTypeColor(stage.type) }} />
-                        {stage.type === 'SS' && stage.ssNumber ? `SS${stage.ssNumber} - ` : ''}
-                        {stage.name}
+                        {getStageTitle(stage)}
                       </div>
                     </SelectItem>
                   );
@@ -345,7 +352,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     style: { color: getStageTypeColor(selectedStage?.type) }
                   })}
                   <p className="text-zinc-400 text-xs uppercase">
-                    {selectedStage?.type === 'SS' && selectedStage?.ssNumber ? `SS${selectedStage.ssNumber}` : selectedStage?.name}
+                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                   </p>
                 </div>
                 <p className={`text-2xl font-mono font-bold ${
@@ -402,7 +409,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     style: { color: getStageTypeColor(selectedStage?.type) }
                   })}
                   <p className="text-zinc-400 text-xs uppercase">
-                    {selectedStage?.type === 'SS' && selectedStage?.ssNumber ? `SS${selectedStage.ssNumber}` : selectedStage?.name}
+                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                   </p>
                 </div>
                 <p className={`text-2xl font-mono font-bold ${
@@ -449,7 +456,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     style: { color: getStageTypeColor(selectedStage?.type) }
                   })}
                   <p className="text-zinc-400 text-xs uppercase">
-                    {selectedStage?.type === 'SS' && selectedStage?.ssNumber ? `SS${selectedStage.ssNumber}` : selectedStage?.name}
+                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                   </p>
                 </div>
                 <p className={`text-2xl font-mono font-bold ${
@@ -472,7 +479,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     style: { color: getStageTypeColor(selectedStage?.type) }
                   })}
                   <p className="text-zinc-400 text-xs uppercase">
-                    {selectedStage?.type === 'SS' && selectedStage?.ssNumber ? `SS${selectedStage.ssNumber}` : selectedStage?.name}
+                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                   </p>
                 </div>
                 <p className={`text-2xl font-mono font-bold ${
@@ -606,7 +613,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                       <div className="flex items-center gap-2">
                         <Icon className="w-4 h-4" style={{ color: stageColor }} />
                         <span className="text-zinc-400 uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          {item.stage.type === 'SS' && item.stage.ssNumber ? `SS${item.stage.ssNumber}` : item.stage.name}
+                          {isSpecialStageType(item.stage.type) && item.stage.ssNumber ? getStageNumberLabel(item.stage) : item.stage.name}
                         </span>
                       </div>
                       <span className={`text-lg font-mono ${

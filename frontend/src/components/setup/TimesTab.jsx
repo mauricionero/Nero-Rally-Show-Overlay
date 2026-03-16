@@ -11,14 +11,34 @@ import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversi
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square } from 'lucide-react';
+import {
+  getStageNumberLabel,
+  isLapRaceStageType,
+  isManualStartStageType,
+  isSpecialStageType,
+  isTransitStageType,
+  SUPER_PRIME_STAGE_TYPE
+} from '../../utils/stageTypes.js';
 
 const getDisplayedStageSchedule = (stage) => {
   if (!stage) return '';
-  if (stage.type === 'Liaison' || stage.type === 'Service Park') {
+  if (isTransitStageType(stage.type)) {
     return formatStageScheduleRange(stage);
   }
   return stage.startTime || '';
 };
+
+const formatClockInput = (value) => {
+  const digits = value.replace(/\D/g, '').slice(-4);
+
+  if (!digits) return '';
+  if (digits.length <= 2) return digits;
+  if (digits.length === 3) return `0${digits[0]}:${digits.slice(1)}`;
+
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+};
+
+const isValidClockTime = (value) => /^\d{2}:\d{2}$/.test(value);
 
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = () => {
@@ -62,6 +82,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 const getStageTypeIcon = (type) => {
   switch (type) {
     case 'SS': return Flag;
+    case SUPER_PRIME_STAGE_TYPE: return Flag;
     case 'Lap Race': return RotateCcw;
     case 'Liaison': return Car;
     case 'Service Park': return Timer;
@@ -72,6 +93,7 @@ const getStageTypeIcon = (type) => {
 const getStageTypeColor = (type) => {
   switch (type) {
     case 'SS': return 'border-l-[#FF4500]';
+    case SUPER_PRIME_STAGE_TYPE: return 'border-l-orange-400';
     case 'Lap Race': return 'border-l-[#FACC15]';
     case 'Liaison': return 'border-l-blue-400';
     case 'Service Park': return 'border-l-green-400';
@@ -79,15 +101,15 @@ const getStageTypeColor = (type) => {
   }
 };
 
-// SS Stage Component - Card layout for each pilot
-function SSStageCard({ stage, pilots, categories }) {
+function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) {
   const { t } = useTranslation();
   const {
-    times,
     setTime,
     getTime,
     setArrivalTime,
-    getArrivalTime
+    getArrivalTime,
+    setStartTime,
+    getStartTime
   } = useRally();
 
   const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
@@ -95,8 +117,8 @@ function SSStageCard({ stage, pilots, categories }) {
   const handleArrivalTimeChange = (pilotId, value) => {
     setArrivalTime(pilotId, stage.id, value);
     const pilot = pilots.find((item) => item.id === pilotId);
-    const startTime = getPilotScheduledStartTime(stage, pilot);
-    if (startTime && value) {
+    const startTime = manualStartTime ? getStartTime(pilotId, stage.id) : getPilotScheduledStartTime(stage, pilot);
+    if (isValidClockTime(startTime) && value) {
       const totalTime = arrivalTimeToTotal(value, startTime);
       if (totalTime) {
         setTime(pilotId, stage.id, totalTime);
@@ -107,9 +129,36 @@ function SSStageCard({ stage, pilots, categories }) {
   const handleTotalTimeChange = (pilotId, value) => {
     setTime(pilotId, stage.id, value);
     const pilot = pilots.find((item) => item.id === pilotId);
-    const startTime = getPilotScheduledStartTime(stage, pilot);
-    if (startTime && value) {
+    const startTime = manualStartTime ? getStartTime(pilotId, stage.id) : getPilotScheduledStartTime(stage, pilot);
+    if (isValidClockTime(startTime) && value) {
       const arrivalTime = totalTimeToArrival(value, startTime);
+      if (arrivalTime) {
+        setArrivalTime(pilotId, stage.id, arrivalTime);
+      }
+    }
+  };
+
+  const handleStartTimeChange = (pilotId, value) => {
+    const nextStartTime = formatClockInput(value);
+    setStartTime(pilotId, stage.id, nextStartTime);
+
+    if (!isValidClockTime(nextStartTime)) {
+      return;
+    }
+
+    const currentArrivalTime = getArrivalTime(pilotId, stage.id);
+    const currentTotalTime = getTime(pilotId, stage.id);
+
+    if (currentArrivalTime) {
+      const totalTime = arrivalTimeToTotal(currentArrivalTime, nextStartTime);
+      if (totalTime) {
+        setTime(pilotId, stage.id, totalTime);
+      }
+      return;
+    }
+
+    if (currentTotalTime) {
+      const arrivalTime = totalTimeToArrival(currentTotalTime, nextStartTime);
       if (arrivalTime) {
         setArrivalTime(pilotId, stage.id, arrivalTime);
       }
@@ -120,7 +169,10 @@ function SSStageCard({ stage, pilots, categories }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       {sortedPilots.map((pilot) => {
         const category = categories.find(c => c.id === pilot.categoryId);
-        const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
+        const startTimeValue = manualStartTime
+          ? getStartTime(pilot.id, stage.id)
+          : getPilotScheduledStartTime(stage, pilot);
+
         return (
           <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
             {category && (
@@ -144,12 +196,38 @@ function SSStageCard({ stage, pilots, categories }) {
               <div className="mb-2">
                 <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
                 <div className="flex items-center gap-1">
-                  <Input
-                    value={inferredStartTime}
-                    readOnly
-                    placeholder="--:--"
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8"
-                  />
+                  {manualStartTime ? (
+                    <>
+                      <Input
+                        value={startTimeValue}
+                        onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
+                        placeholder={t('times.placeholder.shortTime')}
+                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                        inputMode="numeric"
+                      />
+                      <button
+                        onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                        className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
+                        title={t('times.now')}
+                      >
+                        <Clock className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleStartTimeChange(pilot.id, '')}
+                        className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
+                        title={t('common.clear')}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <Input
+                      value={startTimeValue}
+                      readOnly
+                      placeholder="--:--"
+                      className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8"
+                    />
+                  )}
                 </div>
               </div>
               
@@ -474,26 +552,31 @@ export default function TimesTab() {
             <CardHeader>
               <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                 <Icon className="w-5 h-5" />
-                {stage.type === 'SS' && stage.ssNumber && <span className="text-[#FF4500]">SS{stage.ssNumber}</span>}
+                {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
                 {stage.name}
-                {stage.type === 'Lap Race' && (
+                {isLapRaceStageType(stage.type) && (
                   <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})</span>
                 )}
               </CardTitle>
-              {stage.type !== 'Lap Race' && getDisplayedStageSchedule(stage) && (
+              {!isLapRaceStageType(stage.type) && getDisplayedStageSchedule(stage) && (
                 <CardDescription className="text-zinc-400">
                   {t('times.scheduled')}: {getDisplayedStageSchedule(stage)}
                 </CardDescription>
               )}
             </CardHeader>
             <CardContent>
-              {stage.type === 'SS' && (
-                <SSStageCard stage={stage} pilots={pilots} categories={categories} />
+              {isSpecialStageType(stage.type) && (
+                <TimedStageCard
+                  stage={stage}
+                  pilots={pilots}
+                  categories={categories}
+                  manualStartTime={isManualStartStageType(stage.type)}
+                />
               )}
-              {(stage.type === 'Liaison' || stage.type === 'Service Park') && (
+              {isTransitStageType(stage.type) && (
                 <LiaisonStageCard stage={stage} pilots={pilots} categories={categories} />
               )}
-              {stage.type === 'Lap Race' && (
+              {isLapRaceStageType(stage.type) && (
                 <LapRaceStageCard stage={stage} pilots={pilots} categories={categories} />
               )}
             </CardContent>
