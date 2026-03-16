@@ -9,6 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import { TimeInput } from '../TimeInput.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
+import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square } from 'lucide-react';
 
 const getDisplayedStageSchedule = (stage) => {
@@ -86,16 +87,15 @@ function SSStageCard({ stage, pilots, categories }) {
     setTime,
     getTime,
     setArrivalTime,
-    getArrivalTime,
-    setStartTime,
-    getStartTime
+    getArrivalTime
   } = useRally();
 
   const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
 
   const handleArrivalTimeChange = (pilotId, value) => {
     setArrivalTime(pilotId, stage.id, value);
-    const startTime = getStartTime(pilotId, stage.id);
+    const pilot = pilots.find((item) => item.id === pilotId);
+    const startTime = getPilotScheduledStartTime(stage, pilot);
     if (startTime && value) {
       const totalTime = arrivalTimeToTotal(value, startTime);
       if (totalTime) {
@@ -106,7 +106,8 @@ function SSStageCard({ stage, pilots, categories }) {
 
   const handleTotalTimeChange = (pilotId, value) => {
     setTime(pilotId, stage.id, value);
-    const startTime = getStartTime(pilotId, stage.id);
+    const pilot = pilots.find((item) => item.id === pilotId);
+    const startTime = getPilotScheduledStartTime(stage, pilot);
     if (startTime && value) {
       const arrivalTime = totalTimeToArrival(value, startTime);
       if (arrivalTime) {
@@ -119,6 +120,7 @@ function SSStageCard({ stage, pilots, categories }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       {sortedPilots.map((pilot) => {
         const category = categories.find(c => c.id === pilot.categoryId);
+        const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
         return (
           <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
             {category && (
@@ -143,18 +145,11 @@ function SSStageCard({ stage, pilots, categories }) {
                 <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
                 <div className="flex items-center gap-1">
                   <Input
-                    value={getStartTime(pilot.id, stage.id)}
-                    onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
-                    placeholder={t('times.placeholder.shortTime')}
+                    value={inferredStartTime}
+                    readOnly
+                    placeholder="--:--"
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8"
                   />
-                  <button
-                    onClick={() => setStartTime(pilot.id, stage.id, '')}
-                    className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
-                    title={t('common.clear')}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
                 </div>
               </div>
               
@@ -214,7 +209,6 @@ function SSStageCard({ stage, pilots, categories }) {
 // Liaison/Service Park Stage Component - Simple start/end per pilot
 function LiaisonStageCard({ stage, pilots, categories }) {
   const { t } = useTranslation();
-  const { setStartTime, getStartTime, setTime, getTime } = useRally();
 
   const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
 
@@ -222,6 +216,8 @@ function LiaisonStageCard({ stage, pilots, categories }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       {sortedPilots.map((pilot) => {
         const category = categories.find(c => c.id === pilot.categoryId);
+        const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
+        const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
         return (
           <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
             {category && (
@@ -241,24 +237,11 @@ function LiaisonStageCard({ stage, pilots, categories }) {
                 <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
                 <div className="flex items-center gap-1">
                   <Input
-                    value={getStartTime(pilot.id, stage.id)}
-                    onChange={(e) => setStartTime(pilot.id, stage.id, e.target.value)}
-                    placeholder={t('times.placeholder.shortTime')}
+                    value={inferredStartTime}
+                    readOnly
+                    placeholder="--:--"
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
                   />
-                  <button
-                    onClick={() => setStartTime(pilot.id, stage.id, getCurrentTimeString().slice(0, 5))}
-                    className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                    title={t('times.now')}
-                  >
-                    <Clock className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setStartTime(pilot.id, stage.id, '')}
-                    className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
                 </div>
               </div>
               
@@ -267,24 +250,11 @@ function LiaisonStageCard({ stage, pilots, categories }) {
                 <Label className="text-xs text-zinc-400">{t('times.endTime')}</Label>
                 <div className="flex items-center gap-1">
                   <Input
-                    value={getTime(pilot.id, stage.id)}
-                    onChange={(e) => setTime(pilot.id, stage.id, e.target.value)}
-                    placeholder={t('times.placeholder.shortTime')}
+                    value={inferredEndTime}
+                    readOnly
+                    placeholder="--:--"
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
                   />
-                  <button
-                    onClick={() => setTime(pilot.id, stage.id, getCurrentTimeString().slice(0, 5))}
-                    className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                    title={t('times.now')}
-                  >
-                    <Clock className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setTime(pilot.id, stage.id, '')}
-                    className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
                 </div>
               </div>
             </CardContent>

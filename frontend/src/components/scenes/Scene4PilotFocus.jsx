@@ -10,6 +10,7 @@ import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { getPilotScheduledEndTime } from '../../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 
 // Helper to get stage type icon
@@ -196,16 +197,19 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
       } else {
         // Liaison / Service Park
         const startTime = startTimes[focusPilot.id]?.[stage.id];
-        const endTime = times[focusPilot.id]?.[stage.id];
-        
-        let displayTime = '-';
+        const endTime = getPilotScheduledEndTime(stage, focusPilot);
+        const nowTime = currentTime.toTimeString().slice(0, 5);
+
+        let displayTime = `${startTime || ''} -> ${endTime || ''}`.trim();
         let status = 'not_started';
-        
-        if (endTime) {
-          displayTime = `${startTime || '?'} → ${endTime}`;
+
+        if (!displayTime) {
+          displayTime = '-';
+        }
+
+        if (endTime && nowTime >= endTime) {
           status = 'finished';
-        } else if (startTime) {
-          displayTime = `Start: ${startTime}`;
+        } else if (startTime && nowTime >= startTime) {
           status = 'racing';
         }
 
@@ -217,7 +221,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         };
       }
     });
-  }, [sortedStages, focusPilot, lapTimes, startTimes, times]);
+  }, [sortedStages, focusPilot, lapTimes, startTimes, times, currentTime]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
   const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia }), [pilots, cameras, externalMedia]);

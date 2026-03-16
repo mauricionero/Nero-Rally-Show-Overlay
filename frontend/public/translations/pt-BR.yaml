@@ -58,6 +58,7 @@ pilots:
   pilotName: "Nome do Piloto"
   carNumber: "Nº Carro"
   startOrder: "Ordem de Largada"
+  timeOffsetMinutes: "Offset de Tempo (min)"
   category: "Categoria"
   pictureUrl: "URL da Foto"
   streamUrl: "URL do Stream"
@@ -68,6 +69,7 @@ pilots:
     name: "João Silva"
     carNumber: "42"
     startOrder: "1"
+    timeOffsetMinutes: "2"
     pictureUrl: "https://..."
     streamUrl: "https://ninja.vdo/..."
 

@@ -75,6 +75,22 @@ const formatTimeMs = (ms) => {
   return `${mins}:${secs.padStart(6, '0')}`;
 };
 
+// Format cumulative rally time from seconds, switching to HH:MM:SS.fff above 1 hour
+const formatOverallTime = (totalSeconds) => {
+  if (!totalSeconds) return '-';
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = (totalSeconds % 60).toFixed(3).padStart(6, '0');
+
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${seconds}`;
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  return `${String(totalMinutes).padStart(2, '0')}:${seconds}`;
+};
+
 export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, categories, logoUrl, lapTimes, stagePilots } = useRally();
   const { t } = useTranslation();
@@ -150,9 +166,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             if (stage.id === selectedStageId) break;
           }
           
-          const overallMinutes = Math.floor(overallTime / 60);
-          const overallSeconds = (overallTime % 60).toFixed(3).padStart(6, '0');
-          const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? `${overallMinutes}:${overallSeconds}` : '-';
+          const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? formatOverallTime(overallTime) : '-';
           const overallColor = hasRunningInOverall ? 'text-[#FACC15]' : 'text-white';
           
           return {
@@ -197,9 +211,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         }
       });
 
-      const totalMinutes = Math.floor(totalTime / 60);
-      const totalSeconds = (totalTime % 60).toFixed(3).padStart(6, '0');
-      const displayTime = (completedStages > 0 || hasRunningStage) ? `${totalMinutes}:${totalSeconds}` : '-';
+      const displayTime = (completedStages > 0 || hasRunningStage) ? formatOverallTime(totalTime) : '-';
 
       return {
         ...pilot,

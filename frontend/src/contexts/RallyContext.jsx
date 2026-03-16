@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getWebSocketProvider, generateChannelKey, parseChannelKey, PROVIDER_NAME } from '../utils/websocketProvider';
+import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
 
 const RallyContext = createContext();
 
@@ -273,6 +274,52 @@ export const RallyProvider = ({ children }) => {
   }, [startTimes]);
 
   useEffect(() => {
+    setStartTimes((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      pilots.forEach((pilot) => {
+        const nextPilotTimes = { ...(next[pilot.id] || {}) };
+        let pilotChanged = false;
+
+        stages.forEach((stage) => {
+          if (stage.type === 'Lap Race') {
+            if (nextPilotTimes[stage.id]) {
+              delete nextPilotTimes[stage.id];
+              pilotChanged = true;
+            }
+            return;
+          }
+
+          const derivedStartTime = getPilotScheduledStartTime(stage, pilot);
+          const currentValue = nextPilotTimes[stage.id] || '';
+
+          if (derivedStartTime) {
+            if (currentValue !== derivedStartTime) {
+              nextPilotTimes[stage.id] = derivedStartTime;
+              pilotChanged = true;
+            }
+          } else if (currentValue) {
+            delete nextPilotTimes[stage.id];
+            pilotChanged = true;
+          }
+        });
+
+        if (pilotChanged) {
+          if (Object.keys(nextPilotTimes).length > 0) {
+            next[pilot.id] = nextPilotTimes;
+          } else {
+            delete next[pilot.id];
+          }
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [pilots, stages]);
+
+  useEffect(() => {
     localStorage.setItem('rally_current_stage', JSON.stringify(currentStageId));
     updateDataVersion();
   }, [currentStageId]);
@@ -339,6 +386,7 @@ export const RallyProvider = ({ children }) => {
       streamUrl: pilot.streamUrl || '',
       categoryId: pilot.categoryId || null,
       startOrder: pilot.startOrder || 999,
+      timeOffsetMinutes: pilot.timeOffsetMinutes || 0,
       isActive: false,
       ...pilot
     };
