@@ -279,7 +279,7 @@ scene2:
   selectPilotWithStream: "Select a pilot with an active stream"
   mainFeed: "Main Feed"
   selectFeed: "Select Feed"
-  noPilotsOrCameras: "No feeds available"
+  noPilotsOrCameras: "No pilots or cameras available"
 
 # ===========================================
 # SCENE 3 - LEADERBOARD

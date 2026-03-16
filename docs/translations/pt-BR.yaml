@@ -279,7 +279,7 @@ scene2:
   selectPilotWithStream: "Selecione um piloto com stream ativo"
   mainFeed: "Feed Principal"
   selectFeed: "Selecionar Feed"
-  noPilotsOrCameras: "Nenhum feed disponível"
+  noPilotsOrCameras: "Nenhum piloto ou câmera disponível"
 
 # ===========================================
 # CENA 3 - CLASSIFICAÇÃO
