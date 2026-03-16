@@ -9,6 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
+import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
+
+const formatScheduledStartInput = (value) => {
+  const digits = value.replace(/\D/g, '').slice(-4);
+
+  if (!digits) return '';
+  if (digits.length <= 2) return digits;
+  if (digits.length === 3) return `0${digits[0]}:${digits.slice(1)}`;
+
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+};
 
 export default function TheRaceTab() {
   const { t } = useTranslation();
@@ -30,7 +41,7 @@ export default function TheRaceTab() {
     { id: 'Service Park', name: t('theRace.stageTypes.servicePark'), description: 'Service/repair period', icon: Timer }
   ];
 
-  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', startTime: '', numberOfLaps: 5 });
+  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', distance: '', startTime: '', endTime: '', numberOfLaps: 5 });
   const [editingStage, setEditingStage] = useState(null);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
 
@@ -40,7 +51,7 @@ export default function TheRaceTab() {
       return;
     }
     addStage(newStage);
-    setNewStage({ name: '', type: 'SS', ssNumber: '', startTime: '', numberOfLaps: 5 });
+    setNewStage({ name: '', type: 'SS', ssNumber: '', distance: '', startTime: '', endTime: '', numberOfLaps: 5 });
     toast.success('Stage added successfully');
   };
 
@@ -55,15 +66,36 @@ export default function TheRaceTab() {
     toast.success('Updated successfully');
   };
 
-  const sortedStages = [...stages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedStages = [...stages].sort(compareStagesBySchedule);
 
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRaceType = newStage.type === 'Lap Race';
   const isSSType = newStage.type === 'SS';
+  const supportsEndTime = newStage.type === 'Liaison' || newStage.type === 'Service Park';
+
+  const getDisplayedStageSchedule = (stage) => {
+    if (!stage) return '';
+    if (stage.type === 'Liaison' || stage.type === 'Service Park') {
+      return formatStageScheduleRange(stage);
+    }
+    return stage.startTime || '';
+  };
+
+  const handleNewStageTypeChange = (type) => {
+    setNewStage((prev) => ({
+      ...prev,
+      type,
+      endTime: type === 'Liaison' || type === 'Service Park' ? prev.endTime : ''
+    }));
+  };
+
+  const handleEditingStageTypeChange = (type) => {
+    setEditingStage((prev) => prev ? ({
+      ...prev,
+      type,
+      endTime: type === 'Liaison' || type === 'Service Park' ? (prev.endTime || '') : ''
+    }) : prev);
+  };
 
   const getStageTypeIcon = (type) => {
     const stageType = STAGE_TYPES.find(t => t.id === type);
@@ -119,7 +151,7 @@ export default function TheRaceTab() {
                 return (
                   <button
                     key={type.id}
-                    onClick={() => setNewStage({ ...newStage, type: type.id })}
+                    onClick={() => handleNewStageTypeChange(type.id)}
                     className={`p-3 rounded-lg border-2 text-left transition-all ${
                       newStage.type === type.id
                         ? 'border-[#FF4500] bg-[#FF4500]/10'
@@ -139,7 +171,7 @@ export default function TheRaceTab() {
           </div>
 
           {/* Stage Details Form */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
             <div className="md:col-span-2">
               <Label className="text-white">{t('theRace.stageName')} *</Label>
               <Input
@@ -176,16 +208,41 @@ export default function TheRaceTab() {
                 />
               </div>
             )}
+
+            <div>
+              <Label className="text-white">{t('theRace.distance')}</Label>
+              <Input
+                value={newStage.distance}
+                onChange={(e) => setNewStage({ ...newStage, distance: e.target.value })}
+                placeholder={t('theRace.placeholder.distance')}
+                className="bg-[#09090B] border-zinc-700 text-white"
+                inputMode="decimal"
+              />
+            </div>
             
             <div>
               <Label className="text-white">{t('theRace.scheduledStart')}</Label>
               <Input
                 value={newStage.startTime}
-                onChange={(e) => setNewStage({ ...newStage, startTime: e.target.value })}
+                onChange={(e) => setNewStage({ ...newStage, startTime: formatScheduledStartInput(e.target.value) })}
                 placeholder={t('theRace.placeholder.time')}
                 className="bg-[#09090B] border-zinc-700 text-white"
+                inputMode="numeric"
               />
             </div>
+
+            {supportsEndTime && (
+              <div>
+                <Label className="text-white">{t('theRace.endTime')}</Label>
+                <Input
+                  value={newStage.endTime}
+                  onChange={(e) => setNewStage({ ...newStage, endTime: formatScheduledStartInput(e.target.value) })}
+                  placeholder={t('theRace.placeholder.time')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  inputMode="numeric"
+                />
+              </div>
+            )}
             
             <div className="flex items-end">
               <Button
@@ -268,7 +325,8 @@ export default function TheRaceTab() {
                       </span>
                     </div>
                     <div className="flex gap-4 mt-1 text-sm text-zinc-400">
-                      {stage.startTime && <span>{t('status.start')}: {stage.startTime}</span>}
+                      {stage.distance && <span>{stage.distance} km</span>}
+                      {getDisplayedStageSchedule(stage) && <span>{getDisplayedStageSchedule(stage)}</span>}
                       {stage.type === 'Lap Race' && (
                         <span className="text-[#FACC15]">{stage.numberOfLaps} {t('scene3.laps').toLowerCase()}</span>
                       )}
@@ -298,7 +356,7 @@ export default function TheRaceTab() {
                           <div className="space-y-4">
                             <div>
                               <Label className="text-white">{t('theRace.stageType')}</Label>
-                              <Select value={editingStage.type} onValueChange={(val) => setEditingStage({ ...editingStage, type: val })}>
+                              <Select value={editingStage.type} onValueChange={handleEditingStageTypeChange}>
                                 <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
                                   <SelectValue />
                                 </SelectTrigger>
@@ -340,14 +398,37 @@ export default function TheRaceTab() {
                               </div>
                             )}
                             <div>
+                              <Label className="text-white">{t('theRace.distance')}</Label>
+                              <Input
+                                value={editingStage.distance || ''}
+                                onChange={(e) => setEditingStage({ ...editingStage, distance: e.target.value })}
+                                placeholder={t('theRace.placeholder.distance')}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                                inputMode="decimal"
+                              />
+                            </div>
+                            <div>
                               <Label className="text-white">{t('theRace.scheduledStart')}</Label>
                               <Input
                                 value={editingStage.startTime || ''}
-                                onChange={(e) => setEditingStage({ ...editingStage, startTime: e.target.value })}
+                                onChange={(e) => setEditingStage({ ...editingStage, startTime: formatScheduledStartInput(e.target.value) })}
                                 placeholder={t('theRace.placeholder.time')}
                                 className="bg-[#09090B] border-zinc-700 text-white"
+                                inputMode="numeric"
                               />
                             </div>
+                            {(editingStage.type === 'Liaison' || editingStage.type === 'Service Park') && (
+                              <div>
+                                <Label className="text-white">{t('theRace.endTime')}</Label>
+                                <Input
+                                  value={editingStage.endTime || ''}
+                                  onChange={(e) => setEditingStage({ ...editingStage, endTime: formatScheduledStartInput(e.target.value) })}
+                                  placeholder={t('theRace.placeholder.time')}
+                                  className="bg-[#09090B] border-zinc-700 text-white"
+                                  inputMode="numeric"
+                                />
+                              </div>
+                            )}
                           </div>
                         )}
                         <DialogFooter>

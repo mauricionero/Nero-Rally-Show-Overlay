@@ -423,7 +423,9 @@ export const RallyProvider = ({ children }) => {
       name: stage.name,
       type: stage.type || 'SS',
       ssNumber: stage.ssNumber || '', // Only for SS type
+      distance: stage.distance || '',
       startTime: stage.startTime || '', // For SS/Liaison/Service Park: schedule time. For Lap Race: race start time
+      endTime: stage.endTime || '',
       numberOfLaps: stage.numberOfLaps || 5, // For Lap Race type
       ...stage
     };

@@ -8,7 +8,16 @@ import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { TimeInput } from '../TimeInput.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
+import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square } from 'lucide-react';
+
+const getDisplayedStageSchedule = (stage) => {
+  if (!stage) return '';
+  if (stage.type === 'Liaison' || stage.type === 'Service Park') {
+    return formatStageScheduleRange(stage);
+  }
+  return stage.startTime || '';
+};
 
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = () => {
@@ -466,11 +475,7 @@ export default function TimesTab() {
   const { t } = useTranslation();
   const { pilots, stages, categories } = useRally();
 
-  const sortedStages = [...stages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedStages = [...stages].sort(compareStagesBySchedule);
 
   if (pilots.length === 0) {
     return (
@@ -505,9 +510,9 @@ export default function TimesTab() {
                   <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})</span>
                 )}
               </CardTitle>
-              {stage.type !== 'Lap Race' && stage.startTime && (
+              {stage.type !== 'Lap Race' && getDisplayedStageSchedule(stage) && (
                 <CardDescription className="text-zinc-400">
-                  {t('times.scheduled')}: {stage.startTime}
+                  {t('times.scheduled')}: {getDisplayedStageSchedule(stage)}
                 </CardDescription>
               )}
             </CardHeader>

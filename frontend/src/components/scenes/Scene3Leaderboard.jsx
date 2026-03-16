@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { parseTime, getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
+import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
 
 // Helper to calculate Lap Race positions and data
@@ -88,17 +89,9 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   const lapRaceStages = stages.filter(s => s.type === 'Lap Race');
   
   // Sort stages by start time
-  const sortedSSStages = [...ssStages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedSSStages = [...ssStages].sort(compareStagesBySchedule);
 
-  const sortedLapRaceStages = [...lapRaceStages].sort((a, b) => {
-    if (!a.startTime) return 1;
-    if (!b.startTime) return -1;
-    return a.startTime.localeCompare(b.startTime);
-  });
+  const sortedLapRaceStages = [...lapRaceStages].sort(compareStagesBySchedule);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);

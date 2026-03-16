@@ -2,11 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
+import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { getPilotStatus, getRunningTime } from '../../utils/rallyHelpers';
 import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
+import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
+import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 
 // Helper to get stage type icon
 const getStageIcon = (type) => {
@@ -66,16 +70,14 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras
+    lapTimes, stagePilots, cameras, externalMedia
   } = useRally();
   const { t } = useTranslation();
   
   const [selectedPilotId, setSelectedPilotId] = useState(pilots[0]?.id || null);
   const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
-  const [selectedCameraId, setSelectedCameraId] = useState(null); // null = use pilot stream as main
+  const [selectedMainFeedValue, setSelectedMainFeedValue] = useState('none');
   const [currentTime, setCurrentTime] = useState(new Date());
-
-  const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
@@ -108,11 +110,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
 
   // Get pilot's stage times with sorted stages
   const sortedStages = useMemo(() => {
-    return [...stages].sort((a, b) => {
-      if (!a.startTime) return 1;
-      if (!b.startTime) return -1;
-      return a.startTime.localeCompare(b.startTime);
-    });
+    return [...stages].sort(compareStagesBySchedule);
   }, [stages]);
 
   // Build pilot stage data based on stage type
@@ -222,6 +220,21 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   }, [sortedStages, focusPilot, lapTimes, startTimes, times]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
+  const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia }), [pilots, cameras, externalMedia]);
+  const selectedMainFeed = selectedMainFeedValue === 'none' ? null : findFeedByValue(availableFeeds, selectedMainFeedValue);
+  const SelectedMediaIcon = selectedMainFeed?.type === 'media'
+    ? getExternalMediaIconComponent(selectedMainFeed.icon)
+    : null;
+  const showFocusPilotPip = !!selectedMainFeed
+    && !!focusPilot?.streamUrl
+    && !hideStreams
+    && !(selectedMainFeed.type === 'pilot' && selectedMainFeed.id === focusPilot.id);
+
+  useEffect(() => {
+    if (selectedMainFeedValue !== 'none' && !findFeedByValue(availableFeeds, selectedMainFeedValue)) {
+      setSelectedMainFeedValue('none');
+    }
+  }, [availableFeeds, selectedMainFeedValue]);
 
   // Early return after all hooks
   if (!focusPilot) {
@@ -277,28 +290,24 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
             </Select>
           </div>
 
-          {/* Camera Selection */}
-          {activeCameras.length > 0 && (
+          {/* Main Feed Selection */}
+          {availableFeeds.length > 0 && (
             <div>
-              <Label className="text-white text-xs uppercase mb-2 block">{t('scene4.mainCamera')}</Label>
-              <Select value={selectedCameraId || 'none'} onValueChange={(val) => setSelectedCameraId(val === 'none' ? null : val)}>
-                <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    <span className="text-zinc-400">{t('scene4.noneUsesPilotStream')}</span>
-                  </SelectItem>
-                  {activeCameras.map((camera) => (
-                    <SelectItem key={camera.id} value={camera.id}>
-                      <div className="flex items-center gap-2">
-                        <Video className="w-4 h-4 text-[#FF4500]" />
-                        {camera.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-white text-xs uppercase mb-2 block">{t('scene4.mainFeed')}</Label>
+              <FeedSelect
+                value={selectedMainFeedValue}
+                onValueChange={setSelectedMainFeedValue}
+                feeds={availableFeeds}
+                placeholder={t('scene4.mainFeed')}
+                noneOption={{ value: 'none', label: t('scene4.noneUsesPilotStream') }}
+                triggerClassName="bg-[#18181B] border-zinc-700 text-white text-sm"
+                contentClassName="bg-[#18181B] border-zinc-700 text-white"
+                groupLabels={{
+                  cameras: t('streams.additionalCameras'),
+                  media: t('config.externalMedia'),
+                  pilots: t('tabs.pilots')
+                }}
+              />
             </div>
           )}
         </div>
@@ -306,23 +315,77 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
 
       {/* Stream Display */}
       <div className="flex-1 p-8">
-        {selectedCameraId && activeCameras.find(c => c.id === selectedCameraId) ? (
-          /* Camera as main feed with pilot PiP */
+        {selectedMainFeed?.type === 'media' ? (
           <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-            {!hideStreams && (
+            <iframe
+              src={selectedMainFeed.url}
+              className="w-full h-full border-0"
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              title={selectedMainFeed.name}
+            />
+
+            <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
+              {SelectedMediaIcon && <SelectedMediaIcon className="w-4 h-4 text-[#FF4500]" />}
+              <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {selectedMainFeed.name}
+              </span>
+            </div>
+
+            {selectedStageData && (
+              <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                <div className="flex items-center gap-2 mb-1">
+                  {React.createElement(getStageIcon(selectedStage?.type), {
+                    className: 'w-4 h-4',
+                    style: { color: getStageTypeColor(selectedStage?.type) }
+                  })}
+                  <p className="text-zinc-400 text-xs uppercase">
+                    {selectedStage?.type === 'SS' && selectedStage?.ssNumber ? `SS${selectedStage.ssNumber}` : selectedStage?.name}
+                  </p>
+                </div>
+                <p className={`text-2xl font-mono font-bold ${
+                  selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                  selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                  'text-zinc-500'
+                }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  {selectedStageData.time}
+                </p>
+              </div>
+            )}
+
+            {showFocusPilotPip && (
+              <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
+                <StreamPlayer
+                  pilotId={focusPilot.id}
+                  streamUrl={focusPilot.streamUrl}
+                  name={focusPilot.name}
+                  className="w-full h-full"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+                  <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {focusPilot.name}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : selectedMainFeed ? (
+          /* Selected feed as main with focus pilot PiP */
+          <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
+            {!hideStreams && selectedMainFeed.streamUrl && (
               <StreamPlayer
-                pilotId={selectedCameraId}
-                streamUrl={activeCameras.find(c => c.id === selectedCameraId)?.streamUrl}
-                name={activeCameras.find(c => c.id === selectedCameraId)?.name}
+                pilotId={selectedMainFeed.id}
+                streamUrl={selectedMainFeed.streamUrl}
+                name={selectedMainFeed.name}
                 className="w-full h-full"
               />
             )}
             
-            {/* Camera Label */}
             <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
-              <Video className="w-4 h-4 text-[#FF4500]" />
+              {selectedMainFeed.type === 'camera' && <Video className="w-4 h-4 text-[#FF4500]" />}
               <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                {activeCameras.find(c => c.id === selectedCameraId)?.name}
+                {selectedMainFeed.name}
               </span>
             </div>
             
@@ -348,8 +411,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               </div>
             )}
             
-            {/* Pilot PiP - Bottom right, rounded, not touching sides */}
-            {focusPilot.streamUrl && !hideStreams && (
+            {showFocusPilotPip && (
               <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
                 <StreamPlayer
                   pilotId={focusPilot.id}
@@ -396,7 +458,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               </div>
             )}
           </div>
-        ) : hideStreams && (focusPilot.streamUrl || selectedCameraId) ? (
+        ) : hideStreams && (focusPilot.streamUrl || selectedMainFeed) ? (
           <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
             {selectedStageData && (
               <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">

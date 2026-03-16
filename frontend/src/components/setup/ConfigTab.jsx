@@ -5,9 +5,11 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Map, Image, Globe, Trash2 } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Copy, Check, Image, Globe, Trash2 } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
+import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 
 export default function ConfigTab() {
   const { t } = useTranslation();
@@ -42,6 +44,18 @@ export default function ConfigTab() {
 
   const activePilots = pilots.filter(p => p.isActive);
   const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
+
+  const renderMediaIconValue = (iconValue) => {
+    const option = EXTERNAL_MEDIA_ICON_OPTIONS.find((item) => item.value === iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
+    const Icon = getExternalMediaIconComponent(option.value);
+
+    return (
+      <div className="flex items-center gap-2">
+        <Icon className="w-4 h-4 text-[#FF4500]" />
+        <span>{option.label}</span>
+      </div>
+    );
+  };
 
   const handleAddMedia = () => {
     if (!newMedia.name.trim() || !newMedia.url.trim()) {
@@ -198,15 +212,21 @@ export default function ConfigTab() {
                   placeholder={t('config.mediaUrl')}
                   className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
                 />
-                <select
+                <Select
                   value={m.icon || 'Map'}
-                  onChange={(e) => updateExternalMedia(m.id, { ...m, icon: e.target.value })}
-                  className="bg-[#09090B] border-zinc-700 text-white text-sm p-1"
+                  onValueChange={(value) => updateExternalMedia(m.id, { ...m, icon: value })}
                 >
-                  <option value="Map">Map</option>
-                  <option value="Globe">Globe</option>
-                  <option value="Video">Video</option>
-                </select>
+                  <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
+                    {renderMediaIconValue(m.icon || 'Map')}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {renderMediaIconValue(option.value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -231,15 +251,21 @@ export default function ConfigTab() {
                 placeholder={t('config.mediaUrl')}
                 className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
               />
-              <select
+              <Select
                 value={newMedia.icon}
-                onChange={(e) => setNewMedia({ ...newMedia, icon: e.target.value })}
-                className="bg-[#09090B] border-zinc-700 text-white text-sm p-1"
+                onValueChange={(value) => setNewMedia({ ...newMedia, icon: value })}
               >
-                <option value="Map">Map</option>
-                <option value="Globe">Globe</option>
-                <option value="Video">Video</option>
-              </select>
+                <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
+                  {renderMediaIconValue(newMedia.icon)}
+                </SelectTrigger>
+                <SelectContent>
+                  {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {renderMediaIconValue(option.value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 onClick={handleAddMedia}
                 className="bg-[#FF4500] hover:bg-[#FF4500]/90"

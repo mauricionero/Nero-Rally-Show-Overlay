@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { getPilotStatus, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
-import { ChevronLeft, ChevronRight, Map, Flag, RotateCcw, Video, Globe } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, RotateCcw, Video } from 'lucide-react';
+import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -78,11 +79,8 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
   // helper to render an icon for a media item
   const renderIcon = (iconName) => {
-    switch (iconName) {
-      case 'Globe': return <Globe className="w-5 h-5 text-[#FF4500]" />;
-      case 'Video': return <Video className="w-5 h-5 text-[#FF4500]" />;
-      default: return <Map className="w-5 h-5 text-[#FF4500]" />;
-    }
+    const Icon = getExternalMediaIconComponent(iconName);
+    return <Icon className="w-5 h-5 text-[#FF4500]" />;
   };
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
   const [bottomScroll, setBottomScroll] = useState(0);

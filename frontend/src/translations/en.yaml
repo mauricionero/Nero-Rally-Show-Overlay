@@ -96,7 +96,9 @@ theRace:
   stageType: "Stage Type"
   ssNumber: "SS Number"
   numberOfLaps: "Number of Laps"
+  distance: "Distance"
   scheduledStart: "Scheduled Start"
+  endTime: "End Time"
   noStages: "No stages registered. Add your first stage above."
   stageTypes:
     ss: "SS (Special Stage)"
@@ -107,6 +109,7 @@ theRace:
     stageName: "Shakedown"
     ssNumber: "1"
     laps: "5"
+    distance: "12.5"
     time: "HH:MM"
 
 # ===========================================
@@ -258,7 +261,7 @@ scene2:
   selectPilotWithStream: "Select a pilot with an active stream"
   mainFeed: "Main Feed"
   selectFeed: "Select Feed"
-  noPilotsOrCameras: "No pilots or cameras available"
+  noPilotsOrCameras: "No feeds available"
 
 # ===========================================
 # SCENE 3 - LEADERBOARD
@@ -292,6 +295,7 @@ scene4:
   lapTimes: "Lap Times"
   total: "TOTAL"
   live: "LIVE"
+  mainFeed: "Main Feed"
   mainCamera: "Main Camera"
   noneUsesPilotStream: "None (Use Pilot Stream)"
   cameraAsMain: "Camera as main feed"

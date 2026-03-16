@@ -96,7 +96,9 @@ theRace:
   stageType: "Tipo de Etapa"
   ssNumber: "Número SS"
   numberOfLaps: "Número de Voltas"
+  distance: "Distância"
   scheduledStart: "Horário Previsto"
+  endTime: "Horário Final"
   noStages: "Nenhuma etapa cadastrada. Adicione sua primeira etapa acima."
   stageTypes:
     ss: "SS (Especial)"
@@ -107,6 +109,7 @@ theRace:
     stageName: "Shakedown"
     ssNumber: "1"
     laps: "5"
+    distance: "12.5"
     time: "HH:MM"
 
 # ===========================================
@@ -291,6 +294,7 @@ scene4:
   lapTimes: "Tempos de Volta"
   total: "TOTAL"
   live: "AO VIVO"
+  mainFeed: "Feed Principal"
   mainCamera: "Câmera Principal"
   noneUsesPilotStream: "Nenhuma (Usar Stream do Piloto)"
   cameraAsMain: "Câmera como feed principal"
