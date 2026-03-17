@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getWebSocketProvider, generateChannelKey, parseChannelKey, PROVIDER_NAME } from '../utils/websocketProvider';
 import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
-import { isLapRaceStageType, isManualStartStageType } from '../utils/stageTypes.js';
+import { compareStagesBySchedule } from '../utils/stageSchedule.js';
+import { isLapRaceStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
 
 const RallyContext = createContext();
 
@@ -23,6 +24,34 @@ const loadFromStorage = (key, defaultValue) => {
   }
 };
 
+const createEntityId = (prefix = '') => {
+  const rawId = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+  return prefix ? `${prefix}_${rawId}` : rawId;
+};
+
+const ensureUniqueEntityIds = (items, prefix) => {
+  const seenIds = new Set();
+  let changed = false;
+
+  const repairedItems = items.map((item) => {
+    if (!item?.id || seenIds.has(item.id)) {
+      changed = true;
+      return {
+        ...item,
+        id: createEntityId(prefix)
+      };
+    }
+
+    seenIds.add(item.id);
+    return item;
+  });
+
+  return changed ? repairedItems : items;
+};
+
 export const RallyProvider = ({ children }) => {
   // Event configuration
   const [eventName, setEventName] = useState(() => loadFromStorage('rally_event_name', ''));
@@ -36,6 +65,7 @@ export const RallyProvider = ({ children }) => {
   const [times, setTimes] = useState(() => loadFromStorage('rally_times', {}));
   const [arrivalTimes, setArrivalTimes] = useState(() => loadFromStorage('rally_arrival_times', {}));
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
+  const [retiredStages, setRetiredStages] = useState(() => loadFromStorage('rally_retired_stages', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
@@ -71,6 +101,7 @@ export const RallyProvider = ({ children }) => {
     setTimes(loadFromStorage('rally_times', {}));
     setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
     setStartTimes(loadFromStorage('rally_start_times', {}));
+    setRetiredStages(loadFromStorage('rally_retired_stages', {}));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setDebugDate(loadFromStorage('rally_debug_date', ''));
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
@@ -103,6 +134,7 @@ export const RallyProvider = ({ children }) => {
     if (data.times) setTimes(data.times);
     if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
     if (data.startTimes) setStartTimes(data.startTimes);
+    if (data.retiredStages) setRetiredStages(data.retiredStages);
     if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
     if (data.debugDate !== undefined) setDebugDate(data.debugDate);
     if (data.chromaKey) setChromaKey(data.chromaKey);
@@ -146,6 +178,7 @@ export const RallyProvider = ({ children }) => {
       times,
       arrivalTimes,
       startTimes,
+      retiredStages,
       currentStageId,
       debugDate,
       chromaKey,
@@ -159,7 +192,7 @@ export const RallyProvider = ({ children }) => {
     };
     
     await wsProvider.current.publish(data);
-  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, currentStageId, debugDate, chromaKey, mapUrl, logoUrl, externalMedia, streamConfigs, globalAudio, cameras]);
+  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, retiredStages, currentStageId, debugDate, chromaKey, mapUrl, logoUrl, externalMedia, streamConfigs, globalAudio, cameras]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey) => {
@@ -279,6 +312,11 @@ export const RallyProvider = ({ children }) => {
   }, [startTimes]);
 
   useEffect(() => {
+    localStorage.setItem('rally_retired_stages', JSON.stringify(retiredStages));
+    updateDataVersion();
+  }, [retiredStages]);
+
+  useEffect(() => {
     localStorage.setItem('rally_debug_date', JSON.stringify(debugDate));
     updateDataVersion();
   }, [debugDate]);
@@ -334,6 +372,65 @@ export const RallyProvider = ({ children }) => {
   }, [pilots, stages]);
 
   useEffect(() => {
+    const repairedPilots = ensureUniqueEntityIds(pilots, 'pilot');
+    if (repairedPilots !== pilots) {
+      setPilots(repairedPilots);
+    }
+  }, [pilots]);
+
+  useEffect(() => {
+    const repairedStages = ensureUniqueEntityIds(stages, 'stage');
+    if (repairedStages !== stages) {
+      setStages(repairedStages);
+    }
+  }, [stages]);
+
+  useEffect(() => {
+    const repairedCategories = ensureUniqueEntityIds(categories, 'category');
+    if (repairedCategories !== categories) {
+      setCategories(repairedCategories);
+    }
+  }, [categories]);
+
+  useEffect(() => {
+    let changed = false;
+
+    const normalizedCategories = categories.map((category, index) => {
+      const numericOrder = category?.order === '' || category?.order === null || category?.order === undefined
+        ? NaN
+        : Number(category.order);
+
+      if (Number.isFinite(numericOrder)) {
+        return category;
+      }
+
+      changed = true;
+      return {
+        ...category,
+        order: index + 1
+      };
+    });
+
+    if (changed) {
+      setCategories(normalizedCategories);
+    }
+  }, [categories]);
+
+  useEffect(() => {
+    const repairedCameras = ensureUniqueEntityIds(cameras, 'cam');
+    if (repairedCameras !== cameras) {
+      setCameras(repairedCameras);
+    }
+  }, [cameras]);
+
+  useEffect(() => {
+    const repairedExternalMedia = ensureUniqueEntityIds(externalMedia, 'media');
+    if (repairedExternalMedia !== externalMedia) {
+      setExternalMedia(repairedExternalMedia);
+    }
+  }, [externalMedia]);
+
+  useEffect(() => {
     localStorage.setItem('rally_current_stage', JSON.stringify(currentStageId));
     updateDataVersion();
   }, [currentStageId]);
@@ -375,7 +472,7 @@ export const RallyProvider = ({ children }) => {
   // CRUD for external media items
   const addExternalMedia = (item) => {
     const newItem = {
-      id: `media_${Date.now().toString()}`,
+      id: createEntityId('media'),
       name: item.name || '',
       url: item.url || '',
       icon: item.icon || 'Map',
@@ -394,7 +491,7 @@ export const RallyProvider = ({ children }) => {
 
   const addPilot = (pilot) => {
     const newPilot = {
-      id: Date.now().toString(),
+      id: createEntityId('pilot'),
       name: pilot.name,
       team: pilot.team || '',
       car: pilot.car || '',
@@ -425,6 +522,40 @@ export const RallyProvider = ({ children }) => {
       delete newStartTimes[id];
       return newStartTimes;
     });
+    setArrivalTimes(prev => {
+      const newArrivalTimes = { ...prev };
+      delete newArrivalTimes[id];
+      return newArrivalTimes;
+    });
+    setLapTimes(prev => {
+      const newLapTimes = { ...prev };
+      delete newLapTimes[id];
+      return newLapTimes;
+    });
+    setPositions(prev => {
+      const newPositions = { ...prev };
+      delete newPositions[id];
+      return newPositions;
+    });
+    setRetiredStages(prev => {
+      const nextRetiredStages = { ...prev };
+      delete nextRetiredStages[id];
+      return nextRetiredStages;
+    });
+    setStreamConfigs(prev => {
+      const nextStreamConfigs = { ...prev };
+      delete nextStreamConfigs[id];
+      return nextStreamConfigs;
+    });
+    setStagePilots(prev => {
+      const nextStagePilots = {};
+
+      Object.entries(prev).forEach(([stageId, pilotIds]) => {
+        nextStagePilots[stageId] = (pilotIds || []).filter((pilotId) => pilotId !== id);
+      });
+
+      return nextStagePilots;
+    });
   };
 
   const togglePilotActive = (id) => {
@@ -434,7 +565,7 @@ export const RallyProvider = ({ children }) => {
   // Camera CRUD operations
   const addCamera = (camera) => {
     const newCamera = {
-      id: `cam_${Date.now().toString()}`,
+      id: createEntityId('cam'),
       name: camera.name,
       streamUrl: camera.streamUrl || '',
       isActive: true,
@@ -462,11 +593,20 @@ export const RallyProvider = ({ children }) => {
   };
 
   const addCategory = (category) => {
+    const parsedOrder = category?.order === '' || category?.order === null || category?.order === undefined
+      ? NaN
+      : Number(category.order);
+    const fallbackOrder = categories.reduce((maxOrder, currentCategory) => {
+      const currentOrder = Number(currentCategory?.order);
+      return Number.isFinite(currentOrder) ? Math.max(maxOrder, currentOrder) : maxOrder;
+    }, 0) + 1;
+
     const newCategory = {
-      id: Date.now().toString(),
+      id: createEntityId('category'),
       name: category.name,
       color: category.color || '#FF4500',
-      ...category
+      ...category,
+      order: Number.isFinite(parsedOrder) ? parsedOrder : fallbackOrder
     };
     setCategories(prev => [...prev, newCategory]);
   };
@@ -483,7 +623,7 @@ export const RallyProvider = ({ children }) => {
 
   const addStage = (stage) => {
     const newStage = {
-      id: Date.now().toString(),
+      id: createEntityId('stage'),
       name: stage.name,
       type: stage.type || 'SS',
       ssNumber: stage.ssNumber || '', // For SS / Super Prime stage types
@@ -708,6 +848,44 @@ export const RallyProvider = ({ children }) => {
     return startTimes[pilotId]?.[stageId] || '';
   };
 
+  const isRetiredStage = (pilotId, stageId) => {
+    return !!retiredStages[pilotId]?.[stageId];
+  };
+
+  const setRetiredFromStage = (pilotId, stageId, retired) => {
+    const sortedSpecialStages = [...stages]
+      .filter((stage) => isSpecialStageType(stage.type))
+      .sort(compareStagesBySchedule);
+    const startIndex = sortedSpecialStages.findIndex((stage) => stage.id === stageId);
+
+    if (startIndex === -1) {
+      return;
+    }
+
+    const affectedStageIds = sortedSpecialStages.slice(startIndex).map((stage) => stage.id);
+
+    setRetiredStages((prev) => {
+      const next = { ...prev };
+      const nextPilotStages = { ...(next[pilotId] || {}) };
+
+      affectedStageIds.forEach((affectedStageId) => {
+        if (retired) {
+          nextPilotStages[affectedStageId] = affectedStageId;
+        } else {
+          delete nextPilotStages[affectedStageId];
+        }
+      });
+
+      if (Object.keys(nextPilotStages).length > 0) {
+        next[pilotId] = nextPilotStages;
+      } else {
+        delete next[pilotId];
+      }
+
+      return next;
+    });
+  };
+
   // Stream configuration functions
   const getStreamConfig = (pilotId) => {
     return streamConfigs[pilotId] || {
@@ -762,6 +940,7 @@ export const RallyProvider = ({ children }) => {
       times,
       arrivalTimes,
       startTimes,
+      retiredStages,
       streamConfigs,
       globalAudio,
       cameras,
@@ -785,6 +964,7 @@ export const RallyProvider = ({ children }) => {
       if (data.times) setTimes(data.times);
       if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
       if (data.startTimes) setStartTimes(data.startTimes);
+      if (data.retiredStages) setRetiredStages(data.retiredStages);
       if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.cameras) setCameras(data.cameras);
@@ -815,7 +995,8 @@ export const RallyProvider = ({ children }) => {
     setStages([]);
     setTimes({});
     setArrivalTimes({});
-    setStartTimes([]);
+    setStartTimes({});
+    setRetiredStages({});
     setDebugDate('');
     setStreamConfigs({});
     setCameras([]);
@@ -841,6 +1022,7 @@ export const RallyProvider = ({ children }) => {
     times,
     arrivalTimes,
     startTimes,
+    retiredStages,
     debugDate,
     streamConfigs,
     globalAudio,
@@ -887,6 +1069,8 @@ export const RallyProvider = ({ children }) => {
     getArrivalTime,
     setStartTime,
     getStartTime,
+    setRetiredFromStage,
+    isRetiredStage,
     // Lap time functions
     setLapTime,
     getLapTime,

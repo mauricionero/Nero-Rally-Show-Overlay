@@ -46,6 +46,7 @@ tabs:
   pilots: "Pilots"
   categories: "Categories"
   theRace: "The Race"
+  bulkLoad: "Bulk Load"
   times: "Times"
   streams: "Streams"
   config: "Config"
@@ -84,11 +85,13 @@ pilots:
 categories:
   addNewCategory: "Add New Category"
   categoryName: "Category Name"
+  order: "Order"
   color: "Color"
   addCategory: "Add Category"
   noCategories: "No categories registered. Add your first category above."
   placeholder:
     name: "WRC"
+    order: "1"
 
 # ===========================================
 # THE RACE TAB (STAGES)
@@ -129,6 +132,7 @@ times:
   arrivalTime: "Arrival Time"
   totalTime: "Total Time"
   endTime: "End Time"
+  showCompetitiveStagesOnly: "Show competitive stages only"
   raceStartTime: "Race Start Time"
   pilotsInRace: "Pilots in this race"
   selectPilots: "Select pilots to record lap times"
@@ -139,6 +143,7 @@ times:
   now: "Now"
   addPilotsFirst: "Add pilots first in the Pilots tab to record times."
   addStagesFirst: "Add stages first in The Race tab to record times."
+  noCompetitiveStages: "No competitive stages match the current filter."
   placeholder:
     time: "HH:MM:SS.000"
     shortTime: "HH:MM"
@@ -330,6 +335,35 @@ status:
   racing: "Racing"
   finished: "Finished"
   notStarted: "Not Started"
+  retired: "Retired"
   start: "Start"
   active: "Active"
   inactive: "Inactive"
+
+# ===========================================
+# BULK LOAD TAB
+# ===========================================
+bulkLoad:
+  pilotsTitle: "Bulk Load Pilots"
+  pilotsDescription: "Paste CSV for pilot registration. Duplicate names are rejected without stopping the import."
+  stagesTitle: "Bulk Load Race Info"
+  stagesDescription: "Paste CSV for stage creation. Duplicate names are rejected without stopping the import."
+  expectedHeaders: "Expected Headers"
+  example: "Example"
+  updateExistingPilots: "Update Existing Pilots"
+  updateExistingPilotsDesc: "If an imported pilot name matches exactly, overwrite that pilot instead of rejecting the row."
+  importPilots: "Import Pilots"
+  importStages: "Import Stages"
+  rejectedRows: "Rejected Rows"
+  noErrors: "No rejected rows."
+  noImportYet: "No import executed yet"
+  noRows: "No rows to import."
+  importSummary: "{imported} imported, {failed} rejected"
+  importSummaryPilots: "{created} created, {updated} updated, {failed} rejected"
+  rowLabel: "Row {row}"
+  errors:
+    nameRequired: "Name is required."
+    duplicateName: "A record with the same name already exists."
+    duplicateInImport: "This name appears more than once in the same import."
+    categoryNotFound: "Category not found."
+    invalidStageType: "Invalid stage type."

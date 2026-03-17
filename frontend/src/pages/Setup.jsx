@@ -12,6 +12,7 @@ import { VERSION } from '../config/version.js';
 import PilotsTab from '../components/setup/PilotsTab.jsx';
 import CategoriesTab from '../components/setup/CategoriesTab.jsx';
 import TheRaceTab from '../components/setup/TheRaceTab.jsx';
+import BulkLoadTab from '../components/setup/BulkLoadTab.jsx';
 import TimesTab from '../components/setup/TimesTab.jsx';
 import StreamsTab from '../components/setup/StreamsTab.jsx';
 import ConfigTab from '../components/setup/ConfigTab.jsx';
@@ -61,6 +62,7 @@ export default function Setup() {
             <TabsTrigger value="therace" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-therace">{t('tabs.theRace')}</TabsTrigger>
             <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">{t('tabs.times')}</TabsTrigger>
             <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">{t('tabs.streams')}</TabsTrigger>
+            <TabsTrigger value="bulkload" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-bulkload">{t('tabs.bulkLoad')}</TabsTrigger>
             <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">{t('tabs.config')}</TabsTrigger>
             <TabsTrigger value="debug" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-debug">{t('tabs.debug')}</TabsTrigger>
           </TabsList>
@@ -83,6 +85,10 @@ export default function Setup() {
 
           <TabsContent value="streams">
             <StreamsTab />
+          </TabsContent>
+
+          <TabsContent value="bulkload">
+            <BulkLoadTab />
           </TabsContent>
 
           <TabsContent value="config">

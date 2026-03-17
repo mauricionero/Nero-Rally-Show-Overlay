@@ -6,7 +6,7 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
-import { getPilotStatus, getReferenceNow, getRunningTime, sortPilotsByStatus } from '../../utils/rallyHelpers';
+import { getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, sortPilotsByStatus } from '../../utils/rallyHelpers';
 import { ChevronLeft, ChevronRight, Flag, RotateCcw, Video } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
@@ -90,7 +90,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, times, categories, 
     chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions,
-    cameras, externalMedia, debugDate
+    cameras, externalMedia, debugDate, retiredStages
   } = useRally();
   const { t } = useTranslation();
   
@@ -135,9 +135,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     }
     
     // For SS and other types, use the existing sort
-    const sorted = sortPilotsByStatus(pilots, currentStageId, startTimes, times, currentStage?.date, sceneNow);
+    const sorted = sortPilotsByStatus(pilots, categories, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
     return sorted.map((pilot, index) => ({ pilot, position: index + 1 }));
-  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, sceneNow]);
+  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, retiredStages, sceneNow]);
 
   // Track position changes for animation
   useEffect(() => {
@@ -252,6 +252,23 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       isFinished: data.isFinished || false,
       totalLaps: currentStage?.numberOfLaps || 0
     };
+  };
+
+  const handleBottomTickerWheel = (event) => {
+    if (maxScroll <= 0) {
+      return;
+    }
+
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ? event.deltaX
+      : event.deltaY;
+
+    if (!delta) {
+      return;
+    }
+
+    event.preventDefault();
+    setBottomScroll((prev) => Math.max(0, Math.min(maxScroll, prev + delta)));
   };
 
   // Get stage display name - always show stage name, not event name
@@ -479,16 +496,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               }
             } else if (isSSStage) {
               // SS Stage display (original logic)
-              const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, currentStage?.date, sceneNow);
+              const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
               const startTime = startTimes[pilot.id]?.[currentStageId];
               const finishTime = times[pilot.id]?.[currentStageId];
+              const retired = isPilotRetiredForStage(pilot.id, currentStageId, retiredStages);
               
-              if (status === 'racing' && startTime) {
+              if (status === 'retired') {
+                displayTime = t('status.retired');
+                timeColor = 'text-red-400';
+              } else if (status === 'racing' && startTime) {
                 displayTime = getRunningTime(startTime, currentStage?.date, sceneNow);
                 timeColor = 'text-[#FF8C00]';
               } else if (status === 'finished' && finishTime) {
-                displayTime = finishTime;
-                timeColor = 'text-[#22C55E]';
+                displayTime = retired ? `${finishTime} RET` : finishTime;
+                timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
               } else if (startTime) {
                 displayTime = `Start: ${startTime}`;
                 timeColor = 'text-zinc-500';
@@ -569,7 +590,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               </button>
             )}
 
-            <div className="overflow-hidden px-10" ref={bottomContainerRef}>
+            <div className="overflow-hidden px-10" ref={bottomContainerRef} onWheel={handleBottomTickerWheel}>
               <div 
                 ref={bottomTrackRef}
                 className="flex gap-2 py-2 transition-transform duration-500 ease-out"
@@ -594,14 +615,19 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       timeColor = 'text-[#FACC15]';
                     }
                   } else if (isSSStage) {
-                    const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, currentStage?.date, sceneNow);
+                    const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
                     const startTime = startTimes[pilot.id]?.[currentStageId];
                     const finishTime = times[pilot.id]?.[currentStageId];
+                    const retired = isPilotRetiredForStage(pilot.id, currentStageId, retiredStages);
                     
-                    if (status === 'finished' && finishTime) {
-                      borderColor = 'border-[#22C55E]';
-                      timeDisplay = finishTime;
-                      timeColor = 'text-[#22C55E]';
+                    if (status === 'retired') {
+                      borderColor = 'border-red-500';
+                      timeDisplay = t('status.retired');
+                      timeColor = 'text-red-400';
+                    } else if (status === 'finished' && finishTime) {
+                      borderColor = retired ? 'border-amber-400' : 'border-[#22C55E]';
+                      timeDisplay = retired ? `${finishTime} RET` : finishTime;
+                      timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
                     } else if (status === 'racing' && startTime) {
                       borderColor = 'border-[#FF8C00]';
                       timeDisplay = getRunningTime(startTime, currentStage?.date, sceneNow);

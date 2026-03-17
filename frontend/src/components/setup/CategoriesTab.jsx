@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit } from 'lucide-react';
+import { sortCategoriesByDisplayOrder } from '../../utils/displayOrder.js';
 
 export default function CategoriesTab() {
   const { t } = useTranslation();
@@ -18,17 +19,22 @@ export default function CategoriesTab() {
     deleteCategory
   } = useRally();
 
-  const [newCategory, setNewCategory] = useState({ name: '', color: '#FF4500' });
+  const [newCategory, setNewCategory] = useState({ name: '', color: '#FF4500', order: '' });
   const [editingCategory, setEditingCategory] = useState(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+
+  const sortedCategories = sortCategoriesByDisplayOrder(categories);
 
   const handleAddCategory = () => {
     if (!newCategory.name.trim()) {
       toast.error(t('categories.categoryName') + ' is required');
       return;
     }
-    addCategory(newCategory);
-    setNewCategory({ name: '', color: '#FF4500' });
+    addCategory({
+      ...newCategory,
+      order: newCategory.order === '' ? '' : parseInt(newCategory.order, 10)
+    });
+    setNewCategory({ name: '', color: '#FF4500', order: '' });
     toast.success('Category added successfully');
   };
 
@@ -37,7 +43,10 @@ export default function CategoriesTab() {
       toast.error(t('categories.categoryName') + ' is required');
       return;
     }
-    updateCategory(editingCategory.id, editingCategory);
+    updateCategory(editingCategory.id, {
+      ...editingCategory,
+      order: editingCategory.order === '' ? '' : parseInt(editingCategory.order, 10)
+    });
     setEditingCategory(null);
     setCategoryDialogOpen(false);
     toast.success('Category updated successfully');
@@ -59,6 +68,18 @@ export default function CategoriesTab() {
                 placeholder={t('categories.placeholder.name')}
                 className="bg-[#09090B] border-zinc-700 text-white"
                 data-testid="input-category-name"
+              />
+            </div>
+            <div className="w-32">
+              <Label className="text-white">{t('categories.order')}</Label>
+              <Input
+                type="number"
+                min="1"
+                value={newCategory.order}
+                onChange={(e) => setNewCategory({ ...newCategory, order: e.target.value })}
+                placeholder={t('categories.placeholder.order')}
+                className="bg-[#09090B] border-zinc-700 text-white"
+                data-testid="input-category-order"
               />
             </div>
             <div className="w-32">
@@ -86,7 +107,7 @@ export default function CategoriesTab() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {categories.map((category) => (
+        {sortedCategories.map((category) => (
           <Card key={category.id} className="bg-[#18181B] border-zinc-800 relative" data-testid={`category-card-${category.id}`}>
             <div className="absolute left-0 top-0 bottom-0 w-2" style={{ backgroundColor: category.color }} />
             <CardContent className="pt-6 pl-6">
@@ -95,6 +116,9 @@ export default function CategoriesTab() {
                   <h3 className="font-bold text-xl uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: category.color }}>
                     {category.name}
                   </h3>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {t('categories.order')}: {category.order ?? '-'}
+                  </p>
                   <p className="text-xs text-zinc-500 mt-1">{category.color}</p>
                 </div>
                 <div className="flex gap-1">
@@ -124,6 +148,17 @@ export default function CategoriesTab() {
                             <Input
                               value={editingCategory.name}
                               onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('categories.order')}</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={editingCategory.order ?? ''}
+                              onChange={(e) => setEditingCategory({ ...editingCategory, order: e.target.value })}
+                              placeholder={t('categories.placeholder.order')}
                               className="bg-[#09090B] border-zinc-700 text-white"
                             />
                           </div>

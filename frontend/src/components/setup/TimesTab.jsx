@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { TimeInput } from '../TimeInput.jsx';
+import CurrentStageCard from './CurrentStageCard.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
-import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square } from 'lucide-react';
+import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import {
   getStageNumberLabel,
   isLapRaceStageType,
@@ -105,7 +107,7 @@ const getStageTypeColor = (type) => {
   }
 };
 
-function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) {
+function TimedStageCard({ stage, sortedPilots, categoryMap, pilotById, manualStartTime = false }) {
   const { t } = useTranslation();
   const {
     setTime,
@@ -113,14 +115,14 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
     setArrivalTime,
     getArrivalTime,
     setStartTime,
-    getStartTime
+    getStartTime,
+    setRetiredFromStage,
+    isRetiredStage
   } = useRally();
-
-  const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
 
   const handleArrivalTimeChange = (pilotId, value) => {
     setArrivalTime(pilotId, stage.id, value);
-    const pilot = pilots.find((item) => item.id === pilotId);
+    const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime ? getStartTime(pilotId, stage.id) : getPilotScheduledStartTime(stage, pilot);
     if (isValidClockTime(startTime) && value) {
       const totalTime = arrivalTimeToTotal(value, startTime);
@@ -132,7 +134,7 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
 
   const handleTotalTimeChange = (pilotId, value) => {
     setTime(pilotId, stage.id, value);
-    const pilot = pilots.find((item) => item.id === pilotId);
+    const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime ? getStartTime(pilotId, stage.id) : getPilotScheduledStartTime(stage, pilot);
     if (isValidClockTime(startTime) && value) {
       const arrivalTime = totalTimeToArrival(value, startTime);
@@ -172,10 +174,12 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
   return (
     <div className="grid gap-2" style={pilotTimingGridStyle}>
       {sortedPilots.map((pilot) => {
-        const category = categories.find(c => c.id === pilot.categoryId);
+        const category = categoryMap.get(pilot.categoryId);
         const startTimeValue = manualStartTime
           ? getStartTime(pilot.id, stage.id)
           : getPilotScheduledStartTime(stage, pilot);
+        const retired = isRetiredStage(pilot.id, stage.id);
+        const hasRecordedTime = !!getTime(pilot.id, stage.id);
 
         return (
           <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
@@ -194,6 +198,11 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
                 <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {pilot.name}
                 </span>
+                {retired && (
+                  <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                    RET
+                  </span>
+                )}
               </div>
               
               {/* Start Time */}
@@ -280,6 +289,21 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
                   />
                 </div>
               </div>
+
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={retired}
+                    onCheckedChange={(checked) => setRetiredFromStage(pilot.id, stage.id, checked === true)}
+                  />
+                  <span className="text-[11px] text-zinc-400 uppercase">{t('status.retired')}</span>
+                </label>
+                {retired && (
+                  <span className={`text-[11px] font-bold uppercase ${hasRecordedTime ? 'text-amber-400' : 'text-red-400'}`}>
+                    {hasRecordedTime ? `${t('status.retired')} + ${t('times.totalTime')}` : t('status.retired')}
+                  </span>
+                )}
+              </div>
             </CardContent>
           </Card>
         );
@@ -289,15 +313,13 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
 }
 
 // Liaison/Service Park Stage Component - Simple start/end per pilot
-function LiaisonStageCard({ stage, pilots, categories }) {
+function LiaisonStageCard({ stage, sortedPilots, categoryMap }) {
   const { t } = useTranslation();
-
-  const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
 
   return (
     <div className="grid gap-2" style={pilotTimingGridStyle}>
       {sortedPilots.map((pilot) => {
-        const category = categories.find(c => c.id === pilot.categoryId);
+        const category = categoryMap.get(pilot.categoryId);
         const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
         const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
         return (
@@ -348,7 +370,7 @@ function LiaisonStageCard({ stage, pilots, categories }) {
 }
 
 // Lap Race Stage Component - Laps x Pilots matrix with pilot selection
-function LapRaceStageCard({ stage, pilots, categories }) {
+function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap }) {
   const { t } = useTranslation();
   const {
     setLapTime,
@@ -361,8 +383,11 @@ function LapRaceStageCard({ stage, pilots, categories }) {
   } = useRally();
 
   const selectedPilotIds = getStagePilots(stage.id);
-  const selectedPilots = pilots.filter(p => selectedPilotIds.includes(p.id));
-  const sortedPilots = [...selectedPilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
+  const selectedPilotIdSet = useMemo(() => new Set(selectedPilotIds), [selectedPilotIds]);
+  const selectedPilots = useMemo(
+    () => sortedPilots.filter((pilot) => selectedPilotIdSet.has(pilot.id)),
+    [sortedPilots, selectedPilotIdSet]
+  );
   
   const lapsArray = Array.from({ length: stage.numberOfLaps || 5 }, (_, i) => i);
   const allSelected = selectedPilotIds.length === pilots.length;
@@ -416,17 +441,17 @@ function LapRaceStageCard({ stage, pilots, categories }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {pilots.map(pilot => (
+          {sortedPilots.map(pilot => (
             <label
               key={pilot.id}
               className={`flex items-center gap-1 px-2 py-1 rounded cursor-pointer transition-colors ${
-                selectedPilotIds.includes(pilot.id)
+                selectedPilotIdSet.has(pilot.id)
                   ? 'bg-[#FF4500]/20 border border-[#FF4500]'
                   : 'bg-zinc-800 border border-zinc-700'
               }`}
             >
               <Checkbox
-                checked={selectedPilotIds.includes(pilot.id)}
+                checked={selectedPilotIdSet.has(pilot.id)}
                 onCheckedChange={() => togglePilotInStage(stage.id, pilot.id)}
                 className="w-3 h-3"
               />
@@ -437,7 +462,7 @@ function LapRaceStageCard({ stage, pilots, categories }) {
       </div>
 
       {/* Lap Times Matrix */}
-      {sortedPilots.length === 0 ? (
+      {selectedPilots.length === 0 ? (
         <div className="text-center py-8 text-zinc-500">
           {t('times.selectPilots')}
         </div>
@@ -458,8 +483,8 @@ function LapRaceStageCard({ stage, pilots, categories }) {
               </tr>
             </thead>
             <tbody>
-              {sortedPilots.map((pilot) => {
-                const category = categories.find(c => c.id === pilot.categoryId);
+              {selectedPilots.map((pilot) => {
+                const category = categoryMap.get(pilot.categoryId);
                 return (
                   <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
                     <td className="p-2 sticky left-0 bg-[#18181B] z-10">
@@ -525,9 +550,28 @@ function LapRaceStageCard({ stage, pilots, categories }) {
 
 export default function TimesTab() {
   const { t } = useTranslation();
-  const { pilots, stages, categories } = useRally();
+  const { pilots, stages, categories, currentStageId } = useRally();
+  const [showCompetitiveStagesOnly, setShowCompetitiveStagesOnly] = useState(true);
+  const sortedPilots = useMemo(() => sortPilotsByDisplayOrder(pilots, categories), [pilots, categories]);
+  const categoryMap = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const pilotById = useMemo(() => new Map(pilots.map((pilot) => [pilot.id, pilot])), [pilots]);
 
-  const sortedStages = [...stages].sort(compareStagesBySchedule);
+  const sortedStages = useMemo(() => {
+    const visibleStages = showCompetitiveStagesOnly
+      ? stages.filter((stage) => isSpecialStageType(stage.type) || isLapRaceStageType(stage.type))
+      : stages;
+
+    return [...visibleStages].sort(compareStagesBySchedule);
+  }, [stages, showCompetitiveStagesOnly]);
+  const [openStageIds, setOpenStageIds] = useState(() => (currentStageId ? [currentStageId] : []));
+
+  const toggleStageOpen = (stageId) => {
+    setOpenStageIds((prev) => (
+      prev.includes(stageId)
+        ? prev.filter((id) => id !== stageId)
+        : [...prev, stageId]
+    ));
+  };
 
   if (pilots.length === 0) {
     return (
@@ -547,43 +591,82 @@ export default function TimesTab() {
 
   return (
     <div className="space-y-6">
+      <CurrentStageCard />
+
+      <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-[#18181B] px-4 py-3">
+        <Checkbox
+          id="times-competitive-only"
+          checked={showCompetitiveStagesOnly}
+          onCheckedChange={(checked) => setShowCompetitiveStagesOnly(checked === true)}
+        />
+        <Label htmlFor="times-competitive-only" className="text-sm text-white cursor-pointer">
+          {t('times.showCompetitiveStagesOnly')}
+        </Label>
+      </div>
+
+      {sortedStages.length === 0 && (
+        <div className="text-center py-12 text-zinc-500">
+          {t('times.noCompetitiveStages')}
+        </div>
+      )}
+
       {sortedStages.map((stage) => {
         const Icon = getStageTypeIcon(stage.type);
         const borderColor = getStageTypeColor(stage.type);
+        const isOpen = openStageIds.includes(stage.id);
         
         return (
           <Card key={stage.id} className={`bg-[#18181B] border-zinc-800 border-l-4 ${borderColor}`}>
-            <CardHeader>
-              <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                <Icon className="w-5 h-5" />
-                {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
-                {stage.name}
-                {isLapRaceStageType(stage.type) && (
-                  <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})</span>
+            <button
+              type="button"
+              onClick={() => toggleStageOpen(stage.id)}
+              className="w-full text-left"
+            >
+              <CardHeader className="cursor-pointer">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      <Icon className="w-5 h-5 flex-shrink-0" />
+                      {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
+                      <span className="truncate">{stage.name}</span>
+                      {isLapRaceStageType(stage.type) && (
+                        <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})</span>
+                      )}
+                    </CardTitle>
+                    {!isLapRaceStageType(stage.type) && getDisplayedStageSchedule(stage) && (
+                      <CardDescription className="text-zinc-400 mt-1">
+                        {t('times.scheduled')}: {getDisplayedStageSchedule(stage)}
+                      </CardDescription>
+                    )}
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </CardHeader>
+            </button>
+            {isOpen && (
+              <CardContent>
+                {isSpecialStageType(stage.type) && (
+                  <TimedStageCard
+                    stage={stage}
+                    sortedPilots={sortedPilots}
+                    categoryMap={categoryMap}
+                    pilotById={pilotById}
+                    manualStartTime={isManualStartStageType(stage.type)}
+                  />
                 )}
-              </CardTitle>
-              {!isLapRaceStageType(stage.type) && getDisplayedStageSchedule(stage) && (
-                <CardDescription className="text-zinc-400">
-                  {t('times.scheduled')}: {getDisplayedStageSchedule(stage)}
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent>
-              {isSpecialStageType(stage.type) && (
-                <TimedStageCard
-                  stage={stage}
-                  pilots={pilots}
-                  categories={categories}
-                  manualStartTime={isManualStartStageType(stage.type)}
-                />
-              )}
-              {isTransitStageType(stage.type) && (
-                <LiaisonStageCard stage={stage} pilots={pilots} categories={categories} />
-              )}
-              {isLapRaceStageType(stage.type) && (
-                <LapRaceStageCard stage={stage} pilots={pilots} categories={categories} />
-              )}
-            </CardContent>
+                {isTransitStageType(stage.type) && (
+                  <LiaisonStageCard stage={stage} sortedPilots={sortedPilots} categoryMap={categoryMap} />
+                )}
+                {isLapRaceStageType(stage.type) && (
+                  <LapRaceStageCard
+                    stage={stage}
+                    pilots={pilots}
+                    sortedPilots={sortedPilots}
+                    categoryMap={categoryMap}
+                  />
+                )}
+              </CardContent>
+            )}
           </Card>
         );
       })}

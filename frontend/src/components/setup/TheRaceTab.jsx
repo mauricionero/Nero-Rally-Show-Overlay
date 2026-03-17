@@ -4,15 +4,15 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
+import CurrentStageCard from './CurrentStageCard.jsx';
 import {
   getStageNumberLabel,
-  getStageTitle,
   isLapRaceStageType,
   isSpecialStageType,
   isTransitStageType,
@@ -84,7 +84,6 @@ export default function TheRaceTab() {
     setEventName,
     stages,
     currentStageId,
-    setCurrentStageId,
     addStage,
     updateStage,
     deleteStage
@@ -137,7 +136,6 @@ export default function TheRaceTab() {
 
   const sortedStages = [...stages].sort(compareStagesBySchedule);
 
-  const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRaceType = isLapRaceStageType(newStage.type);
   const isSSType = isSpecialStageType(newStage.type);
   const supportsEndTime = isTransitStageType(newStage.type);
@@ -202,6 +200,8 @@ export default function TheRaceTab() {
           />
         </CardContent>
       </Card>
+
+      <CurrentStageCard />
 
       {/* Add New Stage */}
       <Card className="bg-[#18181B] border-zinc-800">
@@ -335,46 +335,6 @@ export default function TheRaceTab() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Current Stage Selector */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            {t('scene1.currentStage')} (Live)
-          </CardTitle>
-          <CardDescription className="text-zinc-400">
-            {t('common.select')} - affects overlay display
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
-            <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" data-testid="select-current-stage">
-              <SelectValue placeholder={t('common.select')} />
-            </SelectTrigger>
-            <SelectContent>
-              {sortedStages.map((stage) => {
-                const Icon = getStageTypeIcon(stage.type);
-                return (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
-                      {getStageTitle(stage)}
-                      {isLapRaceStageType(stage.type) && ` (${stage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-          {currentStage && (
-            <p className="mt-2 text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
-              LIVE: {getStageTitle(currentStage)}
-              {isLapRaceStageType(currentStage.type) && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
-            </p>
-          )}
         </CardContent>
       </Card>
 

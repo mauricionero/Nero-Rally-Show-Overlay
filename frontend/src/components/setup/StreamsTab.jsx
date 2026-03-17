@@ -12,6 +12,7 @@ import { AudioMeter, GlobalAudioMeter } from '../AudioMeter.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
 import { Volume2, VolumeX, Headphones, Plus, Trash2, Edit, Video } from 'lucide-react';
+import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 
 export default function StreamsTab() {
   const { t } = useTranslation();
@@ -35,11 +36,7 @@ export default function StreamsTab() {
   const [editingCamera, setEditingCamera] = useState(null);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
 
-  const sortedPilots = [...pilots].sort((a, b) => {
-    const orderA = a.startOrder || 999;
-    const orderB = b.startOrder || 999;
-    return orderA - orderB;
-  });
+  const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
 
   const handleAddCamera = () => {
     if (!newCamera.name.trim()) {

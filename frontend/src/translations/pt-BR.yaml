@@ -46,6 +46,7 @@ tabs:
   pilots: "Pilotos"
   categories: "Categorias"
   theRace: "A Corrida"
+  bulkLoad: "Carga em Massa"
   times: "Tempos"
   streams: "Streams"
   config: "Config"
@@ -84,11 +85,13 @@ pilots:
 categories:
   addNewCategory: "Adicionar Nova Categoria"
   categoryName: "Nome da Categoria"
+  order: "Ordem"
   color: "Cor"
   addCategory: "Adicionar Categoria"
   noCategories: "Nenhuma categoria cadastrada. Adicione sua primeira categoria acima."
   placeholder:
     name: "WRC"
+    order: "1"
 
 # ===========================================
 # ABA A CORRIDA (ETAPAS)
@@ -129,6 +132,7 @@ times:
   arrivalTime: "Horário de Chegada"
   totalTime: "Tempo Total"
   endTime: "Horário Final"
+  showCompetitiveStagesOnly: "Mostrar apenas provas"
   raceStartTime: "Horário de Largada da Corrida"
   pilotsInRace: "Pilotos nesta corrida"
   selectPilots: "Selecione pilotos para registrar tempos de volta"
@@ -139,6 +143,7 @@ times:
   now: "Agora"
   addPilotsFirst: "Adicione pilotos primeiro na aba Pilotos para registrar tempos."
   addStagesFirst: "Adicione etapas primeiro na aba A Corrida para registrar tempos."
+  noCompetitiveStages: "Nenhuma prova corresponde ao filtro atual."
   placeholder:
     time: "HH:MM:SS.000"
     shortTime: "HH:MM"
@@ -329,6 +334,35 @@ status:
   racing: "Correndo"
   finished: "Finalizado"
   notStarted: "Não Largou"
+  retired: "Retirado"
   start: "Largada"
   active: "Ativo"
   inactive: "Inativo"
+
+# ===========================================
+# ABA CARGA EM MASSA
+# ===========================================
+bulkLoad:
+  pilotsTitle: "Carga em Massa de Pilotos"
+  pilotsDescription: "Cole um CSV para cadastrar pilotos. Nomes duplicados sao rejeitados sem interromper a importacao."
+  stagesTitle: "Carga em Massa da Corrida"
+  stagesDescription: "Cole um CSV para criar etapas. Nomes duplicados sao rejeitados sem interromper a importacao."
+  expectedHeaders: "Cabecalhos Esperados"
+  example: "Exemplo"
+  updateExistingPilots: "Atualizar Pilotos Existentes"
+  updateExistingPilotsDesc: "Se o nome importado bater exatamente com um piloto existente, atualize esse piloto em vez de rejeitar a linha."
+  importPilots: "Importar Pilotos"
+  importStages: "Importar Etapas"
+  rejectedRows: "Linhas Rejeitadas"
+  noErrors: "Nenhuma linha rejeitada."
+  noImportYet: "Nenhuma importacao executada ainda"
+  noRows: "Nenhuma linha para importar."
+  importSummary: "{imported} importados, {failed} rejeitados"
+  importSummaryPilots: "{created} criados, {updated} atualizados, {failed} rejeitados"
+  rowLabel: "Linha {row}"
+  errors:
+    nameRequired: "O nome e obrigatorio."
+    duplicateName: "Ja existe um registro com o mesmo nome."
+    duplicateInImport: "Este nome aparece mais de uma vez na mesma importacao."
+    categoryNotFound: "Categoria nao encontrada."
+    invalidStageType: "Tipo de etapa invalido."

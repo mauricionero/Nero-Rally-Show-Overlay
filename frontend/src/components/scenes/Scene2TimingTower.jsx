@@ -4,7 +4,7 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { getPilotStatus, getReferenceNow, getRunningTime, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
+import { getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -93,7 +93,7 @@ const formatTime = (ms) => {
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, debugDate
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages
   } = useRally();
   const { t } = useTranslation();
   
@@ -163,9 +163,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     }
     
     // SS Stage - use existing logic
-    const sortedPilots = sortPilotsByStatus(pilots, currentStageId, startTimes, times, currentStage?.date, sceneNow);
+    const sortedPilots = sortPilotsByStatus(pilots, categories, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
     return sortedPilots.map((pilot, index) => {
-      const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, currentStage?.date, sceneNow);
+      const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
       return {
         pilot,
         position: index + 1,
@@ -174,7 +174,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         isRacing: status === 'racing'
       };
     });
-  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, sceneNow]);
+  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, retiredStages, sceneNow]);
 
   useEffect(() => {
     if (!selectedFeedValue && sortedPilotsData.length > 0) {
@@ -214,6 +214,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const racing = sortedPilotsData.filter(d => d.status === 'racing');
   const finished = sortedPilotsData.filter(d => d.status === 'finished');
   const notStarted = sortedPilotsData.filter(d => d.status === 'not_started');
+  const retired = sortedPilotsData.filter(d => d.status === 'retired');
   const leader = finished[0];
 
   const handleArrowClick = (e, pilotId) => {
@@ -259,11 +260,16 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       // SS Stage logic
       const startTime = startTimes[pilot.id]?.[currentStageId];
       const finishTime = times[pilot.id]?.[currentStageId];
+      const retired = isPilotRetiredForStage(pilot.id, currentStageId, retiredStages);
       
-      if (isFinished && finishTime) {
-        displayTime = finishTime;
-        timeColor = 'text-[#22C55E]';
-        statusColor = 'bg-[#22C55E]';
+      if (data.status === 'retired') {
+        displayTime = t('status.retired');
+        timeColor = 'text-red-400';
+        statusColor = 'bg-[#EF4444]';
+      } else if (isFinished && finishTime) {
+        displayTime = retired ? `${finishTime} RET` : finishTime;
+        timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
+        statusColor = retired ? 'bg-[#F59E0B]' : 'bg-[#22C55E]';
       } else if (isRacing && startTime) {
         displayTime = getRunningTime(startTime, currentStage?.date, sceneNow);
         timeColor = 'text-[#FF8C00]';
@@ -469,6 +475,17 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               </span>
             </div>
             {notStarted.map((data, index) => renderPilotRow(data, index))}
+          </div>
+        )}
+
+        {retired.length > 0 && (
+          <div className="mt-2">
+            <div className="px-3 py-1 bg-red-500/15 border-l-2 border-red-500">
+              <span className="text-red-400 text-xs font-bold uppercase">
+                {t('status.retired')}
+              </span>
+            </div>
+            {retired.map((data, index) => renderPilotRow(data, index))}
           </div>
         )}
       </div>
