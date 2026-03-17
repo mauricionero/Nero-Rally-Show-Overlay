@@ -5,7 +5,7 @@ import { LeftControls } from '../LeftControls.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { parseTime, getPilotStatus, getReferenceNow, getRunningTime } from '../../utils/rallyHelpers';
+import { parseTime, getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage } from '../../utils/rallyHelpers';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
@@ -93,7 +93,7 @@ const formatOverallTime = (totalSeconds) => {
 };
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, categories, logoUrl, lapTimes, stagePilots, debugDate } = useRally();
+  const { pilots, stages, times, startTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId } = useRally();
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [selectedStageType, setSelectedStageType] = useState('all'); // 'all', 'ss', 'lapRace'
@@ -105,11 +105,31 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   // Filter stages by type
   const ssStages = stages.filter(s => isSpecialStageType(s.type));
   const lapRaceStages = stages.filter(s => isLapRaceStageType(s.type));
+  const sortedAllStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   
   // Sort stages by start time
   const sortedSSStages = [...ssStages].sort(compareStagesBySchedule);
 
   const sortedLapRaceStages = [...lapRaceStages].sort(compareStagesBySchedule);
+
+  const referenceSpecialStage = useMemo(() => {
+    if (selectedStage && isSpecialStageType(selectedStage.type)) {
+      return selectedStage;
+    }
+
+    if (!currentStageId) {
+      return sortedSSStages[sortedSSStages.length - 1] || null;
+    }
+
+    const currentStageIndex = sortedAllStages.findIndex((stage) => stage.id === currentStageId);
+    if (currentStageIndex === -1) {
+      return sortedSSStages[sortedSSStages.length - 1] || null;
+    }
+
+    return [...sortedAllStages.slice(0, currentStageIndex + 1)]
+      .reverse()
+      .find((stage) => isSpecialStageType(stage.type)) || null;
+  }, [selectedStage, currentStageId, sortedAllStages, sortedSSStages]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
@@ -118,6 +138,25 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
 
   // Calculate leaderboard based on selected stage/type
   const leaderboard = useMemo(() => {
+    const sortByRetirementAndTime = (entries) => (
+      [...entries].sort((a, b) => {
+        if (a.isRetired !== b.isRetired) {
+          return a.isRetired ? 1 : -1;
+        }
+
+        if (a.isRetired && b.isRetired) {
+          if (b.completedStages !== a.completedStages) {
+            return b.completedStages - a.completedStages;
+          }
+        }
+
+        if (!a.hasTime && !b.hasTime) return 0;
+        if (!a.hasTime) return 1;
+        if (!b.hasTime) return -1;
+        return a.sortTime - b.sortTime;
+      })
+    );
+
     // If a specific stage is selected
     if (selectedStageId && selectedStage) {
       if (isLapRaceStageType(selectedStage.type)) {
@@ -125,22 +164,26 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         return calculateLapRaceLeaderboard(pilots, selectedStageId, lapTimes, stagePilots, selectedStage.numberOfLaps || 5);
       } else if (isSpecialStageType(selectedStage.type)) {
         // Single special stage leaderboard
-        return pilots.map(pilot => {
-          const status = getPilotStatus(pilot.id, selectedStageId, startTimes, times, selectedStage?.date, sceneNow);
+        return sortByRetirementAndTime(pilots.map(pilot => {
+          const status = getPilotStatus(pilot.id, selectedStageId, startTimes, times, retiredStages, selectedStage?.date, sceneNow);
           const startTime = startTimes[pilot.id]?.[selectedStageId];
           const finishTime = times[pilot.id]?.[selectedStageId];
+          const retired = isPilotRetiredForStage(pilot.id, selectedStageId, retiredStages);
           
           let displayTime = '-';
           let timeColor = 'text-white';
           let sortTime = Infinity;
           
-          if (status === 'racing' && startTime) {
+          if (status === 'retired') {
+            displayTime = t('status.retired');
+            timeColor = 'text-red-400';
+          } else if (status === 'racing' && startTime) {
             displayTime = getRunningTime(startTime, selectedStage?.date, sceneNow);
             timeColor = 'text-[#FACC15]';
             sortTime = parseTime(displayTime) || Infinity;
           } else if (status === 'finished' && finishTime) {
-            displayTime = finishTime;
-            timeColor = 'text-white';
+            displayTime = retired ? `${finishTime} RET` : finishTime;
+            timeColor = retired ? 'text-amber-400' : 'text-white';
             sortTime = parseTime(finishTime);
           }
           
@@ -156,7 +199,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
               overallTime += parseTime(stageFinishTime);
               completedStages++;
             } else if (stage.id === selectedStageId) {
-              const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times, stage.date, sceneNow);
+              const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times, retiredStages, stage.date, sceneNow);
               const stageStartTime = startTimes[pilot.id]?.[stage.id];
               if (stageStatus === 'racing' && stageStartTime) {
                 const runningTime = getRunningTime(stageStartTime, stage.date, sceneNow);
@@ -180,22 +223,22 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             overallDisplay,
             overallColor,
             hasTime: status === 'finished' || status === 'racing',
-            status
+            status,
+            completedStages,
+            isRetired: retired
           };
-        }).sort((a, b) => {
-          if (!a.hasTime && !b.hasTime) return 0;
-          if (!a.hasTime) return 1;
-          if (!b.hasTime) return -1;
-          return a.sortTime - b.sortTime;
-        });
+        }));
       }
     }
     
     // Overall SS standings (default)
-    return pilots.map(pilot => {
+    return sortByRetirementAndTime(pilots.map(pilot => {
       let totalTime = 0;
       let completedStages = 0;
       let hasRunningStage = false;
+      const isRetired = referenceSpecialStage
+        ? isPilotRetiredForStage(pilot.id, referenceSpecialStage.id, retiredStages)
+        : false;
       
       sortedSSStages.forEach(stage => {
         const finishTime = times[pilot.id]?.[stage.id];
@@ -203,7 +246,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           totalTime += parseTime(finishTime);
           completedStages++;
         } else {
-          const status = getPilotStatus(pilot.id, stage.id, startTimes, times, stage.date, sceneNow);
+          const status = getPilotStatus(pilot.id, stage.id, startTimes, times, retiredStages, stage.date, sceneNow);
           const startTime = startTimes[pilot.id]?.[stage.id];
           if (status === 'racing' && startTime && !hasRunningStage) {
             const runningTime = getRunningTime(startTime, stage.date, sceneNow);
@@ -223,15 +266,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         timeColor: hasRunningStage ? 'text-[#FACC15]' : 'text-white',
         sortTime: (completedStages > 0 || hasRunningStage) ? totalTime : Infinity,
         overallDisplay: displayTime,
-        hasTime: completedStages > 0 || hasRunningStage
+        hasTime: completedStages > 0 || hasRunningStage,
+        isRetired
       };
-    }).sort((a, b) => {
-      if (!a.hasTime && !b.hasTime) return 0;
-      if (!a.hasTime) return 1;
-      if (!b.hasTime) return -1;
-      return a.sortTime - b.sortTime;
-    });
-  }, [selectedStageId, selectedStage, pilots, times, startTimes, lapTimes, stagePilots, sortedSSStages, sceneNow]);
+    }));
+  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, sceneNow, referenceSpecialStage, t]);
 
   const leader = leaderboard.find(p => p.hasTime);
   const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
@@ -249,7 +288,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   };
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center p-8" data-testid="scene-3-leaderboard">
+    <div className="relative w-full h-full flex items-center justify-center p-8 overflow-hidden" data-testid="scene-3-leaderboard">
       {/* Logo - Top Right */}
       {logoUrl && (
         <div className="absolute top-8 right-8 z-10">
@@ -316,9 +355,9 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         </div>
       </LeftControls>
 
-      <div className="w-full max-w-6xl">
+      <div className="w-full max-w-6xl h-full flex flex-col min-h-0">
         {/* Header - Shows selected stage name */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 flex-shrink-0">
           <div className="flex items-center justify-center gap-3 mb-2">
             {selectedStage ? (
               <>
@@ -342,10 +381,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         </div>
 
         {/* Leaderboard Table */}
-        <div className="bg-black/95 backdrop-blur-sm border border-white/10 rounded-lg overflow-hidden">
+        <div className="bg-black/95 backdrop-blur-sm border border-white/10 rounded-lg overflow-hidden flex-1 min-h-0">
+          <div className="h-full overflow-y-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-[#18181B] text-white border-b border-white/10">
+              <tr className="bg-[#18181B] text-white border-b border-white/10 sticky top-0 z-10">
                 <th className="p-1 w-1"></th>
                 <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.pos')}</th>
                 <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.pilot')}</th>
@@ -429,9 +469,16 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                           </div>
                         )}
                         <div className="min-w-0">
-                          <span className="text-white text-xl font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                            {pilot.name}
-                          </span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-white text-xl font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                              {pilot.name}
+                            </span>
+                            {pilot.isRetired && (
+                              <span className="flex-shrink-0 bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                RET
+                              </span>
+                            )}
+                          </div>
                           {pilotMeta && (
                             <span className="text-zinc-400 text-xs uppercase tracking-wide truncate block leading-tight mt-0.5">
                               {pilotMeta}
@@ -493,6 +540,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
               })}
             </tbody>
           </table>
+          </div>
         </div>
 
         {leaderboard.length === 0 && (

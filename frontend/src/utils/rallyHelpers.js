@@ -1,3 +1,5 @@
+import { sortPilotsByDisplayOrder } from './displayOrder.js';
+
 // Helper functions for pilot status and timing
 
 export const getReferenceNow = (debugDate, now = new Date()) => {
@@ -33,12 +35,21 @@ export const hasStageDateTimePassed = (clockTime, stageDate, now = new Date()) =
   return now >= stageDateTime;
 };
 
-export const getPilotStatus = (pilotId, stageId, startTimes, times, stageDate, now = new Date()) => {
+export const isPilotRetiredForStage = (pilotId, stageId, retiredStages) => {
+  return !!retiredStages?.[pilotId]?.[stageId];
+};
+
+export const getPilotStatus = (pilotId, stageId, startTimes, times, retiredStages, stageDate, now = new Date()) => {
   const startTime = startTimes[pilotId]?.[stageId];
   const finishTime = times[pilotId]?.[stageId];
+  const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
   
   if (finishTime) {
     return 'finished';
+  }
+
+  if (retired) {
+    return 'retired';
   }
   
   if (!startTime) {
@@ -89,24 +100,35 @@ export const parseTime = (timeStr) => {
   }
 };
 
-export const sortPilotsByStatus = (pilots, stageId, startTimes, times, stageDate, now = new Date()) => {
-  const statusOrder = { racing: 0, finished: 1, not_started: 2 };
+export const sortPilotsByStatus = (pilots, categories, stageId, startTimes, times, retiredStages, stageDate, now = new Date()) => {
+  const statusOrder = { racing: 0, finished: 1, not_started: 2, retired: 3 };
+  const fallbackSortedPilots = sortPilotsByDisplayOrder(pilots, categories);
+  const fallbackIndexByPilotId = new Map(fallbackSortedPilots.map((pilot, index) => [pilot.id, index]));
   
   return [...pilots].sort((a, b) => {
-    const statusA = getPilotStatus(a.id, stageId, startTimes, times, stageDate, now);
-    const statusB = getPilotStatus(b.id, stageId, startTimes, times, stageDate, now);
+    const statusA = getPilotStatus(a.id, stageId, startTimes, times, retiredStages, stageDate, now);
+    const statusB = getPilotStatus(b.id, stageId, startTimes, times, retiredStages, stageDate, now);
+    const retiredA = isPilotRetiredForStage(a.id, stageId, retiredStages);
+    const retiredB = isPilotRetiredForStage(b.id, stageId, retiredStages);
     
     if (statusOrder[statusA] !== statusOrder[statusB]) {
       return statusOrder[statusA] - statusOrder[statusB];
+    }
+
+    if (retiredA !== retiredB) {
+      return retiredA ? 1 : -1;
     }
     
     // Within same status, sort by time
     if (statusA === 'finished') {
       const timeA = parseTime(times[a.id]?.[stageId]);
       const timeB = parseTime(times[b.id]?.[stageId]);
-      return timeA - timeB;
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
     }
-    
-    return 0;
+
+    return (fallbackIndexByPilotId.get(a.id) ?? Number.MAX_SAFE_INTEGER)
+      - (fallbackIndexByPilotId.get(b.id) ?? Number.MAX_SAFE_INTEGER);
   });
 };

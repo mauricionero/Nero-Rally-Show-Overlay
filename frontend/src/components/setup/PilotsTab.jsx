@@ -12,6 +12,7 @@ import { StreamThumbnail } from '../StreamThumbnail.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit } from 'lucide-react';
+import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 
 export default function PilotsTab() {
   const { t } = useTranslation();
@@ -79,11 +80,8 @@ export default function PilotsTab() {
     toast.success('Pilot updated successfully');
   };
 
-  const sortedPilots = [...pilots].sort((a, b) => {
-    const orderA = a.startOrder || 999;
-    const orderB = b.startOrder || 999;
-    return orderA - orderB;
-  });
+  const sortedCategories = sortCategoriesByDisplayOrder(categories);
+  const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
 
   return (
     <div className="space-y-4">
@@ -135,7 +133,7 @@ export default function PilotsTab() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">{t('common.none')}</SelectItem>
-                    {categories.map((cat) => (
+                    {sortedCategories.map((cat) => (
                       <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -352,7 +350,7 @@ export default function PilotsTab() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">{t('common.none')}</SelectItem>
-                                {categories.map((cat) => (
+                                {sortedCategories.map((cat) => (
                                   <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                                 ))}
                               </SelectContent>

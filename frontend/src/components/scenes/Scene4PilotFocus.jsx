@@ -6,7 +6,7 @@ import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
-import { getPilotStatus, getReferenceNow, getRunningTime, hasStageDateTimePassed } from '../../utils/rallyHelpers';
+import { getPilotStatus, getReferenceNow, getRunningTime, hasStageDateTimePassed, isPilotRetiredForStage } from '../../utils/rallyHelpers';
 import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -80,7 +80,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, debugDate
+    lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages
   } = useRally();
   const { t } = useTranslation();
   
@@ -184,15 +184,18 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         };
       } else if (isSS) {
         // SS Stage data
-        const status = getPilotStatus(focusPilot.id, stage.id, startTimes, times, stage.date, sceneNow);
+        const status = getPilotStatus(focusPilot.id, stage.id, startTimes, times, retiredStages, stage.date, sceneNow);
         const startTime = startTimes[focusPilot.id]?.[stage.id];
         const finishTime = times[focusPilot.id]?.[stage.id];
+        const retired = isPilotRetiredForStage(focusPilot.id, stage.id, retiredStages);
         
         let displayTime = '-';
-        if (status === 'racing' && startTime) {
+        if (status === 'retired') {
+          displayTime = t('status.retired');
+        } else if (status === 'racing' && startTime) {
           displayTime = getRunningTime(startTime, stage.date, sceneNow);
         } else if (status === 'finished' && finishTime) {
-          displayTime = finishTime;
+          displayTime = retired ? `${finishTime} RET` : finishTime;
         } else if (status === 'not_started' && startTime) {
           displayTime = 'Start: ' + startTime;
         }
@@ -229,7 +232,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         };
       }
     });
-  }, [sortedStages, focusPilot, lapTimes, startTimes, times, sceneNow]);
+  }, [sortedStages, focusPilot, lapTimes, startTimes, times, retiredStages, sceneNow, t]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
   const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia }), [pilots, cameras, externalMedia]);
@@ -420,6 +423,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     <p className={`text-2xl font-mono font-bold ${
                       selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
                       selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      selectedStageData.status === 'retired' ? 'text-red-400' :
                       'text-zinc-500'
                     }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       {selectedStageData.time}
@@ -476,6 +480,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     <p className={`text-2xl font-mono font-bold ${
                       selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
                       selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      selectedStageData.status === 'retired' ? 'text-red-400' :
                       'text-zinc-500'
                     }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       {selectedStageData.time}
@@ -522,6 +527,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     <p className={`text-2xl font-mono font-bold ${
                       selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
                       selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      selectedStageData.status === 'retired' ? 'text-red-400' :
                       'text-zinc-500'
                     }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       {selectedStageData.time}
@@ -545,6 +551,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     <p className={`text-2xl font-mono font-bold ${
                       selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
                       selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      selectedStageData.status === 'retired' ? 'text-red-400' :
                       'text-zinc-500'
                     }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       {selectedStageData.time}
@@ -636,6 +643,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                           <span className={`text-lg font-mono ${
                             item.status === 'racing' ? 'text-[#FACC15]' :
                             item.status === 'finished' ? 'text-white' :
+                            item.status === 'retired' ? 'text-red-400' :
                             'text-zinc-500'
                           }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                             {item.time}
