@@ -57,6 +57,8 @@ tabs:
 pilots:
   addNewPilot: "Adicionar Novo Piloto"
   pilotName: "Nome do Piloto"
+  team: "Equipe"
+  car: "Carro"
   carNumber: "Nº Carro"
   startOrder: "Ordem de Largada"
   timeOffsetMinutes: "Offset de Tempo (min)"
@@ -68,6 +70,8 @@ pilots:
   activePilots: "Pilotos Ativos"
   placeholder:
     name: "João Silva"
+    team: "Toyota Gazoo Racing"
+    car: "GR Yaris Rally1"
     carNumber: "42"
     startOrder: "1"
     timeOffsetMinutes: "2"

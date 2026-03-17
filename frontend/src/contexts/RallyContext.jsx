@@ -396,6 +396,8 @@ export const RallyProvider = ({ children }) => {
     const newPilot = {
       id: Date.now().toString(),
       name: pilot.name,
+      team: pilot.team || '',
+      car: pilot.car || '',
       picture: pilot.picture || '',
       streamUrl: pilot.streamUrl || '',
       categoryId: pilot.categoryId || null,

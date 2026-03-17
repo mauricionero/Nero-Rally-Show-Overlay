@@ -19,6 +19,25 @@ const LAYOUTS = [
   { id: '3x2', name: '3x2 Grid', cols: 3, rows: 2, slots: 6 }
 ];
 
+const abbreviateTickerName = (name) => {
+  if (!name) return '';
+
+  return name
+    .split(/\s*\/\s*/)
+    .map((part) => {
+      const words = part.trim().split(/\s+/).filter(Boolean);
+
+      if (words.length <= 1) {
+        return part.trim();
+      }
+
+      const firstInitial = words[0][0]?.toUpperCase() || '';
+      const lastName = words[words.length - 1];
+      return `${firstInitial}. ${lastName}`;
+    })
+    .join(' / ');
+};
+
 
 // Helper to calculate position for Lap Race based on lap times
 const calculateLapRacePositions = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
@@ -88,6 +107,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const [maxScroll, setMaxScroll] = useState(0);
   const [prevPositions, setPrevPositions] = useState({});
   const bottomContainerRef = useRef(null);
+  const bottomTrackRef = useRef(null);
   
   const currentStage = stages.find(s => s.id === currentStageId);
   const activeMedia = externalMedia.filter(m => m.url);
@@ -128,15 +148,33 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     setPrevPositions(newPositions);
   }, [sortedPilotsWithPositions]);
 
-  // Calculate max scroll based on content width
+  // Calculate max scroll based on the actual ticker track width
   useEffect(() => {
-    if (bottomContainerRef.current) {
-      const container = bottomContainerRef.current;
-      const scrollWidth = container.scrollWidth;
-      const clientWidth = container.clientWidth;
-      setMaxScroll(Math.max(0, scrollWidth - clientWidth));
+    const container = bottomContainerRef.current;
+    const track = bottomTrackRef.current;
+
+    if (!container || !track) {
+      return undefined;
     }
-  }, [sortedPilotsWithPositions]);
+
+    const updateBottomMetrics = () => {
+      const nextMaxScroll = Math.max(0, track.scrollWidth - container.clientWidth);
+      setMaxScroll(nextMaxScroll);
+      setBottomScroll(prev => Math.min(prev, nextMaxScroll));
+    };
+
+    updateBottomMetrics();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const resizeObserver = new ResizeObserver(updateBottomMetrics);
+      resizeObserver.observe(container);
+      resizeObserver.observe(track);
+      return () => resizeObserver.disconnect();
+    }
+
+    window.addEventListener('resize', updateBottomMetrics);
+    return () => window.removeEventListener('resize', updateBottomMetrics);
+  }, [sortedPilotsWithPositions, pilots]);
   
   // Auto-select active pilots up to layout slots
   useEffect(() => {
@@ -199,6 +237,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const displayItems = selectedSlotIds.map(id => getDisplayItem(id)).filter(Boolean);
 
   const gridStyle = {
+    height: currentStage && currentStageId ? 'calc(100% - 230px)' : '100%',
     gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`
   };
@@ -359,7 +398,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
         </div>
       </LeftControls>
 
-      <div className="grid gap-4 h-[calc(100%-200px)]" style={gridStyle}>
+      <div className="grid gap-4" style={gridStyle}>
         {displayItems.length === 0 ? (
           <div className="flex items-center justify-center h-full col-span-full">
             <div className="text-center">
@@ -532,11 +571,13 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
             <div className="overflow-hidden px-10" ref={bottomContainerRef}>
               <div 
+                ref={bottomTrackRef}
                 className="flex gap-2 py-2 transition-transform duration-500 ease-out"
                 style={{ transform: `translateX(-${bottomScroll}px)` }}
               >
                 {sortedPilotsWithPositions.map(({ pilot, position, completedLaps, isFinished }) => {
                   const category = categories.find(c => c.id === pilot.categoryId);
+                  const pilotMeta = [pilot.car, pilot.team].filter(Boolean).join(' • ');
                   
                   let borderColor = 'border-zinc-700';
                   let timeDisplay = '';
@@ -574,22 +615,27 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   return (
                     <div 
                       key={pilot.id} 
-                      className={`relative flex-shrink-0 bg-white/5 border-2 ${borderColor} px-4 py-2 min-w-[150px] transition-all duration-500 ease-out`}
+                      className={`relative flex-shrink-0 w-[170px] bg-white/5 border-2 ${borderColor} px-4 py-2.5 transition-all duration-500 ease-out`}
                       style={{ order: position }}
                     >
                       {category && (
                         <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
                       )}
-                      <div className="pl-2 flex items-center gap-2">
+                      <div className="pl-2 min-w-0">
                         {isLapRace && (
-                          <span className="text-[#FF4500] font-bold text-sm">P{position}</span>
+                          <span className="block text-[#FF4500] font-bold text-sm leading-none mb-1">P{position}</span>
                         )}
-                        <div>
+                        <div className="min-w-0 space-y-0.5">
                           <p className="text-white text-sm font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                            {pilot.name}
+                            {abbreviateTickerName(pilot.name)}
                           </p>
+                          {pilotMeta && (
+                            <p className="text-zinc-400 text-[11px] leading-tight truncate">
+                              {pilotMeta}
+                            </p>
+                          )}
                           {timeDisplay && (
-                            <p className={`font-mono text-xs ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            <p className={`font-mono text-xs truncate ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                               {timeDisplay}
                             </p>
                           )}

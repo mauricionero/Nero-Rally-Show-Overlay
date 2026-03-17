@@ -388,6 +388,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 }
                 
                 const category = categories.find(c => c.id === pilot.categoryId);
+                const pilotMeta = [pilot.car, pilot.team].filter(Boolean).join(' • ');
 
                 return (
                   <tr
@@ -427,9 +428,16 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                             <span className="text-lg font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
                           </div>
                         )}
-                        <span className="text-white text-xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          {pilot.name}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="text-white text-xl font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                            {pilot.name}
+                          </span>
+                          {pilotMeta && (
+                            <span className="text-zinc-400 text-xs uppercase tracking-wide truncate block leading-tight mt-0.5">
+                              {pilotMeta}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     

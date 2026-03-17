@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
@@ -9,6 +9,30 @@ import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getStageNumberLabel, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
+
+const TIMING_TOWER_WIDTH_KEY = 'scene2TimingTowerWidth';
+const DEFAULT_TOWER_WIDTH = 300;
+const MIN_TOWER_WIDTH = 260;
+const MAX_TOWER_WIDTH = 460;
+
+const abbreviateCompactName = (name) => {
+  if (!name) return '';
+
+  return name
+    .split(/\s*\/\s*/)
+    .map((part) => {
+      const words = part.trim().split(/\s+/).filter(Boolean);
+
+      if (words.length <= 1) {
+        return part.trim();
+      }
+
+      const firstInitial = words[0][0]?.toUpperCase() || '';
+      const lastName = words[words.length - 1];
+      return `${firstInitial}. ${lastName}`;
+    })
+    .join(' / ');
+};
 
 // Helper to calculate positions for Lap Race
 const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
@@ -76,6 +100,17 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedFeedValue, setSelectedFeedValue] = useState(null);
   const [expandedPilotId, setExpandedPilotId] = useState(null);
+  const [towerWidth, setTowerWidth] = useState(() => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_TOWER_WIDTH;
+    }
+
+    const storedWidth = parseInt(window.localStorage.getItem(TIMING_TOWER_WIDTH_KEY) || '', 10);
+    return Number.isFinite(storedWidth)
+      ? Math.min(MAX_TOWER_WIDTH, Math.max(MIN_TOWER_WIDTH, storedWidth))
+      : DEFAULT_TOWER_WIDTH;
+  });
+  const resizeStateRef = useRef(null);
   
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRace = isLapRaceStageType(currentStage?.type);
@@ -84,6 +119,39 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TIMING_TOWER_WIDTH_KEY, String(towerWidth));
+    }
+  }, [towerWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      if (!resizeStateRef.current) {
+        return;
+      }
+
+      const { startX, startWidth } = resizeStateRef.current;
+      const nextWidth = Math.min(
+        MAX_TOWER_WIDTH,
+        Math.max(MIN_TOWER_WIDTH, startWidth + (event.clientX - startX))
+      );
+      setTowerWidth(nextWidth);
+    };
+
+    const handleMouseUp = () => {
+      resizeStateRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
   }, []);
 
   // Calculate sorted pilots based on stage type
@@ -159,6 +227,14 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     setExpandedPilotId(expandedPilotId === pilotId ? null : pilotId);
   };
 
+  const handleResizeStart = (event) => {
+    event.preventDefault();
+    resizeStateRef.current = {
+      startX: event.clientX,
+      startWidth: towerWidth
+    };
+  };
+
   const renderPilotRow = (data, index) => {
     const { pilot, position, completedLaps, totalTimeMs, isFinished, isRacing } = data;
     const category = categories.find(c => c.id === pilot.categoryId);
@@ -197,6 +273,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         timeColor = 'text-zinc-500';
       }
     }
+
+    const rowDisplayName = displayTime ? abbreviateCompactName(pilot.name) : pilot.name;
 
     // Calculate gap from leader
     let gap = '';
@@ -243,7 +321,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           {/* Pilot name */}
           <div className="flex-1 min-w-0">
             <span className="text-white text-sm font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              {pilot.name}
+              {rowDisplayName}
             </span>
           </div>
           
@@ -289,6 +367,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const selectedPilotData = selectedFeed?.type === 'pilot'
     ? sortedPilotsData.find((data) => data.pilot.id === selectedFeed.id)
     : null;
+  const selectedPilotMeta = selectedPilot
+    ? [selectedPilot.car, selectedPilot.team].filter(Boolean).join(' • ')
+    : '';
   const SelectedMediaIcon = selectedFeed?.type === 'media'
     ? getExternalMediaIconComponent(selectedFeed.icon)
     : null;
@@ -319,7 +400,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       </LeftControls>
 
       {/* Left Side - Compact Timing Tower */}
-      <div className="w-[280px] bg-gradient-to-b from-black/95 to-black/80 backdrop-blur-sm overflow-y-auto">
+      <div
+        className="bg-gradient-to-b from-black/95 to-black/80 backdrop-blur-sm overflow-y-auto"
+        style={{ width: `${towerWidth}px` }}
+      >
         {/* Header with diagonal accent */}
         <div className="relative p-4 pb-3 overflow-hidden">
           <div className="absolute -right-10 -top-10 w-32 h-32 bg-[#FF4500]/20 rotate-45" />
@@ -389,6 +473,14 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         )}
       </div>
 
+      <div
+        onMouseDown={handleResizeStart}
+        className="group relative w-2 cursor-col-resize flex-shrink-0 bg-black/40 hover:bg-black/60 transition-colors"
+        title="Resize timing tower"
+      >
+        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-zinc-700 group-hover:bg-[#FF4500]" />
+      </div>
+
       {/* Right Side - Main Stream */}
       <div className="flex-1 relative" style={{ backgroundColor: chromaKey }}>
         {selectedFeed?.type === 'media' ? (
@@ -447,6 +539,11 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                   <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                     {selectedPilot.name}
                   </p>
+                  {selectedPilotMeta && (
+                    <p className="text-zinc-300 text-sm uppercase tracking-wide mt-1">
+                      {selectedPilotMeta}
+                    </p>
+                  )}
                   {isLapRace && selectedPilotData && (
                     <p className="text-[#FACC15] text-lg font-mono">
                       {t('times.lap')} {selectedPilotData.completedLaps || 0}/{currentStage?.numberOfLaps || 0}

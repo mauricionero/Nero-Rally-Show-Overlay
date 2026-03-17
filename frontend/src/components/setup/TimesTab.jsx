@@ -40,6 +40,10 @@ const formatClockInput = (value) => {
 
 const isValidClockTime = (value) => /^\d{2}:\d{2}$/.test(value);
 
+const pilotTimingGridStyle = {
+  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))'
+};
+
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = () => {
   const now = new Date();
@@ -166,7 +170,7 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+    <div className="grid gap-2" style={pilotTimingGridStyle}>
       {sortedPilots.map((pilot) => {
         const category = categories.find(c => c.id === pilot.categoryId);
         const startTimeValue = manualStartTime
@@ -178,16 +182,16 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
             {category && (
               <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l" style={{ backgroundColor: category.color }} />
             )}
-            <CardContent className="p-3 pl-4">
+            <CardContent className="p-2 pl-3">
               {/* Pilot Header */}
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
                 <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
                 {pilot.carNumber && (
                   <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
                     {pilot.carNumber}
                   </span>
                 )}
-                <span className="text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {pilot.name}
                 </span>
               </div>
@@ -202,19 +206,19 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
                         value={startTimeValue}
                         onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
                         placeholder={t('times.placeholder.shortTime')}
-                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                         inputMode="numeric"
                       />
                       <button
                         onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
-                        className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
+                        className="h-7 w-7 flex-shrink-0 text-zinc-400 hover:text-[#FF4500] transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center"
                         title={t('times.now')}
                       >
-                        <Clock className="w-4 h-4" />
+                        <Clock className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleStartTimeChange(pilot.id, '')}
-                        className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
+                        className="h-7 w-4 flex-shrink-0 text-zinc-500 hover:text-red-500 transition-colors flex items-center justify-center"
                         title={t('common.clear')}
                       >
                         <X className="w-3 h-3" />
@@ -225,7 +229,7 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
                       value={startTimeValue}
                       readOnly
                       placeholder="--:--"
-                      className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8"
+                      className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7"
                     />
                   )}
                 </div>
@@ -239,24 +243,24 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
                     value={getArrivalTime(pilot.id, stage.id)}
                     onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
                     placeholder={t('times.placeholder.time')}
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                   />
                   <button
                     onClick={() => {
                       const currentTime = getCurrentTimeString();
                       handleArrivalTimeChange(pilot.id, currentTime);
                     }}
-                    className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
+                    className="h-7 w-7 flex-shrink-0 text-zinc-400 hover:text-[#FF4500] transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center"
                     title={t('times.now')}
                   >
-                    <Clock className="w-4 h-4" />
+                    <Clock className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => {
                       setArrivalTime(pilot.id, stage.id, '');
                       setTime(pilot.id, stage.id, '');
                     }}
-                    className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
+                    className="h-7 w-4 flex-shrink-0 text-zinc-500 hover:text-red-500 transition-colors flex items-center justify-center"
                     title={t('common.clear')}
                   >
                     <X className="w-3 h-3" />
@@ -272,7 +276,7 @@ function TimedStageCard({ stage, pilots, categories, manualStartTime = false }) 
                     value={getTime(pilot.id, stage.id)}
                     onChange={(val) => handleTotalTimeChange(pilot.id, val)}
                     placeholder={t('times.placeholder.totalTime')}
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                   />
                 </div>
               </div>
@@ -291,7 +295,7 @@ function LiaisonStageCard({ stage, pilots, categories }) {
   const sortedPilots = [...pilots].sort((a, b) => (a.startOrder || 999) - (b.startOrder || 999));
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+    <div className="grid gap-2" style={pilotTimingGridStyle}>
       {sortedPilots.map((pilot) => {
         const category = categories.find(c => c.id === pilot.categoryId);
         const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
@@ -301,11 +305,11 @@ function LiaisonStageCard({ stage, pilots, categories }) {
             {category && (
               <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l" style={{ backgroundColor: category.color }} />
             )}
-            <CardContent className="p-3 pl-4">
+            <CardContent className="p-2 pl-3">
               {/* Pilot Header */}
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
                 <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                <span className="text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {pilot.name}
                 </span>
               </div>
@@ -318,7 +322,7 @@ function LiaisonStageCard({ stage, pilots, categories }) {
                     value={inferredStartTime}
                     readOnly
                     placeholder="--:--"
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                   />
                 </div>
               </div>
@@ -331,7 +335,7 @@ function LiaisonStageCard({ stage, pilots, categories }) {
                     value={inferredEndTime}
                     readOnly
                     placeholder="--:--"
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-8 flex-1"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                   />
                 </div>
               </div>

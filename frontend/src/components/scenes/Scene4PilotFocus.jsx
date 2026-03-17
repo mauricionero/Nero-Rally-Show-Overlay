@@ -324,310 +324,329 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         </div>
       </LeftControls>
 
-      {/* Stream Display */}
-      <div className="flex-1 p-8">
-        {selectedMainFeed?.type === 'media' ? (
-          <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-            <iframe
-              src={selectedMainFeed.url}
-              className="w-full h-full border-0"
-              allowFullScreen
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              title={selectedMainFeed.name}
-            />
+      <div className="flex-1 p-8 flex flex-col gap-5 min-h-0">
+        <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-4 min-w-0 flex-1">
+            {focusPilot.picture ? (
+              <img
+                src={focusPilot.picture}
+                alt={focusPilot.name}
+                className="w-16 h-16 rounded-full object-cover flex-shrink-0 border-2 border-[#FF4500]"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 border-2 border-[#FF4500]">
+                <span className="text-2xl font-bold text-white">{focusPilot.name.charAt(0)}</span>
+              </div>
+            )}
 
-            <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
-              {SelectedMediaIcon && <SelectedMediaIcon className="w-4 h-4 text-[#FF4500]" />}
-              <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                {selectedMainFeed.name}
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-3xl font-bold uppercase text-white truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {focusPilot.name}
+                </h2>
+                {focusPilot.carNumber && (
+                  <span className="inline-block bg-[#FF4500] text-white text-sm font-bold px-2 py-0.5 rounded">
+                    #{focusPilot.carNumber}
+                  </span>
+                )}
+                {focusPilot.isActive && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#FF4500] rounded-full">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    <span className="text-white text-xs font-bold uppercase">{t('scene4.live')}</span>
+                  </div>
+                )}
+              </div>
             </div>
-
-            {selectedStageData && (
-              <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
-                <div className="flex items-center gap-2 mb-1">
-                  {React.createElement(getStageIcon(selectedStage?.type), {
-                    className: 'w-4 h-4',
-                    style: { color: getStageTypeColor(selectedStage?.type) }
-                  })}
-                  <p className="text-zinc-400 text-xs uppercase">
-                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
-                  </p>
-                </div>
-                <p className={`text-2xl font-mono font-bold ${
-                  selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                  selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                  'text-zinc-500'
-                }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  {selectedStageData.time}
-                </p>
-              </div>
-            )}
-
-            {showFocusPilotPip && (
-              <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
-                <StreamPlayer
-                  pilotId={focusPilot.id}
-                  streamUrl={focusPilot.streamUrl}
-                  name={focusPilot.name}
-                  className="w-full h-full"
-                />
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-                  <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    {focusPilot.name}
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
-        ) : selectedMainFeed ? (
-          /* Selected feed as main with focus pilot PiP */
-          <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-            {!hideStreams && selectedMainFeed.streamUrl && (
-              <StreamPlayer
-                pilotId={selectedMainFeed.id}
-                streamUrl={selectedMainFeed.streamUrl}
-                name={selectedMainFeed.name}
-                className="w-full h-full"
+
+          <div className="flex items-center gap-4 flex-shrink-0">
+            {(focusPilot.car || focusPilot.team) && (
+              <div className="bg-black/50 border border-white/10 rounded-lg px-4 py-2 min-w-[220px]">
+                {focusPilot.car && (
+                  <p className="text-zinc-200 text-sm uppercase tracking-wide truncate">
+                    {focusPilot.car}
+                  </p>
+                )}
+                {focusPilot.team && (
+                  <p className="text-zinc-400 text-sm uppercase tracking-wide truncate mt-0.5">
+                    {focusPilot.team}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {logoUrl && (
+              <img
+                src={logoUrl}
+                alt="Channel Logo"
+                className="w-32 max-h-16 object-contain flex-shrink-0"
               />
             )}
-            
-            <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
-              {selectedMainFeed.type === 'camera' && <Video className="w-4 h-4 text-[#FF4500]" />}
-              <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                {selectedMainFeed.name}
-              </span>
-            </div>
-            
-            {/* Stage Info */}
-            {selectedStageData && (
-              <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
-                <div className="flex items-center gap-2 mb-1">
-                  {React.createElement(getStageIcon(selectedStage?.type), { 
-                    className: 'w-4 h-4',
-                    style: { color: getStageTypeColor(selectedStage?.type) }
-                  })}
-                  <p className="text-zinc-400 text-xs uppercase">
-                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
-                  </p>
+          </div>
+        </div>
+
+        <div className="flex-1 flex gap-6 min-h-0">
+          {/* Stream Display */}
+          <div className="flex-1 min-h-0">
+            {selectedMainFeed?.type === 'media' ? (
+              <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
+                <iframe
+                  src={selectedMainFeed.url}
+                  className="w-full h-full border-0"
+                  allowFullScreen
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  title={selectedMainFeed.name}
+                />
+
+                <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
+                  {SelectedMediaIcon && <SelectedMediaIcon className="w-4 h-4 text-[#FF4500]" />}
+                  <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {selectedMainFeed.name}
+                  </span>
                 </div>
-                <p className={`text-2xl font-mono font-bold ${
-                  selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                  selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                  'text-zinc-500'
-                }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  {selectedStageData.time}
-                </p>
+
+                {selectedStageData && (
+                  <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                    <div className="flex items-center gap-2 mb-1">
+                      {React.createElement(getStageIcon(selectedStage?.type), {
+                        className: 'w-4 h-4',
+                        style: { color: getStageTypeColor(selectedStage?.type) }
+                      })}
+                      <p className="text-zinc-400 text-xs uppercase">
+                        {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
+                      </p>
+                    </div>
+                    <p className={`text-2xl font-mono font-bold ${
+                      selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                      selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      'text-zinc-500'
+                    }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {selectedStageData.time}
+                    </p>
+                  </div>
+                )}
+
+                {showFocusPilotPip && (
+                  <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
+                    <StreamPlayer
+                      pilotId={focusPilot.id}
+                      streamUrl={focusPilot.streamUrl}
+                      name={focusPilot.name}
+                      className="w-full h-full"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+                      <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {focusPilot.name}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            
-            {showFocusPilotPip && (
-              <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
+            ) : selectedMainFeed ? (
+              /* Selected feed as main with focus pilot PiP */
+              <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
+                {!hideStreams && selectedMainFeed.streamUrl && (
+                  <StreamPlayer
+                    pilotId={selectedMainFeed.id}
+                    streamUrl={selectedMainFeed.streamUrl}
+                    name={selectedMainFeed.name}
+                    className="w-full h-full"
+                  />
+                )}
+                
+                <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
+                  {selectedMainFeed.type === 'camera' && <Video className="w-4 h-4 text-[#FF4500]" />}
+                  <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {selectedMainFeed.name}
+                  </span>
+                </div>
+                
+                {selectedStageData && (
+                  <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                    <div className="flex items-center gap-2 mb-1">
+                      {React.createElement(getStageIcon(selectedStage?.type), { 
+                        className: 'w-4 h-4',
+                        style: { color: getStageTypeColor(selectedStage?.type) }
+                      })}
+                      <p className="text-zinc-400 text-xs uppercase">
+                        {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
+                      </p>
+                    </div>
+                    <p className={`text-2xl font-mono font-bold ${
+                      selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                      selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      'text-zinc-500'
+                    }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {selectedStageData.time}
+                    </p>
+                  </div>
+                )}
+                
+                {showFocusPilotPip && (
+                  <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
+                    <StreamPlayer
+                      pilotId={focusPilot.id}
+                      streamUrl={focusPilot.streamUrl}
+                      name={focusPilot.name}
+                      className="w-full h-full"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+                      <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {focusPilot.name}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : focusPilot.streamUrl && !hideStreams ? (
+              /* Pilot stream as main (original behavior) */
+              <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
                 <StreamPlayer
                   pilotId={focusPilot.id}
                   streamUrl={focusPilot.streamUrl}
                   name={focusPilot.name}
                   className="w-full h-full"
                 />
-                {/* Pilot name overlay on PiP */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-                  <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    {focusPilot.name}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : focusPilot.streamUrl && !hideStreams ? (
-          /* Pilot stream as main (original behavior) */
-          <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-            <StreamPlayer
-              pilotId={focusPilot.id}
-              streamUrl={focusPilot.streamUrl}
-              name={focusPilot.name}
-              className="w-full h-full"
-            />
-            {selectedStageData && (
-              <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
-                <div className="flex items-center gap-2 mb-1">
-                  {React.createElement(getStageIcon(selectedStage?.type), { 
-                    className: 'w-4 h-4',
-                    style: { color: getStageTypeColor(selectedStage?.type) }
-                  })}
-                  <p className="text-zinc-400 text-xs uppercase">
-                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
-                  </p>
-                </div>
-                <p className={`text-2xl font-mono font-bold ${
-                  selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                  selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                  'text-zinc-500'
-                }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  {selectedStageData.time}
-                </p>
-              </div>
-            )}
-          </div>
-        ) : hideStreams && (focusPilot.streamUrl || selectedMainFeed) ? (
-          <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
-            {selectedStageData && (
-              <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
-                <div className="flex items-center gap-2 mb-1">
-                  {React.createElement(getStageIcon(selectedStage?.type), { 
-                    className: 'w-4 h-4',
-                    style: { color: getStageTypeColor(selectedStage?.type) }
-                  })}
-                  <p className="text-zinc-400 text-xs uppercase">
-                    {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
-                  </p>
-                </div>
-                <p className={`text-2xl font-mono font-bold ${
-                  selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                  selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                  'text-zinc-500'
-                }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  {selectedStageData.time}
-                </p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="h-full rounded border-2 border-[#FF4500] flex items-center justify-center" style={{ backgroundColor: hideStreams ? chromaKey : 'black' }}>
-            <p className="text-zinc-500 text-xl">{t('scene4.noStreamAvailable')}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Right Side - Pilot Info */}
-      <div className="w-1/3 bg-black/95 backdrop-blur-sm p-6 overflow-y-auto">
-
-        {/* Logo - Top Center */}
-        {logoUrl && (
-          <div className="flex justify-center mb-4">
-            <img 
-              src={logoUrl} 
-              alt="Channel Logo" 
-              className="w-1/2 max-h-16 object-contain"
-            />
-          </div>
-        )}
-
-        {/* Pilot Header */}
-        <div className="text-center mb-6">
-          {focusPilot.picture ? (
-            <img
-              src={focusPilot.picture}
-              alt={focusPilot.name}
-              className="w-24 h-24 rounded-full object-cover mx-auto mb-3 border-4 border-[#FF4500]"
-            />
-          ) : (
-            <div className="w-24 h-24 rounded-full bg-zinc-800 mx-auto mb-3 flex items-center justify-center border-4 border-[#FF4500]">
-              <span className="text-4xl font-bold text-white">{focusPilot.name.charAt(0)}</span>
-            </div>
-          )}
-          <h2 className="text-3xl font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            {focusPilot.name}
-          </h2>
-          {focusPilot.carNumber && (
-            <span className="inline-block bg-[#FF4500] text-white text-sm font-bold px-2 py-0.5 rounded mt-1">
-              #{focusPilot.carNumber}
-            </span>
-          )}
-          {focusPilot.isActive && (
-            <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 bg-[#FF4500] rounded-full ml-2">
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              <span className="text-white text-xs font-bold uppercase">{t('scene4.live')}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Selected Stage Detail (for Lap Race, show lap breakdown) */}
-        {selectedStageData && selectedStageData.isLapRace && (
-          <div className="mb-6 p-4 bg-white/5 rounded border border-[#FACC15]/30">
-            <h3 className="text-lg font-bold uppercase text-[#FACC15] mb-3 flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              <RotateCcw className="w-5 h-5" />
-              {selectedStage?.name} - {t('scene4.lapTimes')}
-            </h3>
-            <div className="space-y-2">
-              {Array.from({ length: selectedStageData.numberOfLaps }, (_, i) => {
-                const lapTime = selectedStageData.pilotLaps?.[i];
-                const lapDuration = selectedStageData.lapDurations?.[i];
-                const isCompleted = !!lapTime;
-                
-                return (
-                  <div key={i} className={`flex justify-between items-center p-2 rounded ${
-                    isCompleted ? 'bg-[#22C55E]/10 border border-[#22C55E]/30' : 'bg-zinc-800/50'
-                  }`}>
-                    <span className="text-zinc-400 text-sm">{t('times.lap')} {i + 1}</span>
-                    <div className="text-right">
-                      {isCompleted ? (
-                        <>
-                          <span className="text-[#22C55E] font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {lapDuration ? formatTimeMs(lapDuration) : '-'}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-zinc-600 text-sm">-</span>
-                      )}
+                {selectedStageData && (
+                  <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                    <div className="flex items-center gap-2 mb-1">
+                      {React.createElement(getStageIcon(selectedStage?.type), { 
+                        className: 'w-4 h-4',
+                        style: { color: getStageTypeColor(selectedStage?.type) }
+                      })}
+                      <p className="text-zinc-400 text-xs uppercase">
+                        {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
+                      </p>
                     </div>
+                    <p className={`text-2xl font-mono font-bold ${
+                      selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                      selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      'text-zinc-500'
+                    }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {selectedStageData.time}
+                    </p>
                   </div>
-                );
-              })}
-              {selectedStageData.totalTimeMs > 0 && (
-                <div className="flex justify-between items-center p-2 rounded bg-[#FACC15]/20 border border-[#FACC15]/50 mt-3">
-                  <span className="text-[#FACC15] font-bold text-sm">{t('scene4.total')}</span>
-                  <span className="text-[#FACC15] font-mono font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {formatTimeMs(selectedStageData.totalTimeMs)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* All Stage Times */}
-        <div>
-          <h3 className="text-xl font-bold uppercase text-[#FF4500] mb-3" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            {t('scene4.allStageTimes')}
-          </h3>
-          <div className="space-y-2">
-            {pilotStageData.length === 0 ? (
-              <p className="text-zinc-500 text-center py-8">{t('scene4.noStagesRegistered')}</p>
+                )}
+              </div>
+            ) : hideStreams && (focusPilot.streamUrl || selectedMainFeed) ? (
+              <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
+                {selectedStageData && (
+                  <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                    <div className="flex items-center gap-2 mb-1">
+                      {React.createElement(getStageIcon(selectedStage?.type), { 
+                        className: 'w-4 h-4',
+                        style: { color: getStageTypeColor(selectedStage?.type) }
+                      })}
+                      <p className="text-zinc-400 text-xs uppercase">
+                        {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
+                      </p>
+                    </div>
+                    <p className={`text-2xl font-mono font-bold ${
+                      selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                      selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                      'text-zinc-500'
+                    }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {selectedStageData.time}
+                    </p>
+                  </div>
+                )}
+              </div>
             ) : (
-              pilotStageData.map((item) => {
-                const Icon = getStageIcon(item.stage.type);
-                const stageColor = getStageTypeColor(item.stage.type);
-                
-                return (
-                  <div 
-                    key={item.stage.id} 
-                    className={`border p-3 cursor-pointer transition-colors ${
-                      item.stage.id === selectedStageId 
-                        ? 'bg-[#FF4500]/20 border-[#FF4500]' 
-                        : 'bg-white/5 border-white/10 hover:bg-white/10'
-                    }`}
-                    onClick={() => setSelectedStageId(item.stage.id)}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <Icon className="w-4 h-4" style={{ color: stageColor }} />
-                        <span className="text-zinc-400 uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          {isSpecialStageType(item.stage.type) && item.stage.ssNumber ? getStageNumberLabel(item.stage) : item.stage.name}
-                        </span>
+              <div className="h-full rounded border-2 border-[#FF4500] flex items-center justify-center" style={{ backgroundColor: hideStreams ? chromaKey : 'black' }}>
+                <p className="text-zinc-500 text-xl">{t('scene4.noStreamAvailable')}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Right Side - Pilot Info */}
+          <div className="w-1/3 bg-black/95 backdrop-blur-sm p-6 overflow-y-auto min-h-0">
+            {/* Selected Stage Detail (for Lap Race, show lap breakdown) */}
+            {selectedStageData && selectedStageData.isLapRace && (
+              <div className="mb-6 p-4 bg-white/5 rounded border border-[#FACC15]/30">
+                <h3 className="text-lg font-bold uppercase text-[#FACC15] mb-3 flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  <RotateCcw className="w-5 h-5" />
+                  {selectedStage?.name} - {t('scene4.lapTimes')}
+                </h3>
+                <div className="space-y-2">
+                  {Array.from({ length: selectedStageData.numberOfLaps }, (_, i) => {
+                    const lapTime = selectedStageData.pilotLaps?.[i];
+                    const lapDuration = selectedStageData.lapDurations?.[i];
+                    const isCompleted = !!lapTime;
+                    
+                    return (
+                      <div key={i} className={`flex justify-between items-center p-2 rounded ${
+                        isCompleted ? 'bg-[#22C55E]/10 border border-[#22C55E]/30' : 'bg-zinc-800/50'
+                      }`}>
+                        <span className="text-zinc-400 text-sm">{t('times.lap')} {i + 1}</span>
+                        <div className="text-right">
+                          {isCompleted ? (
+                            <span className="text-[#22C55E] font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                              {lapDuration ? formatTimeMs(lapDuration) : '-'}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-600 text-sm">-</span>
+                          )}
+                        </div>
                       </div>
-                      <span className={`text-lg font-mono ${
-                        item.status === 'racing' ? 'text-[#FACC15]' :
-                        item.status === 'finished' ? 'text-white' :
-                        'text-zinc-500'
-                      }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {item.time}
+                    );
+                  })}
+                  {selectedStageData.totalTimeMs > 0 && (
+                    <div className="flex justify-between items-center p-2 rounded bg-[#FACC15]/20 border border-[#FACC15]/50 mt-3">
+                      <span className="text-[#FACC15] font-bold text-sm">{t('scene4.total')}</span>
+                      <span className="text-[#FACC15] font-mono font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        {formatTimeMs(selectedStageData.totalTimeMs)}
                       </span>
                     </div>
-                  </div>
-                );
-              })
+                  )}
+                </div>
+              </div>
             )}
+
+            {/* All Stage Times */}
+            <div>
+              <h3 className="text-xl font-bold uppercase text-[#FF4500] mb-3" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {t('scene4.allStageTimes')}
+              </h3>
+              <div className="space-y-2">
+                {pilotStageData.length === 0 ? (
+                  <p className="text-zinc-500 text-center py-8">{t('scene4.noStagesRegistered')}</p>
+                ) : (
+                  pilotStageData.map((item) => {
+                    const Icon = getStageIcon(item.stage.type);
+                    const stageColor = getStageTypeColor(item.stage.type);
+                    
+                    return (
+                      <div 
+                        key={item.stage.id} 
+                        className={`border p-3 cursor-pointer transition-colors ${
+                          item.stage.id === selectedStageId 
+                            ? 'bg-[#FF4500]/20 border-[#FF4500]' 
+                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                        }`}
+                        onClick={() => setSelectedStageId(item.stage.id)}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <Icon className="w-4 h-4" style={{ color: stageColor }} />
+                            <span className="text-zinc-400 uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                              {isSpecialStageType(item.stage.type) && item.stage.ssNumber ? getStageNumberLabel(item.stage) : item.stage.name}
+                            </span>
+                          </div>
+                          <span className={`text-lg font-mono ${
+                            item.status === 'racing' ? 'text-[#FACC15]' :
+                            item.status === 'finished' ? 'text-white' :
+                            'text-zinc-500'
+                          }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {item.time}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

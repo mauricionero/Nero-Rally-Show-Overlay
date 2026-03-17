@@ -57,6 +57,8 @@ tabs:
 pilots:
   addNewPilot: "Add New Pilot"
   pilotName: "Pilot Name"
+  team: "Team"
+  car: "Car"
   carNumber: "Car #"
   startOrder: "Start Order"
   timeOffsetMinutes: "Time Offset (min)"
@@ -68,6 +70,8 @@ pilots:
   activePilots: "Active Pilots"
   placeholder:
     name: "John Doe"
+    team: "Toyota Gazoo Racing"
+    car: "GR Yaris Rally1"
     carNumber: "42"
     startOrder: "1"
     timeOffsetMinutes: "2"

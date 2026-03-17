@@ -24,7 +24,17 @@ export default function PilotsTab() {
     togglePilotActive
   } = useRally();
 
-  const [newPilot, setNewPilot] = useState({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '', timeOffsetMinutes: '' });
+  const [newPilot, setNewPilot] = useState({
+    name: '',
+    team: '',
+    car: '',
+    carNumber: '',
+    picture: '',
+    streamUrl: '',
+    categoryId: null,
+    startOrder: '',
+    timeOffsetMinutes: ''
+  });
   const [editingPilot, setEditingPilot] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
 
@@ -39,7 +49,17 @@ export default function PilotsTab() {
       timeOffsetMinutes: parseInt(newPilot.timeOffsetMinutes) || 0
     };
     addPilot(pilotData);
-    setNewPilot({ name: '', carNumber: '', picture: '', streamUrl: '', categoryId: null, startOrder: '', timeOffsetMinutes: '' });
+    setNewPilot({
+      name: '',
+      team: '',
+      car: '',
+      carNumber: '',
+      picture: '',
+      streamUrl: '',
+      categoryId: null,
+      startOrder: '',
+      timeOffsetMinutes: ''
+    });
     toast.success('Pilot added successfully');
   };
 
@@ -72,98 +92,125 @@ export default function PilotsTab() {
           <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('pilots.addNewPilot')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
-            <div>
-              <Label htmlFor="pilot-name" className="text-white">{t('pilots.pilotName')} *</Label>
-              <Input
-                id="pilot-name"
-                value={newPilot.name}
-                onChange={(e) => setNewPilot({ ...newPilot, name: e.target.value })}
-                placeholder={t('pilots.placeholder.name')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                data-testid="input-pilot-name"
-              />
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div>
+                <Label htmlFor="pilot-name" className="text-white">{t('pilots.pilotName')} *</Label>
+                <Input
+                  id="pilot-name"
+                  value={newPilot.name}
+                  onChange={(e) => setNewPilot({ ...newPilot, name: e.target.value })}
+                  placeholder={t('pilots.placeholder.name')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pilot-team" className="text-white">{t('pilots.team')}</Label>
+                <Input
+                  id="pilot-team"
+                  value={newPilot.team}
+                  onChange={(e) => setNewPilot({ ...newPilot, team: e.target.value })}
+                  placeholder={t('pilots.placeholder.team')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-team"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pilot-car" className="text-white">{t('pilots.car')}</Label>
+                <Input
+                  id="pilot-car"
+                  value={newPilot.car}
+                  onChange={(e) => setNewPilot({ ...newPilot, car: e.target.value })}
+                  placeholder={t('pilots.placeholder.car')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-car"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pilot-category" className="text-white">{t('pilots.category')}</Label>
+                <Select value={newPilot.categoryId || 'none'} onValueChange={(val) => setNewPilot({ ...newPilot, categoryId: val === 'none' ? null : val })}>
+                  <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" id="pilot-category">
+                    <SelectValue placeholder={t('common.select')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('common.none')}</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="pilot-car-number" className="text-white">{t('pilots.carNumber')}</Label>
-              <Input
-                id="pilot-car-number"
-                value={newPilot.carNumber}
-                onChange={(e) => setNewPilot({ ...newPilot, carNumber: e.target.value })}
-                placeholder={t('pilots.placeholder.carNumber')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                data-testid="input-pilot-car-number"
-              />
-            </div>
-            <div>
-              <Label htmlFor="pilot-order" className="text-white">{t('pilots.startOrder')}</Label>
-              <Input
-                id="pilot-order"
-                type="number"
-                value={newPilot.startOrder}
-                onChange={(e) => setNewPilot({ ...newPilot, startOrder: e.target.value })}
-                placeholder={t('pilots.placeholder.startOrder')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                data-testid="input-pilot-order"
-              />
-            </div>
-            <div>
-              <Label htmlFor="pilot-offset" className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
-              <Input
-                id="pilot-offset"
-                type="number"
-                value={newPilot.timeOffsetMinutes}
-                onChange={(e) => setNewPilot({ ...newPilot, timeOffsetMinutes: e.target.value })}
-                placeholder={t('pilots.placeholder.timeOffsetMinutes')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                data-testid="input-pilot-offset"
-              />
-            </div>
-            <div>
-              <Label htmlFor="pilot-category" className="text-white">{t('pilots.category')}</Label>
-              <Select value={newPilot.categoryId || 'none'} onValueChange={(val) => setNewPilot({ ...newPilot, categoryId: val === 'none' ? null : val })}>
-                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" id="pilot-category">
-                  <SelectValue placeholder={t('common.select')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t('common.none')}</SelectItem>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="pilot-picture" className="text-white">{t('pilots.pictureUrl')}</Label>
-              <Input
-                id="pilot-picture"
-                value={newPilot.picture}
-                onChange={(e) => setNewPilot({ ...newPilot, picture: e.target.value })}
-                placeholder={t('pilots.placeholder.pictureUrl')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                data-testid="input-pilot-picture"
-              />
-            </div>
-            <div>
-              <Label htmlFor="pilot-stream" className="text-white">{t('pilots.streamUrl')}</Label>
-              <Input
-                id="pilot-stream"
-                value={newPilot.streamUrl}
-                onChange={(e) => setNewPilot({ ...newPilot, streamUrl: e.target.value })}
-                placeholder={t('pilots.placeholder.streamUrl')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                data-testid="input-pilot-stream"
-              />
-            </div>
-            <div className="flex items-end">
-              <Button
-                onClick={handleAddPilot}
-                className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
-                data-testid="button-add-pilot"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('pilots.addPilot')}
-              </Button>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+              <div>
+                <Label htmlFor="pilot-car-number" className="text-white">{t('pilots.carNumber')}</Label>
+                <Input
+                  id="pilot-car-number"
+                  value={newPilot.carNumber}
+                  onChange={(e) => setNewPilot({ ...newPilot, carNumber: e.target.value })}
+                  placeholder={t('pilots.placeholder.carNumber')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-car-number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pilot-order" className="text-white">{t('pilots.startOrder')}</Label>
+                <Input
+                  id="pilot-order"
+                  type="number"
+                  value={newPilot.startOrder}
+                  onChange={(e) => setNewPilot({ ...newPilot, startOrder: e.target.value })}
+                  placeholder={t('pilots.placeholder.startOrder')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-order"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pilot-offset" className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
+                <Input
+                  id="pilot-offset"
+                  type="number"
+                  value={newPilot.timeOffsetMinutes}
+                  onChange={(e) => setNewPilot({ ...newPilot, timeOffsetMinutes: e.target.value })}
+                  placeholder={t('pilots.placeholder.timeOffsetMinutes')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-offset"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pilot-picture" className="text-white">{t('pilots.pictureUrl')}</Label>
+                <Input
+                  id="pilot-picture"
+                  value={newPilot.picture}
+                  onChange={(e) => setNewPilot({ ...newPilot, picture: e.target.value })}
+                  placeholder={t('pilots.placeholder.pictureUrl')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-picture"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pilot-stream" className="text-white">{t('pilots.streamUrl')}</Label>
+                <Input
+                  id="pilot-stream"
+                  value={newPilot.streamUrl}
+                  onChange={(e) => setNewPilot({ ...newPilot, streamUrl: e.target.value })}
+                  placeholder={t('pilots.placeholder.streamUrl')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-stream"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  onClick={handleAddPilot}
+                  className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
+                  data-testid="button-add-pilot"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('pilots.addPilot')}
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -196,6 +243,20 @@ export default function PilotsTab() {
                   </div>
                   {pilot.streamUrl && (
                     <p className="text-xs text-zinc-500 truncate font-mono mt-1">{pilot.streamUrl}</p>
+                  )}
+                  {(pilot.team || pilot.car) && (
+                    <div className="mt-2 space-y-1">
+                      {pilot.team && (
+                        <p className="text-xs text-zinc-400 truncate">
+                          <span className="text-zinc-500">{t('pilots.team')}:</span> {pilot.team}
+                        </p>
+                      )}
+                      {pilot.car && (
+                        <p className="text-xs text-zinc-400 truncate">
+                          <span className="text-zinc-500">{t('pilots.car')}:</span> {pilot.car}
+                        </p>
+                      )}
+                    </div>
                   )}
                   <div className="flex items-center gap-2 mt-2">
                     <Switch
@@ -234,6 +295,24 @@ export default function PilotsTab() {
                             <Input
                               value={editingPilot.name}
                               onChange={(e) => setEditingPilot({ ...editingPilot, name: e.target.value })}
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('pilots.team')}</Label>
+                            <Input
+                              value={editingPilot.team || ''}
+                              onChange={(e) => setEditingPilot({ ...editingPilot, team: e.target.value })}
+                              placeholder={t('pilots.placeholder.team')}
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('pilots.car')}</Label>
+                            <Input
+                              value={editingPilot.car || ''}
+                              onChange={(e) => setEditingPilot({ ...editingPilot, car: e.target.value })}
+                              placeholder={t('pilots.placeholder.car')}
                               className="bg-[#09090B] border-zinc-700 text-white"
                             />
                           </div>
