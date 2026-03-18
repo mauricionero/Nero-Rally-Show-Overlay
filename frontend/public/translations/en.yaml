@@ -38,6 +38,9 @@ header:
   disconnect: "Disconnect"
   updated: "Updated"
   local: "Local"
+  websocket: "Websocket"
+  websocketSetupHint: "Connect it in Config > Live sync (websocket): generate a key, connect, then this button will be enabled."
+  websocketReadyHint: "Opens the overlay with the active websocket connection key."
 
 # ===========================================
 # SETUP PAGE - TABS
@@ -256,6 +259,10 @@ scenes:
 # SCENE 1 - LIVE STAGE
 # ===========================================
 scene1:
+  cameraSpacing: "Camera Spacing"
+  expandView: "Expand Cameras"
+  retractView: "Retract Cameras"
+  cameraSpacingHint: "Uses 2px spacing so the camera grid fills almost all available space."
   layout: "Layout"
   selectItems: "Select Items"
   reorderDragDrop: "Reorder (Drag & Drop)"

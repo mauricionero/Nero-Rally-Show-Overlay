@@ -6,8 +6,9 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
+import { Button } from '../ui/button';
 import { getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, sortPilotsByStatus } from '../../utils/rallyHelpers';
-import { ChevronLeft, ChevronRight, Flag, RotateCcw, Video } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, Maximize2, Minimize2, RotateCcw, Video } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
@@ -89,13 +90,14 @@ const calculateLapRacePositions = (pilots, stageId, lapTimes, stagePilots, numbe
 export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, times, categories, 
-    chromaKey, mapUrl, logoUrl, eventName, lapTimes, stagePilots, positions,
+    chromaKey, logoUrl, lapTimes, stagePilots,
     cameras, externalMedia, debugDate, retiredStages
   } = useRally();
   const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedLayout, setSelectedLayout] = useState('2x2');
+  const [isExpandedView, setIsExpandedView] = useState(false);
 
   // helper to render an icon for a media item
   const renderIcon = (iconName) => {
@@ -105,7 +107,6 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
   const [bottomScroll, setBottomScroll] = useState(0);
   const [maxScroll, setMaxScroll] = useState(0);
-  const [prevPositions, setPrevPositions] = useState({});
   const bottomContainerRef = useRef(null);
   const bottomTrackRef = useRef(null);
   
@@ -138,15 +139,6 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     const sorted = sortPilotsByStatus(pilots, categories, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
     return sorted.map((pilot, index) => ({ pilot, position: index + 1 }));
   }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, retiredStages, sceneNow]);
-
-  // Track position changes for animation
-  useEffect(() => {
-    const newPositions = {};
-    sortedPilotsWithPositions.forEach(({ pilot, position }) => {
-      newPositions[pilot.id] = position;
-    });
-    setPrevPositions(newPositions);
-  }, [sortedPilotsWithPositions]);
 
   // Calculate max scroll based on the actual ticker track width
   useEffect(() => {
@@ -235,9 +227,11 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   };
 
   const displayItems = selectedSlotIds.map(id => getDisplayItem(id)).filter(Boolean);
+  const sceneInset = isExpandedView ? '2px' : '2rem';
 
   const gridStyle = {
     height: currentStage && currentStageId ? 'calc(100% - 230px)' : '100%',
+    gap: isExpandedView ? '2px' : '1rem',
     gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`
   };
@@ -283,9 +277,26 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   };
 
   return (
-    <div className="relative w-full h-full p-8" data-testid="scene-1-live-stage">
+    <div className="relative w-full h-full" style={{ padding: sceneInset }} data-testid="scene-1-live-stage">
       <LeftControls>
         <div className="space-y-4">
+          <div>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.cameraSpacing')}</Label>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsExpandedView((prev) => !prev)}
+              className="w-full justify-start border-zinc-700 bg-[#18181B] text-white hover:bg-zinc-800"
+              data-testid="scene1-expand-view-button"
+            >
+              {isExpandedView ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {isExpandedView ? t('scene1.retractView') : t('scene1.expandView')}
+            </Button>
+            <p className="mt-2 text-xs text-zinc-500">
+              {t('scene1.cameraSpacingHint')}
+            </p>
+          </div>
+
           <div>
             <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.layout')}</Label>
             <Select value={selectedLayout} onValueChange={setSelectedLayout}>
@@ -415,7 +426,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
         </div>
       </LeftControls>
 
-      <div className="grid gap-4" style={gridStyle}>
+      <div className="grid" style={gridStyle}>
         {displayItems.length === 0 ? (
           <div className="flex items-center justify-center h-full col-span-full">
             <div className="text-center">
@@ -551,7 +562,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
       {/* Bottom Panel - Current Stage Info */}
       {currentStage && currentStageId && (
-        <div className="absolute bottom-8 left-8 right-8">
+        <div className="absolute" style={{ bottom: sceneInset, left: sceneInset, right: sceneInset }}>
           <div className="bg-black/95 backdrop-blur-sm border-l-4 border-[#FF4500] overflow-hidden mb-4">
             <div className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">

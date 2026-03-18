@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Upload, Download, Wifi, WifiOff, Copy, Check, Image, Globe, Trash2, Palette } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
 import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { getWebSocketOverlayUrl } from '../../utils/overlayUrls.js';
 import { isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 export default function ConfigTab() {
@@ -21,8 +22,6 @@ export default function ConfigTab() {
     cameras,
     chromaKey,
     setChromaKey,
-    mapUrl,
-    setMapUrl,
     logoUrl,
     setLogoUrl,
     externalMedia,
@@ -33,7 +32,6 @@ export default function ConfigTab() {
     importData,
     clearAllData,
     // WebSocket
-    wsEnabled,
     wsChannelKey,
     wsConnectionStatus,
     wsError,
@@ -136,9 +134,8 @@ export default function ConfigTab() {
   };
 
   const handleCopyOverlayUrl = () => {
-    const basePath = process.env.PUBLIC_URL || '';
     const key = wsChannelKey || newKey;
-    const url = `${window.location.origin}${basePath}/overlay?ws=${encodeURIComponent(key)}`;
+    const url = getWebSocketOverlayUrl(key);
     navigator.clipboard.writeText(url);
     toast.success('Overlay URL with key copied!');
   };

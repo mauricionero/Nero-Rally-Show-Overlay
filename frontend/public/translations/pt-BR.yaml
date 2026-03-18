@@ -38,6 +38,9 @@ header:
   disconnect: "Desconectar"
   updated: "Atualizado"
   local: "Local"
+  websocket: "Websocket"
+  websocketSetupHint: "Conecte em Config > Live sync (websocket): gere uma chave, conecte e então este botão será habilitado."
+  websocketReadyHint: "Abre o overlay com a chave ativa da conexão websocket."
 
 # ===========================================
 # PÁGINA SETUP - ABAS
@@ -255,6 +258,10 @@ scenes:
 # CENA 1 - ETAPA AO VIVO
 # ===========================================
 scene1:
+  cameraSpacing: "Espaçamento das Câmeras"
+  expandView: "Expandir Câmeras"
+  retractView: "Retrair Câmeras"
+  cameraSpacingHint: "Usa espaçamento de 2px para o grid de câmeras ocupar quase todo o espaço disponível."
   layout: "Layout"
   selectItems: "Selecionar Itens"
   reorderDragDrop: "Reordenar (Arrastar e Soltar)"
