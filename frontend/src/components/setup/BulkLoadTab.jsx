@@ -1,23 +1,29 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Upload, AlertTriangle, Users, Flag } from 'lucide-react';
+import { Upload, AlertTriangle, Users, Flag, Timer } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   LAP_RACE_STAGE_TYPE,
   LIAISON_STAGE_TYPE,
   SERVICE_PARK_STAGE_TYPE,
   SS_STAGE_TYPE,
-  SUPER_PRIME_STAGE_TYPE
+  SUPER_PRIME_STAGE_TYPE,
+  getStageTitle
 } from '../../utils/stageTypes.js';
+import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
+import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
+import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion.js';
 
 const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'picture', 'streamUrl'];
 const STAGE_HEADERS = ['name', 'type', 'ssNumber', 'date', 'startTime', 'endTime', 'distance', 'numberOfLaps'];
+const TIME_HEADERS = ['number', 'pilot', 'totalTime', 'arrivalTime', 'startTime'];
 
 const PILOT_EXAMPLE = `name,team,car,carNumber,category,startOrder,timeOffsetMinutes,picture,streamUrl
 Ulysses Bertholdo / Mario Marini,Toyota Gazoo Racing,GR Yaris Rally1,42,WRC,1,0,https://example.com/pilot.png,https://vdo.ninja/example`;
@@ -27,8 +33,13 @@ Super Prime,sss,7,2026-03-17,15:31,,3.2,
 Service A,service park,,2026-03-17,16:00,16:45,,
 Circuit Race,lap race,,2026-03-18,10:00,,5.1,8`;
 
+const TIME_EXAMPLE = `number,pilot,totalTime,arrivalTime,startTime
+42,Ulysses Bertholdo / Mario Marini,12:34.567,10:42:15.123,10:29
+7,,13:02.341,,`;
+
 const normalizeRecordName = (value) => value.trim();
 const normalizeLookupKey = (value) => value.trim().toLowerCase();
+const normalizeNumberKey = (value) => String(value ?? '').trim().toLowerCase();
 
 const normalizeDate = (value) => {
   if (!value) return '';
@@ -146,16 +157,42 @@ const createEmptyResult = () => ({
 
 export default function BulkLoadTab() {
   const { t } = useTranslation();
-  const { pilots, stages, categories, addPilot, updatePilot, addStage } = useRally();
+  const {
+    pilots,
+    stages,
+    categories,
+    currentStageId,
+    startTimes,
+    addPilot,
+    updatePilot,
+    addStage,
+    bulkImportTimingEntries
+  } = useRally();
   const [pilotCsv, setPilotCsv] = useState('');
   const [stageCsv, setStageCsv] = useState('');
+  const [timeCsv, setTimeCsv] = useState('');
   const [updateExistingPilots, setUpdateExistingPilots] = useState(false);
+  const [selectedTimesStageId, setSelectedTimesStageId] = useState('');
   const [pilotResult, setPilotResult] = useState(createEmptyResult());
   const [stageResult, setStageResult] = useState(createEmptyResult());
+  const [timeResult, setTimeResult] = useState(createEmptyResult());
 
   const categoryMap = useMemo(() => (
     Object.fromEntries(categories.map((category) => [normalizeLookupKey(category.name), category.id]))
   ), [categories]);
+  const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
+
+  useEffect(() => {
+    setSelectedTimesStageId((prev) => {
+      if (prev && stages.some((stage) => stage.id === prev)) {
+        return prev;
+      }
+      if (currentStageId && stages.some((stage) => stage.id === currentStageId)) {
+        return currentStageId;
+      }
+      return stages[0]?.id || '';
+    });
+  }, [currentStageId, stages]);
 
   const handleImportPilots = () => {
     const parsed = parseCsvText(pilotCsv);
@@ -286,6 +323,115 @@ export default function BulkLoadTab() {
     setStageResult({ importedCount, errors, summary });
     if (importedCount > 0) {
       toast.success(summary);
+    } else {
+      toast.error(summary);
+    }
+  };
+
+  const handleImportTimes = () => {
+    const parsed = parseCsvText(timeCsv);
+    if (parsed.error) {
+      toast.error(parsed.error);
+      return;
+    }
+    if (!selectedTimesStageId) {
+      toast.error(t('bulkLoad.selectStageFirst'));
+      return;
+    }
+    if (parsed.rows.length === 0) {
+      toast.error(t('bulkLoad.noRows'));
+      return;
+    }
+
+    const stage = stages.find((item) => item.id === selectedTimesStageId);
+    const pilotMap = new Map(pilots.map((pilot) => [normalizeLookupKey(pilot.name), pilot]));
+    const pilotNumberMap = new Map();
+
+    pilots.forEach((pilot) => {
+      const identifiers = [pilot.carNumber, pilot.startOrder]
+        .map((value) => normalizeNumberKey(value))
+        .filter(Boolean);
+
+      identifiers.forEach((identifier) => {
+        const existing = pilotNumberMap.get(identifier) || [];
+        if (!existing.some((entry) => entry.id === pilot.id)) {
+          pilotNumberMap.set(identifier, [...existing, pilot]);
+        }
+      });
+    });
+
+    const importedPilots = new Set();
+    const entries = [];
+    const errors = [];
+
+    parsed.rows.forEach(({ rowNumber, values }) => {
+      const number = (values.number || values.carNumber || values.startOrder || '').trim();
+      const pilotName = (values.pilot || values.name || '').trim();
+      const numberKey = normalizeNumberKey(number);
+      const pilotKey = normalizeLookupKey(pilotName);
+      const totalTime = (values.totalTime || '').trim();
+      const arrivalTime = (values.arrivalTime || '').trim();
+      const startTime = (values.startTime || '').trim();
+
+      if (!number && !pilotName) {
+        errors.push({ rowNumber, name: '-', message: t('bulkLoad.errors.pilotOrNumberRequired') });
+        return;
+      }
+
+      const numberMatches = numberKey ? (pilotNumberMap.get(numberKey) || []) : [];
+      if (numberKey && numberMatches.length > 1) {
+        errors.push({ rowNumber, name: number || pilotName || '-', message: t('bulkLoad.errors.ambiguousNumber') });
+        return;
+      }
+
+      const matchedByNumber = numberMatches[0] || null;
+      const matchedByName = pilotName ? pilotMap.get(pilotKey) : null;
+      const pilot = matchedByNumber || matchedByName || null;
+
+      if (matchedByNumber && matchedByName && matchedByNumber.id !== matchedByName.id) {
+        errors.push({ rowNumber, name: `${number} / ${pilotName}`, message: t('bulkLoad.errors.identifierMismatch') });
+        return;
+      }
+
+      if (!pilot) {
+        errors.push({ rowNumber, name: number || pilotName || '-', message: t('bulkLoad.errors.pilotNotFound') });
+        return;
+      }
+
+      if (importedPilots.has(pilot.id)) {
+        errors.push({ rowNumber, name: number || pilotName || pilot.name, message: t('bulkLoad.errors.duplicateInImport') });
+        return;
+      }
+
+      if (!totalTime && !arrivalTime && !startTime) {
+        errors.push({ rowNumber, name: number || pilotName || pilot.name, message: t('bulkLoad.errors.timingValueRequired') });
+        return;
+      }
+
+      const knownStartTime = startTime
+        || startTimes[pilot.id]?.[selectedTimesStageId]
+        || (stage ? getPilotScheduledStartTime(stage, pilot) : '');
+      const resolvedArrivalTime = arrivalTime || (totalTime && knownStartTime ? totalTimeToArrival(totalTime, knownStartTime) : '');
+      const resolvedTotalTime = totalTime || (arrivalTime && knownStartTime ? arrivalTimeToTotal(arrivalTime, knownStartTime) : '');
+
+      entries.push({
+        pilotId: pilot.id,
+        stageId: selectedTimesStageId,
+        totalTime: resolvedTotalTime || undefined,
+        arrivalTime: resolvedArrivalTime || undefined,
+        startTime: startTime || undefined
+      });
+      importedPilots.add(pilot.id);
+    });
+
+    if (entries.length > 0) {
+      bulkImportTimingEntries(entries);
+    }
+
+    const summary = t('bulkLoad.importSummaryTimes', { updated: entries.length, failed: errors.length });
+    setTimeResult({ importedCount: 0, updatedCount: entries.length, errors, summary });
+    if (entries.length > 0) {
+      toast.success(`${stage ? `${getStageTitle(stage)}: ` : ''}${summary}`);
     } else {
       toast.error(summary);
     }
@@ -429,6 +575,72 @@ export default function BulkLoadTab() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Timer className="w-5 h-5" />
+            {t('bulkLoad.timesTitle')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">
+            {t('bulkLoad.timesDescription')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-xs uppercase text-zinc-500 mb-2">{t('bulkLoad.selectStage')}</p>
+            <Select value={selectedTimesStageId} onValueChange={setSelectedTimesStageId}>
+              <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                <SelectValue placeholder={t('bulkLoad.selectStagePlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {sortedStages.map((stage) => (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    {getStageTitle(stage)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-2 text-xs text-zinc-500">{t('bulkLoad.timesHint')}</p>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase text-zinc-500 mb-2">{t('bulkLoad.expectedHeaders')}</p>
+            <code className="block bg-[#09090B] border border-zinc-700 rounded p-3 text-xs text-zinc-300 overflow-x-auto">
+              {TIME_HEADERS.join(', ')}
+            </code>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase text-zinc-500 mb-2">{t('bulkLoad.example')}</p>
+            <code className="block bg-[#09090B] border border-zinc-700 rounded p-3 text-xs text-zinc-300 overflow-x-auto whitespace-pre-wrap">
+              {TIME_EXAMPLE}
+            </code>
+          </div>
+
+          <Textarea
+            value={timeCsv}
+            onChange={(event) => setTimeCsv(event.target.value)}
+            className="min-h-[220px] bg-[#09090B] border-zinc-700 text-white font-mono text-xs"
+            placeholder={TIME_EXAMPLE}
+            data-testid="textarea-bulk-times"
+          />
+
+          <Button onClick={handleImportTimes} className="bg-[#FF4500] hover:bg-[#FF4500]/90">
+            <Upload className="w-4 h-4 mr-2" />
+            {t('bulkLoad.importTimes')}
+          </Button>
+
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant="outline" className="border-zinc-700 text-zinc-300">{timeResult.summary || t('bulkLoad.noImportYet')}</Badge>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase text-zinc-500 mb-2">{t('bulkLoad.rejectedRows')}</p>
+            {renderErrors(timeResult.errors)}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

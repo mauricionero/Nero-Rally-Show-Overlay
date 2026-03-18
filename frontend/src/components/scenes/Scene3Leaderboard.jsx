@@ -8,7 +8,9 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { parseTime, getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage } from '../../utils/rallyHelpers';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
+import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
+const SCENE_3_CONFIG_KEY = 'scene3Config';
 
 // Helper to calculate Lap Race positions and data
 const calculateLapRaceLeaderboard = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
@@ -95,8 +97,7 @@ const formatOverallTime = (totalSeconds) => {
 export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId } = useRally();
   const { t } = useTranslation();
-  const [selectedStageId, setSelectedStageId] = useState(null);
-  const [selectedStageType, setSelectedStageType] = useState('all'); // 'all', 'ss', 'lapRace'
+  const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
   const [currentTime, setCurrentTime] = useState(new Date());
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   
@@ -135,6 +136,18 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (selectedStageId && !stages.some((stage) => stage.id === selectedStageId)) {
+      setSelectedStageId(null);
+    }
+  }, [selectedStageId, stages]);
+
+  useEffect(() => {
+    saveSceneConfig(SCENE_3_CONFIG_KEY, {
+      selectedStageId
+    });
+  }, [selectedStageId]);
 
   // Calculate leaderboard based on selected stage/type
   const leaderboard = useMemo(() => {

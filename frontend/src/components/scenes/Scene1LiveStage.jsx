@@ -10,6 +10,7 @@ import { Button } from '../ui/button';
 import { getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, sortPilotsByStatus } from '../../utils/rallyHelpers';
 import { ChevronLeft, ChevronRight, Flag, Maximize2, Minimize2, RotateCcw, Video } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 const LAYOUTS = [
@@ -19,6 +20,7 @@ const LAYOUTS = [
   { id: '2x2', name: '2x2 Grid', cols: 2, rows: 2, slots: 4 },
   { id: '3x2', name: '3x2 Grid', cols: 3, rows: 2, slots: 6 }
 ];
+const SCENE_1_CONFIG_KEY = 'scene1Config';
 
 const abbreviateTickerName = (name) => {
   if (!name) return '';
@@ -96,15 +98,15 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedLayout, setSelectedLayout] = useState('2x2');
-  const [isExpandedView, setIsExpandedView] = useState(false);
+  const [selectedLayout, setSelectedLayout] = useState(() => loadSceneConfig(SCENE_1_CONFIG_KEY, { selectedLayout: '2x2' }).selectedLayout);
+  const [isExpandedView, setIsExpandedView] = useState(() => loadSceneConfig(SCENE_1_CONFIG_KEY, { isExpandedView: false }).isExpandedView);
 
   // helper to render an icon for a media item
   const renderIcon = (iconName) => {
     const Icon = getExternalMediaIconComponent(iconName);
     return <Icon className="w-5 h-5 text-[#FF4500]" />;
   };
-  const [selectedSlotIds, setSelectedSlotIds] = useState([]);
+  const [selectedSlotIds, setSelectedSlotIds] = useState(() => loadSceneConfig(SCENE_1_CONFIG_KEY, { selectedSlotIds: [] }).selectedSlotIds);
   const [bottomScroll, setBottomScroll] = useState(0);
   const [maxScroll, setMaxScroll] = useState(0);
   const bottomContainerRef = useRef(null);
@@ -115,6 +117,11 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const isLapRace = isLapRaceStageType(currentStage?.type);
   const isSSStage = isSpecialStageType(currentStage?.type);
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
+  const validSlotIds = useMemo(() => new Set([
+    ...pilots.filter((pilot) => pilot.isActive && pilot.streamUrl).map((pilot) => pilot.id),
+    ...activeCameras.map((camera) => camera.id),
+    ...activeMedia.map((media) => `media-${media.id}`)
+  ]), [pilots, activeCameras, activeMedia]);
   
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 100);
@@ -174,6 +181,21 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       setSelectedSlotIds(activePilots.slice(0, layout.slots).map(p => p.id));
     }
   }, [activePilots, layout.slots, selectedSlotIds.length]);
+
+  useEffect(() => {
+    setSelectedSlotIds((prev) => {
+      const next = prev.filter((slotId) => validSlotIds.has(slotId));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [validSlotIds]);
+
+  useEffect(() => {
+    saveSceneConfig(SCENE_1_CONFIG_KEY, {
+      selectedLayout,
+      isExpandedView,
+      selectedSlotIds
+    });
+  }, [selectedLayout, isExpandedView, selectedSlotIds]);
 
   const toggleSlot = (slotId) => {
     setSelectedSlotIds(prev => {

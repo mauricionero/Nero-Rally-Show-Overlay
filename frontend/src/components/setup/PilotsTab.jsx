@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
@@ -11,8 +12,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { StreamThumbnail } from '../StreamThumbnail.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { toast } from 'sonner';
-import { Trash2, Plus, Edit } from 'lucide-react';
+import { Trash2, Plus, Edit, Download } from 'lucide-react';
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+
+const escapeCsvValue = (value) => {
+  const stringValue = String(value ?? '');
+  if (!/[",\n]/.test(stringValue)) {
+    return stringValue;
+  }
+
+  return `"${stringValue.replace(/"/g, '""')}"`;
+};
 
 export default function PilotsTab() {
   const { t } = useTranslation();
@@ -38,6 +48,7 @@ export default function PilotsTab() {
   });
   const [editingPilot, setEditingPilot] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
+  const [selectedExportColumns, setSelectedExportColumns] = useState([]);
 
   const handleAddPilot = () => {
     if (!newPilot.name.trim()) {
@@ -82,6 +93,58 @@ export default function PilotsTab() {
 
   const sortedCategories = sortCategoriesByDisplayOrder(categories);
   const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
+  const categoryById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories]
+  );
+  const exportColumns = useMemo(() => ([
+    { id: 'name', label: t('pilots.pilotName'), getValue: (pilot) => pilot.name || '' },
+    { id: 'team', label: t('pilots.team'), getValue: (pilot) => pilot.team || '' },
+    { id: 'car', label: t('pilots.car'), getValue: (pilot) => pilot.car || '' },
+    { id: 'carNumber', label: t('pilots.carNumber'), getValue: (pilot) => pilot.carNumber || '' },
+    { id: 'category', label: t('pilots.category'), getValue: (pilot) => categoryById.get(pilot.categoryId)?.name || '' },
+    { id: 'startOrder', label: t('pilots.startOrder'), getValue: (pilot) => pilot.startOrder ?? '' },
+    { id: 'timeOffsetMinutes', label: t('pilots.timeOffsetMinutes'), getValue: (pilot) => pilot.timeOffsetMinutes ?? '' },
+    { id: 'picture', label: t('pilots.pictureUrl'), getValue: (pilot) => pilot.picture || '' },
+    { id: 'streamUrl', label: t('pilots.streamUrl'), getValue: (pilot) => pilot.streamUrl || '' },
+    { id: 'isActive', label: t('pilots.activeStatus'), getValue: (pilot) => (pilot.isActive ? t('status.active') : t('status.inactive')) }
+  ]), [categoryById, t]);
+
+  const toggleExportColumn = (columnId) => {
+    setSelectedExportColumns((prev) => (
+      prev.includes(columnId)
+        ? prev.filter((id) => id !== columnId)
+        : [...prev, columnId]
+    ));
+  };
+
+  const handleExportPilots = () => {
+    if (selectedExportColumns.length === 0) {
+      toast.error(t('pilots.exportSelectColumns'));
+      return;
+    }
+
+    const chosenColumns = exportColumns.filter((column) => selectedExportColumns.includes(column.id));
+    const isSingleColumn = chosenColumns.length === 1;
+    const content = isSingleColumn
+      ? sortedPilots.map((pilot) => chosenColumns[0].getValue(pilot)).join('\n')
+      : [
+          chosenColumns.map((column) => escapeCsvValue(column.label)).join(','),
+          ...sortedPilots.map((pilot) => chosenColumns.map((column) => escapeCsvValue(column.getValue(pilot))).join(','))
+        ].join('\n');
+
+    const extension = isSingleColumn ? 'txt' : 'csv';
+    const blob = new Blob([content], { type: isSingleColumn ? 'text/plain;charset=utf-8' : 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `rally-pilots-${new Date().toISOString().slice(0, 10)}.${extension}`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast.success(t('pilots.exportSuccess'));
+  };
 
   return (
     <div className="space-y-4">
@@ -407,6 +470,43 @@ export default function PilotsTab() {
           {t('pilots.noPilots')}
         </div>
       )}
+
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            {t('pilots.exportTitle')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-zinc-400">{t('pilots.exportDescription')}</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {exportColumns.map((column) => (
+              <label key={column.id} className="flex items-start gap-3 rounded border border-zinc-700 bg-[#09090B] p-3 cursor-pointer">
+                <Checkbox
+                  checked={selectedExportColumns.includes(column.id)}
+                  onCheckedChange={() => toggleExportColumn(column.id)}
+                />
+                <span className="text-sm text-white">{column.label}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-xs text-zinc-500">
+              {t('pilots.exportHint')}
+            </p>
+            <Button
+              onClick={handleExportPilots}
+              className="bg-[#FF4500] hover:bg-[#FF4500]/90"
+              data-testid="button-export-pilots"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {t('pilots.exportButton')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

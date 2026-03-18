@@ -8,9 +8,11 @@ import { getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage
 import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageNumberLabel, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 const TIMING_TOWER_WIDTH_KEY = 'scene2TimingTowerWidth';
+const SCENE_2_CONFIG_KEY = 'scene2Config';
 const DEFAULT_TOWER_WIDTH = 300;
 const MIN_TOWER_WIDTH = 260;
 const MAX_TOWER_WIDTH = 460;
@@ -98,8 +100,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const { t } = useTranslation();
   
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedFeedValue, setSelectedFeedValue] = useState(null);
-  const [expandedPilotId, setExpandedPilotId] = useState(null);
+  const [selectedFeedValue, setSelectedFeedValue] = useState(() => loadSceneConfig(SCENE_2_CONFIG_KEY, { selectedFeedValue: null }).selectedFeedValue);
+  const [expandedPilotId, setExpandedPilotId] = useState(() => loadSceneConfig(SCENE_2_CONFIG_KEY, { expandedPilotId: null }).expandedPilotId);
   const [towerWidth, setTowerWidth] = useState(() => {
     if (typeof window === 'undefined') {
       return DEFAULT_TOWER_WIDTH;
@@ -126,6 +128,13 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       window.localStorage.setItem(TIMING_TOWER_WIDTH_KEY, String(towerWidth));
     }
   }, [towerWidth]);
+
+  useEffect(() => {
+    saveSceneConfig(SCENE_2_CONFIG_KEY, {
+      selectedFeedValue,
+      expandedPilotId
+    });
+  }, [selectedFeedValue, expandedPilotId]);
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -202,6 +211,12 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       setSelectedFeedValue(availableFeeds[0]?.value || null);
     }
   }, [availableFeeds, selectedFeedValue]);
+
+  useEffect(() => {
+    if (expandedPilotId && !pilots.some((pilot) => pilot.id === expandedPilotId)) {
+      setExpandedPilotId(null);
+    }
+  }, [expandedPilotId, pilots]);
 
   if (!currentStageId) {
     return (

@@ -848,6 +848,41 @@ export const RallyProvider = ({ children }) => {
     return startTimes[pilotId]?.[stageId] || '';
   };
 
+  const bulkImportTimingEntries = (entries) => {
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return;
+    }
+
+    const applyBulkUpdates = (previousState, valueKey) => {
+      let changed = false;
+      const nextState = { ...previousState };
+
+      entries.forEach((entry) => {
+        const nextValue = entry[valueKey];
+        if (nextValue === undefined || nextValue === null || nextValue === '') {
+          return;
+        }
+
+        const currentPilotState = nextState[entry.pilotId] || {};
+        if (currentPilotState[entry.stageId] === nextValue) {
+          return;
+        }
+
+        nextState[entry.pilotId] = {
+          ...currentPilotState,
+          [entry.stageId]: nextValue
+        };
+        changed = true;
+      });
+
+      return changed ? nextState : previousState;
+    };
+
+    setTimes((prev) => applyBulkUpdates(prev, 'totalTime'));
+    setArrivalTimes((prev) => applyBulkUpdates(prev, 'arrivalTime'));
+    setStartTimes((prev) => applyBulkUpdates(prev, 'startTime'));
+  };
+
   const isRetiredStage = (pilotId, stageId) => {
     return !!retiredStages[pilotId]?.[stageId];
   };
@@ -1069,6 +1104,7 @@ export const RallyProvider = ({ children }) => {
     getArrivalTime,
     setStartTime,
     getStartTime,
+    bulkImportTimingEntries,
     setRetiredFromStage,
     isRetiredStage,
     // Lap time functions

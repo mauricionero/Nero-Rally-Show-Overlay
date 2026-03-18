@@ -10,6 +10,7 @@ import { getPilotStatus, getReferenceNow, getRunningTime, hasStageDateTimePassed
 import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getPilotScheduledEndTime } from '../../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import {
@@ -19,6 +20,7 @@ import {
   isSpecialStageType,
   SUPER_PRIME_STAGE_TYPE
 } from '../../utils/stageTypes.js';
+const SCENE_4_CONFIG_KEY = 'scene4Config';
 
 // Helper to get stage type icon
 const getStageIcon = (type) => {
@@ -84,9 +86,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   } = useRally();
   const { t } = useTranslation();
   
-  const [selectedPilotId, setSelectedPilotId] = useState(pilots[0]?.id || null);
-  const [selectedStageId, setSelectedStageId] = useState(currentStageId || stages[0]?.id || null);
-  const [selectedMainFeedValue, setSelectedMainFeedValue] = useState('none');
+  const [selectedPilotId, setSelectedPilotId] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedPilotId: pilots[0]?.id || null }).selectedPilotId);
+  const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedStageId: currentStageId || stages[0]?.id || null }).selectedStageId);
+  const [selectedMainFeedValue, setSelectedMainFeedValue] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedMainFeedValue: 'none' }).selectedMainFeedValue);
   const [currentTime, setCurrentTime] = useState(new Date());
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
 
@@ -107,12 +109,17 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     }
   }, [stages, selectedStageId]);
 
-  // Update to current stage if it changes
   useEffect(() => {
-    if (currentStageId && currentStageId !== selectedStageId) {
-      setSelectedStageId(currentStageId);
+    if (selectedPilotId && !pilots.some((pilot) => pilot.id === selectedPilotId)) {
+      setSelectedPilotId(pilots[0]?.id || null);
     }
-  }, [currentStageId]);
+  }, [selectedPilotId, pilots]);
+
+  useEffect(() => {
+    if (selectedStageId && !stages.some((stage) => stage.id === selectedStageId)) {
+      setSelectedStageId(currentStageId || stages[0]?.id || null);
+    }
+  }, [selectedStageId, stages, currentStageId]);
 
   const focusPilot = pilots.find(p => p.id === selectedPilotId);
   const selectedStage = stages.find(s => s.id === selectedStageId);
@@ -250,6 +257,14 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
       setSelectedMainFeedValue('none');
     }
   }, [availableFeeds, selectedMainFeedValue]);
+
+  useEffect(() => {
+    saveSceneConfig(SCENE_4_CONFIG_KEY, {
+      selectedPilotId,
+      selectedStageId,
+      selectedMainFeedValue
+    });
+  }, [selectedPilotId, selectedStageId, selectedMainFeedValue]);
 
   // Early return after all hooks
   if (!focusPilot) {
