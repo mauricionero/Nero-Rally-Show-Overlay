@@ -29,7 +29,6 @@ export default function Overlay() {
     connectWebSocket,
     disconnectWebSocket
   } = useRally();
-  const [lastVersion, setLastVersion] = useState(null);
   const [heartbeatStatus, setHeartbeatStatus] = useState('normal');
   const [leftZoneWidth, setLeftZoneWidth] = useState(256);
   const [showWsPanel, setShowWsPanel] = useState(false);
@@ -62,13 +61,6 @@ export default function Overlay() {
     };
   }, []);
 
-  // Initialize lastVersion
-  useEffect(() => {
-    if (lastVersion === null) {
-      setLastVersion(dataVersion);
-    }
-  }, [dataVersion, lastVersion]);
-
   useEffect(() => {
     const handleKeyPress = (e) => {
       const key = parseInt(e.key);
@@ -81,12 +73,9 @@ export default function Overlay() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [setCurrentScene]);
 
-  // Only run localStorage heartbeat if WebSocket is not connected
+  // Keep a localStorage heartbeat active as a safety net for same-browser tabs,
+  // even when WebSocket is connected.
   useEffect(() => {
-    if (wsConnectionStatus === 'connected') {
-      return; // WebSocket handles updates
-    }
-    
     const interval = setInterval(() => {
       setHeartbeatStatus('checking');
       
@@ -94,9 +83,8 @@ export default function Overlay() {
         const storedVersionStr = localStorage.getItem('rally_data_version');
         const storedVersion = storedVersionStr ? JSON.parse(storedVersionStr) : null;
         
-        if (storedVersion && typeof storedVersion === 'number' && lastVersion && storedVersion !== lastVersion) {
+        if (storedVersion && typeof storedVersion === 'number' && storedVersion !== dataVersion) {
           setHeartbeatStatus('changed');
-          setLastVersion(storedVersion);
           window.dispatchEvent(new Event('rally-reload-data'));
           setTimeout(() => setHeartbeatStatus('normal'), 1000);
         } else {
@@ -109,7 +97,7 @@ export default function Overlay() {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [lastVersion, wsConnectionStatus]);
+  }, [dataVersion]);
 
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
