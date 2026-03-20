@@ -310,6 +310,8 @@ scene2:
 # ===========================================
 scene3:
   selectView: "Select View"
+  followCurrentStage: "Follow Current Stage"
+  followCurrentStageHint: "When enabled, this scene automatically switches to the current stage from Setup."
   overallRallyStandings: "Overall Rally Standings"
   overallStandings: "Overall Standings"
   specialStages: "Special Stages"
@@ -329,6 +331,8 @@ scene3:
 scene4:
   selectPilot: "Select Pilot"
   selectStage: "Select Stage"
+  followCurrentStage: "Follow Current Stage"
+  followCurrentStageHint: "When enabled, this scene automatically switches to the current stage from Setup."
   selectCamera: "Select Camera"
   noPilotSelected: "No Pilot Selected"
   noStreamAvailable: "No stream available"

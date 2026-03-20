@@ -472,7 +472,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     referrerPolicy="no-referrer-when-downgrade"
                     title={item.name}
                   />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
+                  <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                     {renderIcon(item.icon)}
                     <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
                       {item.name}
@@ -492,7 +492,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     name={item.name}
                     className="w-full h-full"
                   />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
+                  <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                     <div className="flex items-center gap-2">
                       <Video className="w-5 h-5 text-[#FF4500]" />
                       <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
@@ -563,7 +563,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     className="w-full h-full"
                   />
                 )}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
+                <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">
                     <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1), -1px -1px 2px rgba(0,0,0,1)' }}>
                       <span className="text-zinc-400 text-base mr-2" style={{ textShadow: '0 0 6px rgba(0,0,0,1)' }}>#{pilot.startOrder || '?'}</span>

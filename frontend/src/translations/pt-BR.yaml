@@ -309,6 +309,8 @@ scene2:
 # ===========================================
 scene3:
   selectView: "Selecionar Visualização"
+  followCurrentStage: "Seguir Etapa Atual"
+  followCurrentStageHint: "Quando ativado, esta cena muda automaticamente para a etapa atual definida no Setup."
   overallRallyStandings: "Classificação Geral do Rally"
   overallStandings: "Classificação Geral"
   specialStages: "Especiais"
@@ -328,6 +330,8 @@ scene3:
 scene4:
   selectPilot: "Selecionar Piloto"
   selectStage: "Selecionar Etapa"
+  followCurrentStage: "Seguir Etapa Atual"
+  followCurrentStageHint: "Quando ativado, esta cena muda automaticamente para a etapa atual definida no Setup."
   selectCamera: "Selecionar Câmera"
   noPilotSelected: "Nenhum Piloto Selecionado"
   noStreamAvailable: "Nenhum stream disponível"

@@ -4,6 +4,7 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
+import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { getPilotStatus, getReferenceNow, getRunningTime, hasStageDateTimePassed, isPilotRetiredForStage } from '../../utils/rallyHelpers';
@@ -88,6 +89,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   
   const [selectedPilotId, setSelectedPilotId] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedPilotId: pilots[0]?.id || null }).selectedPilotId);
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedStageId: currentStageId || stages[0]?.id || null }).selectedStageId);
+  const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
   const [selectedMainFeedValue, setSelectedMainFeedValue] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedMainFeedValue: 'none' }).selectedMainFeedValue);
   const [currentTime, setCurrentTime] = useState(new Date());
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
@@ -108,6 +110,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
       setSelectedStageId(stages[0].id);
     }
   }, [stages, selectedStageId]);
+
+  useEffect(() => {
+    if (followCurrentStage && currentStageId && stages.some((stage) => stage.id === currentStageId) && currentStageId !== selectedStageId) {
+      setSelectedStageId(currentStageId);
+    }
+  }, [followCurrentStage, currentStageId, stages, selectedStageId]);
 
   useEffect(() => {
     if (selectedPilotId && !pilots.some((pilot) => pilot.id === selectedPilotId)) {
@@ -262,9 +270,10 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     saveSceneConfig(SCENE_4_CONFIG_KEY, {
       selectedPilotId,
       selectedStageId,
+      followCurrentStage,
       selectedMainFeedValue
     });
-  }, [selectedPilotId, selectedStageId, selectedMainFeedValue]);
+  }, [selectedPilotId, selectedStageId, followCurrentStage, selectedMainFeedValue]);
 
   // Early return after all hooks
   if (!focusPilot) {
@@ -299,7 +308,17 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
 
           <div>
             <Label className="text-white text-xs uppercase mb-2 block">{t('scene4.selectStage')}</Label>
-            <Select value={selectedStageId} onValueChange={setSelectedStageId}>
+            <label className="flex items-start gap-3 cursor-pointer mb-3">
+              <Checkbox
+                checked={followCurrentStage}
+                onCheckedChange={(checked) => setFollowCurrentStage(checked === true)}
+              />
+              <div>
+                <p className="text-sm text-white">{t('scene4.followCurrentStage')}</p>
+                <p className="text-xs text-zinc-500">{t('scene4.followCurrentStageHint')}</p>
+              </div>
+            </label>
+            <Select value={selectedStageId} onValueChange={setSelectedStageId} disabled={followCurrentStage}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
               </SelectTrigger>

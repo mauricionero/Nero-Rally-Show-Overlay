@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
+import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { StreamPlayer } from '../StreamPlayer.jsx';
@@ -98,6 +99,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId } = useRally();
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
+  const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
   const [currentTime, setCurrentTime] = useState(new Date());
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   
@@ -138,6 +140,12 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   }, []);
 
   useEffect(() => {
+    if (followCurrentStage && currentStageId && stages.some((stage) => stage.id === currentStageId) && currentStageId !== selectedStageId) {
+      setSelectedStageId(currentStageId);
+    }
+  }, [followCurrentStage, currentStageId, stages, selectedStageId]);
+
+  useEffect(() => {
     if (selectedStageId && !stages.some((stage) => stage.id === selectedStageId)) {
       setSelectedStageId(null);
     }
@@ -145,9 +153,10 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
 
   useEffect(() => {
     saveSceneConfig(SCENE_3_CONFIG_KEY, {
-      selectedStageId
+      selectedStageId,
+      followCurrentStage
     });
-  }, [selectedStageId]);
+  }, [selectedStageId, followCurrentStage]);
 
   // Calculate leaderboard based on selected stage/type
   const leaderboard = useMemo(() => {
@@ -315,9 +324,20 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
 
       <LeftControls>
         <div className="space-y-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <Checkbox
+              checked={followCurrentStage}
+              onCheckedChange={(checked) => setFollowCurrentStage(checked === true)}
+            />
+            <div>
+              <p className="text-sm text-white">{t('scene3.followCurrentStage')}</p>
+              <p className="text-xs text-zinc-500">{t('scene3.followCurrentStageHint')}</p>
+            </div>
+          </label>
+
           <div>
             <Label className="text-white text-xs uppercase mb-2 block">{t('scene3.selectView')}</Label>
-            <Select value={selectedStageId || 'overall'} onValueChange={(val) => setSelectedStageId(val === 'overall' ? null : val)}>
+            <Select value={selectedStageId || 'overall'} onValueChange={(val) => setSelectedStageId(val === 'overall' ? null : val)} disabled={followCurrentStage}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
               </SelectTrigger>
