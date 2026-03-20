@@ -447,7 +447,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               <img 
                 src={logoUrl} 
                 alt="Channel Logo" 
-                className="w-1/2 max-h-16 object-contain"
+                className="w-1/2 max-h-24 object-contain"
               />
             </div>
           )}

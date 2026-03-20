@@ -325,7 +325,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     <div className="relative w-full h-full flex items-center justify-center p-8 overflow-hidden" data-testid="scene-3-leaderboard">
       {/* Logo - Top Right */}
       {logoUrl && (
-        <div className="absolute top-8 right-8 z-10">
+        <div className="absolute top-4 right-8 z-10">
           <img 
             src={logoUrl} 
             alt="Channel Logo" 
@@ -402,7 +402,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
 
       <div className="w-full max-w-6xl h-full flex flex-col min-h-0">
         {/* Header - Shows selected stage name */}
-        <div className="text-center mb-8 flex-shrink-0">
+        <div className="text-center mb-8 mt-6 flex-shrink-0">
           <div className="flex items-center justify-center gap-3 mb-2">
             {selectedStage ? (
               <>
