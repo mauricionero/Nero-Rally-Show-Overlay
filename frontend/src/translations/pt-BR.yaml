@@ -375,6 +375,8 @@ bulkLoad:
   timesHint: "Campos em branco sao ignorados, entao voce pode colar atualizacoes parciais sem apagar os valores existentes. Sempre que puder, use a coluna number. Se totalTime vier preenchido e houver um horario de largada conhecido, arrivalTime sera calculado automaticamente."
   updateExistingPilots: "Atualizar Pilotos Existentes"
   updateExistingPilotsDesc: "Se o nome importado bater exatamente com um piloto existente, atualize esse piloto em vez de rejeitar a linha."
+  preserveEmptyPilotFields: "Manter Valores Existentes Em Campos Vazios"
+  preserveEmptyPilotFieldsDesc: "Ao atualizar pilotos, campos vazios no CSV nao sobrescrevem os valores ja salvos."
   importPilots: "Importar Pilotos"
   importStages: "Importar Etapas"
   importTimes: "Importar Tempos"

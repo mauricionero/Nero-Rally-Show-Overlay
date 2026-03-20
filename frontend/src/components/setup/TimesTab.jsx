@@ -11,7 +11,7 @@ import CurrentStageCard from './CurrentStageCard.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
-import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
 import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import {
   getStageNumberLabel,
@@ -48,6 +48,37 @@ const formatClockInput = (value) => {
 };
 
 const isValidClockTime = (value) => /^\d{2}:\d{2}$/.test(value);
+
+const getPilotStartOrderForTimes = (pilot) => {
+  const numericValue = Number(pilot?.startOrder);
+
+  if (!Number.isFinite(numericValue) || numericValue >= 999) {
+    return null;
+  }
+
+  return numericValue;
+};
+
+const comparePilotsForTimes = (a, b, categoryOrderById) => {
+  const startOrderA = getPilotStartOrderForTimes(a);
+  const startOrderB = getPilotStartOrderForTimes(b);
+
+  if (startOrderA !== null && startOrderB !== null && startOrderA !== startOrderB) {
+    return startOrderA - startOrderB;
+  }
+
+  if (startOrderA !== null && startOrderB === null) return -1;
+  if (startOrderA === null && startOrderB !== null) return 1;
+
+  const categoryOrderA = categoryOrderById.get(a?.categoryId) ?? Number.MAX_SAFE_INTEGER;
+  const categoryOrderB = categoryOrderById.get(b?.categoryId) ?? Number.MAX_SAFE_INTEGER;
+
+  if (categoryOrderA !== categoryOrderB) {
+    return categoryOrderA - categoryOrderB;
+  }
+
+  return (a?.name || '').localeCompare(b?.name || '');
+};
 
 const pilotTimingGridStyle = {
   gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))'
@@ -114,7 +145,7 @@ const getStageTypeColor = (type) => {
   }
 };
 
-function TimedStageCard({ stage, sortedPilots, categoryMap, pilotById, manualStartTime = false }) {
+function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false }) {
   const { t } = useTranslation();
   const {
     setTime,
@@ -126,6 +157,19 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, pilotById, manualSta
     setRetiredFromStage,
     isRetiredStage
   } = useRally();
+
+  const stageSortedPilots = useMemo(() => (
+    [...sortedPilots].sort((a, b) => {
+      const pilotAHasTime = Boolean(getTime(a.id, stage.id) || getArrivalTime(a.id, stage.id));
+      const pilotBHasTime = Boolean(getTime(b.id, stage.id) || getArrivalTime(b.id, stage.id));
+
+      if (pilotAHasTime !== pilotBHasTime) {
+        return pilotAHasTime ? -1 : 1;
+      }
+
+      return comparePilotsForTimes(a, b, categoryOrderById);
+    })
+  ), [sortedPilots, getTime, getArrivalTime, stage.id, categoryOrderById]);
 
   const handleArrivalTimeChange = (pilotId, value) => {
     setArrivalTime(pilotId, stage.id, value);
@@ -180,7 +224,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, pilotById, manualSta
 
   return (
     <div className="grid gap-2" style={pilotTimingGridStyle}>
-      {sortedPilots.map((pilot) => {
+      {stageSortedPilots.map((pilot) => {
         const category = categoryMap.get(pilot.categoryId);
         const startTimeValue = manualStartTime
           ? getStartTime(pilot.id, stage.id)
@@ -322,10 +366,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, pilotById, manualSta
 // Liaison/Service Park Stage Component - Simple start/end per pilot
 function LiaisonStageCard({ stage, sortedPilots, categoryMap }) {
   const { t } = useTranslation();
+  const stageSortedPilots = sortedPilots;
 
   return (
     <div className="grid gap-2" style={pilotTimingGridStyle}>
-      {sortedPilots.map((pilot) => {
+      {stageSortedPilots.map((pilot) => {
         const category = categoryMap.get(pilot.categoryId);
         const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
         const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
@@ -377,11 +422,12 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap }) {
 }
 
 // Lap Race Stage Component - Laps x Pilots matrix with pilot selection
-function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap }) {
+function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById }) {
   const { t } = useTranslation();
   const {
     setLapTime,
     getLapTime,
+    getPilotLapTimes,
     getStagePilots,
     togglePilotInStage,
     selectAllPilotsInStage,
@@ -391,10 +437,20 @@ function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap }) {
 
   const selectedPilotIds = getStagePilots(stage.id);
   const selectedPilotIdSet = useMemo(() => new Set(selectedPilotIds), [selectedPilotIds]);
-  const selectedPilots = useMemo(
-    () => sortedPilots.filter((pilot) => selectedPilotIdSet.has(pilot.id)),
-    [sortedPilots, selectedPilotIdSet]
-  );
+  const selectedPilots = useMemo(() => (
+    sortedPilots
+      .filter((pilot) => selectedPilotIdSet.has(pilot.id))
+      .sort((a, b) => {
+        const pilotAHasTime = getPilotLapTimes(a.id, stage.id).some((lapTime) => Boolean((lapTime || '').trim()));
+        const pilotBHasTime = getPilotLapTimes(b.id, stage.id).some((lapTime) => Boolean((lapTime || '').trim()));
+
+        if (pilotAHasTime !== pilotBHasTime) {
+          return pilotAHasTime ? -1 : 1;
+        }
+
+        return comparePilotsForTimes(a, b, categoryOrderById);
+      })
+  ), [sortedPilots, selectedPilotIdSet, getPilotLapTimes, stage.id, categoryOrderById]);
   
   const lapsArray = Array.from({ length: stage.numberOfLaps || 5 }, (_, i) => i);
   const allSelected = selectedPilotIds.length === pilots.length;
@@ -559,7 +615,12 @@ export default function TimesTab() {
   const { t } = useTranslation();
   const { pilots, stages, categories, currentStageId } = useRally();
   const [showCompetitiveStagesOnly, setShowCompetitiveStagesOnly] = useState(true);
-  const sortedPilots = useMemo(() => sortPilotsByDisplayOrder(pilots, categories), [pilots, categories]);
+  const categoryOrderById = useMemo(() => (
+    new Map(categories.map((category, index) => [category.id, getCategoryDisplayOrder(category, index + 1)]))
+  ), [categories]);
+  const sortedPilots = useMemo(() => (
+    [...pilots].sort((a, b) => comparePilotsForTimes(a, b, categoryOrderById))
+  ), [pilots, categoryOrderById]);
   const categoryMap = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
   const pilotById = useMemo(() => new Map(pilots.map((pilot) => [pilot.id, pilot])), [pilots]);
 
@@ -657,6 +718,7 @@ export default function TimesTab() {
                     stage={stage}
                     sortedPilots={sortedPilots}
                     categoryMap={categoryMap}
+                    categoryOrderById={categoryOrderById}
                     pilotById={pilotById}
                     manualStartTime={isManualStartStageType(stage.type)}
                   />
@@ -670,6 +732,7 @@ export default function TimesTab() {
                     pilots={pilots}
                     sortedPilots={sortedPilots}
                     categoryMap={categoryMap}
+                    categoryOrderById={categoryOrderById}
                   />
                 )}
               </CardContent>

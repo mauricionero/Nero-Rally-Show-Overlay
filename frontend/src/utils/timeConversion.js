@@ -1,5 +1,24 @@
 // Time conversion utilities
 
+export const normalizeTimingInput = (value) => {
+  if (typeof value !== 'string') {
+    return value ?? '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const officialDurationMatch = trimmed.match(/^(\d+)\.(\d{2}),(\d{1,3})$/);
+  if (officialDurationMatch) {
+    const [, minutes, seconds, decimals] = officialDurationMatch;
+    return `${parseInt(minutes, 10)}:${seconds}.${decimals}`;
+  }
+
+  return trimmed.replace(/,/g, '.');
+};
+
 export const arrivalTimeToTotal = (arrivalTime, startTime) => {
   if (!arrivalTime || !startTime) return '';
   

@@ -376,6 +376,8 @@ bulkLoad:
   timesHint: "Blank cells are ignored, so you can paste partial timing updates without clearing existing values. Use the number column whenever possible. If totalTime is provided and a start time is known, arrivalTime is calculated automatically."
   updateExistingPilots: "Update Existing Pilots"
   updateExistingPilotsDesc: "If an imported pilot name matches exactly, overwrite that pilot instead of rejecting the row."
+  preserveEmptyPilotFields: "Keep Existing Values For Empty Fields"
+  preserveEmptyPilotFieldsDesc: "When updating pilots, empty CSV fields will not overwrite values already stored."
   importPilots: "Import Pilots"
   importStages: "Import Stages"
   importTimes: "Import Times"

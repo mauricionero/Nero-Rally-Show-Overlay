@@ -19,7 +19,7 @@ import {
 } from '../../utils/stageTypes.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
-import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion.js';
+import { arrivalTimeToTotal, normalizeTimingInput, totalTimeToArrival } from '../../utils/timeConversion.js';
 
 const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'picture', 'streamUrl'];
 const STAGE_HEADERS = ['name', 'type', 'ssNumber', 'date', 'startTime', 'endTime', 'distance', 'numberOfLaps'];
@@ -172,6 +172,7 @@ export default function BulkLoadTab() {
   const [stageCsv, setStageCsv] = useState('');
   const [timeCsv, setTimeCsv] = useState('');
   const [updateExistingPilots, setUpdateExistingPilots] = useState(false);
+  const [preserveEmptyPilotFields, setPreserveEmptyPilotFields] = useState(false);
   const [selectedTimesStageId, setSelectedTimesStageId] = useState('');
   const [pilotResult, setPilotResult] = useState(createEmptyResult());
   const [stageResult, setStageResult] = useState(createEmptyResult());
@@ -249,7 +250,21 @@ export default function BulkLoadTab() {
           return;
         }
 
-        updatePilot(existingPilot.id, nextPilotData);
+        const mergedPilotData = preserveEmptyPilotFields
+          ? {
+              ...nextPilotData,
+              team: nextPilotData.team || existingPilot.team || '',
+              car: nextPilotData.car || existingPilot.car || '',
+              carNumber: nextPilotData.carNumber || existingPilot.carNumber || '',
+              categoryId: values.category ? nextPilotData.categoryId : (existingPilot.categoryId ?? null),
+              startOrder: String(values.startOrder || '').trim() ? nextPilotData.startOrder : (existingPilot.startOrder ?? 999),
+              timeOffsetMinutes: String(values.timeOffsetMinutes || '').trim() ? nextPilotData.timeOffsetMinutes : (existingPilot.timeOffsetMinutes ?? 0),
+              picture: nextPilotData.picture || existingPilot.picture || '',
+              streamUrl: nextPilotData.streamUrl || existingPilot.streamUrl || ''
+            }
+          : nextPilotData;
+
+        updatePilot(existingPilot.id, mergedPilotData);
         updatedCount += 1;
       } else {
         addPilot(nextPilotData);
@@ -369,8 +384,8 @@ export default function BulkLoadTab() {
       const pilotName = (values.pilot || values.name || '').trim();
       const numberKey = normalizeNumberKey(number);
       const pilotKey = normalizeLookupKey(pilotName);
-      const totalTime = (values.totalTime || '').trim();
-      const arrivalTime = (values.arrivalTime || '').trim();
+      const totalTime = normalizeTimingInput(values.totalTime || '');
+      const arrivalTime = normalizeTimingInput(values.arrivalTime || '');
       const startTime = (values.startTime || '').trim();
 
       if (!number && !pilotName) {
@@ -507,6 +522,18 @@ export default function BulkLoadTab() {
               <div>
                 <p className="text-sm text-white">{t('bulkLoad.updateExistingPilots')}</p>
                 <p className="text-xs text-zinc-500">{t('bulkLoad.updateExistingPilotsDesc')}</p>
+              </div>
+            </label>
+
+            <label className={`flex items-start gap-3 cursor-pointer ${updateExistingPilots ? '' : 'opacity-50'}`}>
+              <Checkbox
+                checked={preserveEmptyPilotFields}
+                onCheckedChange={(checked) => setPreserveEmptyPilotFields(checked === true)}
+                disabled={!updateExistingPilots}
+              />
+              <div>
+                <p className="text-sm text-white">{t('bulkLoad.preserveEmptyPilotFields')}</p>
+                <p className="text-xs text-zinc-500">{t('bulkLoad.preserveEmptyPilotFieldsDesc')}</p>
               </div>
             </label>
 
