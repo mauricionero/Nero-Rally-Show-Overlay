@@ -3,11 +3,12 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
+import { StartInformationValue } from '../StartInformationValue.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { Button } from '../ui/button';
-import { getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, sortPilotsByStatus } from '../../utils/rallyHelpers';
+import { getReferenceNow, sortPilotsByStatus, startInformationTime } from '../../utils/rallyHelpers';
 import { ChevronLeft, ChevronRight, Flag, Maximize2, Minimize2, RotateCcw, Video } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
@@ -96,17 +97,23 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     cameras, externalMedia, debugDate, retiredStages
   } = useRally();
   const { t } = useTranslation();
+  const initialSceneConfig = useMemo(
+    () => loadSceneConfig(SCENE_1_CONFIG_KEY, { selectedLayout: '2x2', isExpandedView: false, selectedSlotIds: [] }),
+    []
+  );
   
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedLayout, setSelectedLayout] = useState(() => loadSceneConfig(SCENE_1_CONFIG_KEY, { selectedLayout: '2x2' }).selectedLayout);
-  const [isExpandedView, setIsExpandedView] = useState(() => loadSceneConfig(SCENE_1_CONFIG_KEY, { isExpandedView: false }).isExpandedView);
+  const [selectedLayout, setSelectedLayout] = useState(initialSceneConfig.selectedLayout);
+  const [draftSelectedLayout, setDraftSelectedLayout] = useState(initialSceneConfig.selectedLayout);
+  const [isExpandedView, setIsExpandedView] = useState(initialSceneConfig.isExpandedView);
 
   // helper to render an icon for a media item
   const renderIcon = (iconName) => {
     const Icon = getExternalMediaIconComponent(iconName);
     return <Icon className="w-5 h-5 text-[#FF4500]" />;
   };
-  const [selectedSlotIds, setSelectedSlotIds] = useState(() => loadSceneConfig(SCENE_1_CONFIG_KEY, { selectedSlotIds: [] }).selectedSlotIds);
+  const [selectedSlotIds, setSelectedSlotIds] = useState(initialSceneConfig.selectedSlotIds);
+  const [draftSelectedSlotIds, setDraftSelectedSlotIds] = useState(initialSceneConfig.selectedSlotIds);
   const [bottomScroll, setBottomScroll] = useState(0);
   const [maxScroll, setMaxScroll] = useState(0);
   const bottomContainerRef = useRef(null);
@@ -129,6 +136,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   }, []);
 
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
+  const draftLayout = LAYOUTS.find(l => l.id === draftSelectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   
@@ -177,17 +185,32 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   
   // Auto-select active pilots up to layout slots
   useEffect(() => {
-    if (selectedSlotIds.length === 0 && activePilots.length > 0) {
-      setSelectedSlotIds(activePilots.slice(0, layout.slots).map(p => p.id));
+    if (selectedSlotIds.length === 0 && draftSelectedSlotIds.length === 0 && activePilots.length > 0) {
+      const defaultSlotIds = activePilots.slice(0, draftLayout.slots).map((pilot) => pilot.id);
+      setSelectedSlotIds(defaultSlotIds);
+      setDraftSelectedSlotIds(defaultSlotIds);
     }
-  }, [activePilots, layout.slots, selectedSlotIds.length]);
+  }, [activePilots, draftLayout.slots, selectedSlotIds.length, draftSelectedSlotIds.length]);
 
   useEffect(() => {
     setSelectedSlotIds((prev) => {
       const next = prev.filter((slotId) => validSlotIds.has(slotId));
       return next.length === prev.length ? prev : next;
     });
+
+    setDraftSelectedSlotIds((prev) => {
+      const next = prev.filter((slotId) => validSlotIds.has(slotId));
+      return next.length === prev.length ? prev : next;
+    });
   }, [validSlotIds]);
+
+  useEffect(() => {
+    setSelectedSlotIds((prev) => (prev.length > layout.slots ? prev.slice(0, layout.slots) : prev));
+  }, [layout.slots]);
+
+  useEffect(() => {
+    setDraftSelectedSlotIds((prev) => (prev.length > draftLayout.slots ? prev.slice(0, draftLayout.slots) : prev));
+  }, [draftLayout.slots]);
 
   useEffect(() => {
     saveSceneConfig(SCENE_1_CONFIG_KEY, {
@@ -198,10 +221,10 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   }, [selectedLayout, isExpandedView, selectedSlotIds]);
 
   const toggleSlot = (slotId) => {
-    setSelectedSlotIds(prev => {
+    setDraftSelectedSlotIds(prev => {
       if (prev.includes(slotId)) {
         return prev.filter(id => id !== slotId);
-      } else if (prev.length < layout.slots) {
+      } else if (prev.length < draftLayout.slots) {
         return [...prev, slotId];
       }
       return prev;
@@ -223,13 +246,18 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
     if (dragIndex === dropIndex) return;
 
-    setSelectedSlotIds(prev => {
+    setDraftSelectedSlotIds(prev => {
       const newOrder = [...prev];
       const [removed] = newOrder.splice(dragIndex, 1);
       newOrder.splice(dropIndex, 0, removed);
       return newOrder;
     });
   };
+
+  const hasPendingSelectionChanges = draftSelectedSlotIds.length !== selectedSlotIds.length
+    || draftSelectedSlotIds.some((slotId, index) => slotId !== selectedSlotIds[index]);
+  const hasPendingLayoutChanges = draftSelectedLayout !== selectedLayout;
+  const hasPendingChanges = hasPendingLayoutChanges || hasPendingSelectionChanges;
 
   const getDisplayItem = (slotId) => {
     // Check if it's a camera
@@ -298,6 +326,8 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     return currentStage.name;
   };
 
+  const stageScheduleTime = currentStage?.startTime || '';
+
   return (
     <div className="relative w-full h-full" style={{ padding: sceneInset }} data-testid="scene-1-live-stage">
       <LeftControls>
@@ -321,7 +351,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
           <div>
             <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.layout')}</Label>
-            <Select value={selectedLayout} onValueChange={setSelectedLayout}>
+            <Select value={draftSelectedLayout} onValueChange={setDraftSelectedLayout}>
               <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -334,7 +364,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
           </div>
 
           <div>
-            <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.selectItems')} ({selectedSlotIds.length}/{layout.slots})</Label>
+            <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.selectItems')} ({draftSelectedSlotIds.length}/{draftLayout.slots})</Label>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {/* Camera Options - First priority */}
               {activeCameras.length > 0 && (
@@ -344,9 +374,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     <div key={camera.id} className="flex items-center space-x-2 mb-1">
                       <Checkbox
                         id={`camera-${camera.id}`}
-                        checked={selectedSlotIds.includes(camera.id)}
+                        checked={draftSelectedSlotIds.includes(camera.id)}
                         onCheckedChange={() => toggleSlot(camera.id)}
-                        disabled={!selectedSlotIds.includes(camera.id) && selectedSlotIds.length >= layout.slots}
+                        disabled={!draftSelectedSlotIds.includes(camera.id) && draftSelectedSlotIds.length >= draftLayout.slots}
                       />
                       <label htmlFor={`camera-${camera.id}`} className="text-white text-sm cursor-pointer flex items-center gap-2">
                         <Video className="w-4 h-4 text-[#FF4500]" />
@@ -367,9 +397,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       <div key={m.id} className="flex items-center space-x-2 mb-1">
                         <Checkbox
                           id={`media-${m.id}`}
-                          checked={selectedSlotIds.includes(slotId)}
+                          checked={draftSelectedSlotIds.includes(slotId)}
                           onCheckedChange={() => toggleSlot(slotId)}
-                          disabled={!selectedSlotIds.includes(slotId) && selectedSlotIds.length >= layout.slots}
+                          disabled={!draftSelectedSlotIds.includes(slotId) && draftSelectedSlotIds.length >= draftLayout.slots}
                         />
                         <label htmlFor={`media-${m.id}`} className="text-white text-sm cursor-pointer flex items-center gap-2">
                           {renderIcon(m.icon)}
@@ -391,9 +421,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   <div key={pilot.id} className="flex items-center space-x-2">
                     <Checkbox
                       id={`pilot-${pilot.id}`}
-                      checked={selectedSlotIds.includes(pilot.id)}
+                      checked={draftSelectedSlotIds.includes(pilot.id)}
                       onCheckedChange={() => toggleSlot(pilot.id)}
-                      disabled={!selectedSlotIds.includes(pilot.id) && selectedSlotIds.length >= layout.slots}
+                      disabled={!draftSelectedSlotIds.includes(pilot.id) && draftSelectedSlotIds.length >= draftLayout.slots}
                     />
                     <label htmlFor={`pilot-${pilot.id}`} className="text-white text-sm cursor-pointer flex items-center gap-2">
                       {lapInfo && (
@@ -407,11 +437,11 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             </div>
           </div>
 
-          {selectedSlotIds.length > 0 && (
+          {draftSelectedSlotIds.length > 0 && (
             <div>
               <Label className="text-white text-xs uppercase mb-2 block">{t('scene1.reorderDragDrop')}</Label>
               <div className="space-y-1">
-                {selectedSlotIds.map((slotId, index) => {
+                {draftSelectedSlotIds.map((slotId, index) => {
                   const camera = cameras.find(c => c.id === slotId);
                   const media = slotId.startsWith('media-')
                     ? externalMedia.find(m => m.id === slotId.replace('media-', ''))
@@ -445,6 +475,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               </div>
             </div>
           )}
+
+          <Button
+            type="button"
+            onClick={() => {
+              const nextSelectedSlotIds = draftSelectedSlotIds.slice(0, draftLayout.slots);
+              setSelectedLayout(draftSelectedLayout);
+              setSelectedSlotIds(nextSelectedSlotIds);
+              setDraftSelectedSlotIds(nextSelectedSlotIds);
+            }}
+            disabled={!hasPendingChanges}
+            className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90 disabled:bg-zinc-800 disabled:text-zinc-500"
+          >
+            {t('common.apply')}
+          </Button>
         </div>
       </LeftControls>
 
@@ -510,6 +554,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
             
             let displayTime = '';
+            let displayTimeInfo = null;
             let timeColor = 'text-zinc-400';
             let positionBadge = null;
             
@@ -529,22 +574,30 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               }
             } else if (isSSStage) {
               // SS Stage display (original logic)
-              const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
-              const startTime = startTimes[pilot.id]?.[currentStageId];
-              const finishTime = times[pilot.id]?.[currentStageId];
-              const retired = isPilotRetiredForStage(pilot.id, currentStageId, retiredStages);
+              const timeInfo = startInformationTime({
+                pilotId: pilot.id,
+                stageId: currentStageId,
+                startTimes,
+                times,
+                retiredStages,
+                stageDate: currentStage?.date,
+                now: sceneNow,
+                startLabel: t('status.start'),
+                retiredLabel: t('status.retired')
+              });
+              displayTimeInfo = timeInfo;
               
-              if (status === 'retired') {
-                displayTime = t('status.retired');
+              if (timeInfo.status === 'retired') {
+                displayTime = timeInfo.text;
                 timeColor = 'text-red-400';
-              } else if (status === 'racing' && startTime) {
-                displayTime = getRunningTime(startTime, currentStage?.date, sceneNow);
+              } else if (timeInfo.status === 'racing' && timeInfo.timer) {
+                displayTime = timeInfo.text;
                 timeColor = 'text-[#FF8C00]';
-              } else if (status === 'finished' && finishTime) {
-                displayTime = retired ? `${finishTime} RET` : finishTime;
-                timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
-              } else if (startTime) {
-                displayTime = `Start: ${startTime}`;
+              } else if (timeInfo.status === 'finished' && timeInfo.finishTime) {
+                displayTime = timeInfo.text;
+                timeColor = timeInfo.retired ? 'text-amber-400' : 'text-[#22C55E]';
+              } else if (timeInfo.text) {
+                displayTime = timeInfo.text;
                 timeColor = 'text-zinc-500';
               }
             }
@@ -570,9 +623,13 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       {pilot.name}
                     </p>
                     {displayTime && (
-                      <p className={`font-mono text-lg font-bold ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace', textShadow: '0 0 10px rgba(0,0,0,1), 2px 2px 6px rgba(0,0,0,1), -1px -1px 3px rgba(0,0,0,1)' }}>
-                        {displayTime}
-                      </p>
+                      <StartInformationValue
+                        as="p"
+                        info={displayTimeInfo}
+                        fallback={displayTime}
+                        className={`font-mono text-lg font-bold ${timeColor}`}
+                        style={{ fontFamily: 'JetBrains Mono, monospace', textShadow: '0 0 10px rgba(0,0,0,1), 2px 2px 6px rgba(0,0,0,1), -1px -1px 3px rgba(0,0,0,1)' }}
+                      />
                     )}
                   </div>
                 </div>
@@ -597,9 +654,16 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   <p className="text-zinc-400 text-sm uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>
                     {isLapRace ? 'Race' : 'Current Stage'}
                   </p>
-                  <p className="text-white text-3xl font-bold uppercase mt-1" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    {getStageDisplayName()}
-                  </p>
+                  <div className="mt-1 flex items-end gap-6">
+                    <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {getStageDisplayName()}
+                    </p>
+                    {stageScheduleTime && (
+                      <p className="text-zinc-300 text-2xl font-bold font-mono leading-none">
+                        {stageScheduleTime}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
               {logoUrl && (
@@ -635,6 +699,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   
                   let borderColor = 'border-zinc-700';
                   let timeDisplay = '';
+                  let timeInfo = null;
                   let timeColor = 'text-zinc-500';
                   
                   if (isLapRace) {
@@ -648,25 +713,32 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       timeColor = 'text-[#FACC15]';
                     }
                   } else if (isSSStage) {
-                    const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
-                    const startTime = startTimes[pilot.id]?.[currentStageId];
-                    const finishTime = times[pilot.id]?.[currentStageId];
-                    const retired = isPilotRetiredForStage(pilot.id, currentStageId, retiredStages);
+                    timeInfo = startInformationTime({
+                      pilotId: pilot.id,
+                      stageId: currentStageId,
+                      startTimes,
+                      times,
+                      retiredStages,
+                      stageDate: currentStage?.date,
+                      now: sceneNow,
+                      startLabel: t('status.start'),
+                      retiredLabel: t('status.retired')
+                    });
                     
-                    if (status === 'retired') {
+                    if (timeInfo.status === 'retired') {
                       borderColor = 'border-red-500';
-                      timeDisplay = t('status.retired');
+                      timeDisplay = timeInfo.text;
                       timeColor = 'text-red-400';
-                    } else if (status === 'finished' && finishTime) {
-                      borderColor = retired ? 'border-amber-400' : 'border-[#22C55E]';
-                      timeDisplay = retired ? `${finishTime} RET` : finishTime;
-                      timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
-                    } else if (status === 'racing' && startTime) {
+                    } else if (timeInfo.status === 'finished' && timeInfo.finishTime) {
+                      borderColor = timeInfo.retired ? 'border-amber-400' : 'border-[#22C55E]';
+                      timeDisplay = timeInfo.text;
+                      timeColor = timeInfo.retired ? 'text-amber-400' : 'text-[#22C55E]';
+                    } else if (timeInfo.status === 'racing' && timeInfo.timer) {
                       borderColor = 'border-[#FF8C00]';
-                      timeDisplay = getRunningTime(startTime, currentStage?.date, sceneNow);
+                      timeDisplay = timeInfo.text;
                       timeColor = 'text-[#FF8C00]';
-                    } else if (startTime) {
-                      timeDisplay = `Start: ${startTime}`;
+                    } else if (timeInfo.text) {
+                      timeDisplay = timeInfo.text;
                       timeColor = 'text-zinc-500';
                     }
                   }
@@ -694,9 +766,13 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                             </p>
                           )}
                           {timeDisplay && (
-                            <p className={`font-mono text-xs truncate ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                              {timeDisplay}
-                            </p>
+                            <StartInformationValue
+                              as="p"
+                              info={timeInfo}
+                              fallback={timeDisplay}
+                              className={`font-mono text-xs truncate ${timeColor}`}
+                              style={{ fontFamily: 'JetBrains Mono, monospace' }}
+                            />
                           )}
                         </div>
                       </div>

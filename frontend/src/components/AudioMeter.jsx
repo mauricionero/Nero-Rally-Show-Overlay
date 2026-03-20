@@ -15,6 +15,8 @@ export const AudioMeter = ({
   isActive = true, 
   isMuted = false, 
   volume = 100,
+  levels: externalLevels = null,
+  disableSimulation = false,
   height = 150,
   width = 10,
   className = '',
@@ -23,8 +25,21 @@ export const AudioMeter = ({
   const [levels, setLevels] = useState({ left: 0, right: 0 });
   const animationRef = useRef(null);
   
-  // Simulate audio levels when active and not muted
+  // Use real loudness data when available, otherwise fall back to simulation.
   useEffect(() => {
+    if (externalLevels) {
+      setLevels({
+        left: Math.max(0, Math.min(1, externalLevels.left ?? 0)),
+        right: Math.max(0, Math.min(1, externalLevels.right ?? 0))
+      });
+      return;
+    }
+
+    if (disableSimulation) {
+      setLevels({ left: 0, right: 0 });
+      return;
+    }
+
     if (!isActive || isMuted) {
       setLevels({ left: 0, right: 0 });
       return;
@@ -56,7 +71,7 @@ export const AudioMeter = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isActive, isMuted, volume]);
+  }, [externalLevels, disableSimulation, isActive, isMuted, volume]);
   
   const renderBar = (level, side) => {
     const segments = 20;
@@ -117,6 +132,7 @@ export const GlobalAudioMeter = ({
   streamConfigs = {},
   globalVolume = 100,
   globalMuted = false,
+  externalLevel = null,
   height = 200,
   width = 20,
   className = ''
@@ -124,6 +140,11 @@ export const GlobalAudioMeter = ({
   const [level, setLevel] = useState(0);
   
   useEffect(() => {
+    if (externalLevel !== null && externalLevel !== undefined) {
+      setLevel(Math.max(0, Math.min(1, externalLevel)));
+      return undefined;
+    }
+
     if (globalMuted) {
       setLevel(0);
       return;
@@ -148,7 +169,7 @@ export const GlobalAudioMeter = ({
     }, 100);
     
     return () => clearInterval(interval);
-  }, [streamConfigs, globalVolume, globalMuted]);
+  }, [streamConfigs, globalVolume, globalMuted, externalLevel]);
   
   const segments = 30;
   const activeSegments = Math.floor(level * segments);

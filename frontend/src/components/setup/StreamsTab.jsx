@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -11,10 +11,61 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { AudioMeter, GlobalAudioMeter } from '../AudioMeter.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
-import { Volume2, VolumeX, Headphones, Plus, Trash2, Edit, Video } from 'lucide-react';
+import { Volume2, VolumeX, Headphones, Plus, Trash2, Edit, Video, VideoOff } from 'lucide-react';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 
-export default function StreamsTab() {
+function StreamPreviewWithMeter({ item, hideStreams, isEffectivelyMuted, effectiveVolume, t, onAudioLevelsChange }) {
+  const [audioLevels, setAudioLevels] = useState(null);
+  const meterMuted = isEffectivelyMuted || hideStreams || !item.streamUrl;
+
+  useEffect(() => {
+    if (meterMuted) {
+      setAudioLevels(null);
+      onAudioLevelsChange?.(item.id, null);
+    }
+  }, [item.id, meterMuted, onAudioLevelsChange]);
+
+  const handleAudioLevelsChange = (nextLevels) => {
+    setAudioLevels(nextLevels);
+    onAudioLevelsChange?.(item.id, nextLevels);
+  };
+
+  return (
+    <div className="flex gap-2 mb-3">
+      <div className="flex-1 aspect-video bg-black rounded overflow-hidden" style={{ maxHeight: '150px' }}>
+        {hideStreams ? (
+          <div className="w-full h-full bg-zinc-950 flex items-center justify-center text-zinc-500">
+            <div className="flex items-center gap-2 text-sm font-medium uppercase">
+              <VideoOff className="w-4 h-4" />
+              <span>{t('header.hideStreams')}</span>
+            </div>
+          </div>
+        ) : (
+          <StreamPlayer
+            pilotId={item.id}
+            streamUrl={item.streamUrl}
+            name={item.name}
+            className="w-full h-full"
+            showControls={false}
+            showMeter={true}
+            onAudioLevelsChange={handleAudioLevelsChange}
+          />
+        )}
+      </div>
+      <AudioMeter
+        isActive={item.isActive}
+        isMuted={meterMuted}
+        volume={effectiveVolume}
+        levels={audioLevels}
+        disableSimulation={true}
+        height={85}
+        width={10}
+      />
+    </div>
+  );
+}
+
+export default function StreamsTab({ hideStreams = false }) {
   const { t } = useTranslation();
   const {
     pilots,
@@ -35,8 +86,64 @@ export default function StreamsTab() {
   const [newCamera, setNewCamera] = useState({ name: '', streamUrl: '' });
   const [editingCamera, setEditingCamera] = useState(null);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [audioLevelsByStreamId, setAudioLevelsByStreamId] = useState({});
 
   const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
+
+  const handleStreamAudioLevelsChange = (streamId, levels) => {
+    setAudioLevelsByStreamId((prev) => {
+      if (!levels) {
+        if (!(streamId in prev)) {
+          return prev;
+        }
+
+        const next = { ...prev };
+        delete next[streamId];
+        return next;
+      }
+
+      const current = prev[streamId];
+      if (current?.left === levels.left && current?.right === levels.right) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [streamId]: levels
+      };
+    });
+  };
+
+  const combinedAudioLevel = useMemo(() => {
+    if (globalAudio.muted) {
+      return 0;
+    }
+
+    const entries = Object.entries(audioLevelsByStreamId);
+    if (entries.length === 0) {
+      return null;
+    }
+
+    const activeLevels = entries.flatMap(([streamId, levels]) => {
+      const config = getStreamConfig(streamId);
+      const hasSoloStream = Object.values(streamConfigs).some((streamConfig) => streamConfig?.solo);
+      const isMuted = config.muted || globalAudio.muted || (hasSoloStream && !config.solo);
+
+      if (isMuted || !levels) {
+        return [];
+      }
+
+      const effectiveStreamVolume = (config.volume / 100) * (globalAudio.volume / 100);
+      const averageLevel = ((levels.left ?? 0) + (levels.right ?? 0)) / 2;
+      return [averageLevel * effectiveStreamVolume];
+    });
+
+    if (activeLevels.length === 0) {
+      return 0;
+    }
+
+    return Math.max(...activeLevels);
+  }, [audioLevelsByStreamId, getStreamConfig, globalAudio.muted, globalAudio.volume, streamConfigs]);
 
   const handleAddCamera = () => {
     if (!newCamera.name.trim()) {
@@ -80,26 +187,14 @@ export default function StreamsTab() {
         )}
         <CardContent className="pt-4 pl-4">
           {/* Stream Preview with Audio Meter */}
-          <div className="flex gap-2 mb-3">
-            <div className="flex-1 aspect-video bg-black rounded overflow-hidden" style={{ maxHeight: '150px' }}>
-              <StreamPlayer
-                pilotId={item.id}
-                streamUrl={item.streamUrl}
-                name={item.name}
-                className="w-full h-full"
-                showControls={false}
-                showMeter={true}
-              />
-            </div>
-            {/* Audio Level Meter */}
-            <AudioMeter
-              isActive={item.isActive}
-              isMuted={isEffectivelyMuted}
-              volume={Math.round((config.volume / 100) * (globalAudio.volume / 100) * 100)}
-              height={85}
-              width={10}
-            />
-          </div>
+          <StreamPreviewWithMeter
+            item={item}
+            hideStreams={hideStreams}
+            isEffectivelyMuted={isEffectivelyMuted}
+            effectiveVolume={Math.round((config.volume / 100) * (globalAudio.volume / 100) * 100)}
+            t={t}
+            onAudioLevelsChange={handleStreamAudioLevelsChange}
+          />
           
           {/* Name and Controls */}
           <div className="flex items-center justify-between mb-3">
@@ -311,6 +406,7 @@ export default function StreamsTab() {
               streamConfigs={streamConfigs}
               globalVolume={globalAudio.volume}
               globalMuted={globalAudio.muted}
+              externalLevel={combinedAudioLevel}
               height={100}
               width={16}
             />
@@ -436,7 +532,7 @@ export default function StreamsTab() {
 
       {/* Note about audio meters */}
       <div className="text-xs text-zinc-600 text-center px-4">
-        Note: Audio meters show simulated levels based on volume settings. For real audio monitoring, VDO.Ninja streams include built-in meters via the &amp;meter=1 parameter.
+        VDO.Ninja streams support real mute control and loudness meters here. Generic iframe sources like YouTube may still display, but they do not expose the same audio control and metering hooks.
       </div>
     </div>
   );

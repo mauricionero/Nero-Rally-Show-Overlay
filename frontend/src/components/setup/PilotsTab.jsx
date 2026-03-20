@@ -24,7 +24,7 @@ const escapeCsvValue = (value) => {
   return `"${stringValue.replace(/"/g, '""')}"`;
 };
 
-export default function PilotsTab() {
+export default function PilotsTab({ hideStreams = false }) {
   const { t } = useTranslation();
   const {
     pilots,
@@ -287,6 +287,7 @@ export default function PilotsTab() {
                   streamUrl={pilot.streamUrl}
                   name={pilot.name}
                   showAlways={true}
+                  hideStreams={hideStreams}
                   className="w-20 h-20 rounded flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">

@@ -6,7 +6,8 @@ import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { parseTime, getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage } from '../../utils/rallyHelpers';
+import { StartInformationValue } from '../StartInformationValue.jsx';
+import { parseTime, getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, startInformationTime } from '../../utils/rallyHelpers';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
@@ -187,26 +188,36 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       } else if (isSpecialStageType(selectedStage.type)) {
         // Single special stage leaderboard
         return sortByRetirementAndTime(pilots.map(pilot => {
-          const status = getPilotStatus(pilot.id, selectedStageId, startTimes, times, retiredStages, selectedStage?.date, sceneNow);
-          const startTime = startTimes[pilot.id]?.[selectedStageId];
-          const finishTime = times[pilot.id]?.[selectedStageId];
-          const retired = isPilotRetiredForStage(pilot.id, selectedStageId, retiredStages);
+          const timeInfo = startInformationTime({
+            pilotId: pilot.id,
+            stageId: selectedStageId,
+            startTimes,
+            times,
+            retiredStages,
+            stageDate: selectedStage?.date,
+            now: sceneNow,
+            startLabel: t('status.start'),
+            retiredLabel: t('status.retired')
+          });
           
           let displayTime = '-';
           let timeColor = 'text-white';
           let sortTime = Infinity;
           
-          if (status === 'retired') {
-            displayTime = t('status.retired');
+          if (timeInfo.status === 'retired') {
+            displayTime = timeInfo.text;
             timeColor = 'text-red-400';
-          } else if (status === 'racing' && startTime) {
-            displayTime = getRunningTime(startTime, selectedStage?.date, sceneNow);
+          } else if (timeInfo.status === 'racing' && timeInfo.timer) {
+            displayTime = timeInfo.text;
             timeColor = 'text-[#FACC15]';
-            sortTime = parseTime(displayTime) || Infinity;
-          } else if (status === 'finished' && finishTime) {
-            displayTime = retired ? `${finishTime} RET` : finishTime;
-            timeColor = retired ? 'text-amber-400' : 'text-white';
-            sortTime = parseTime(finishTime);
+            sortTime = parseTime(timeInfo.timer) || Infinity;
+          } else if (timeInfo.status === 'finished' && timeInfo.finishTime) {
+            displayTime = timeInfo.text;
+            timeColor = timeInfo.retired ? 'text-amber-400' : 'text-white';
+            sortTime = parseTime(timeInfo.finishTime);
+          } else if (timeInfo.text) {
+            displayTime = timeInfo.text;
+            timeColor = 'text-zinc-400';
           }
           
           // Calculate overall time: sum of all SS up to and including the selected stage
@@ -239,15 +250,16 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           return {
             ...pilot,
             displayTime,
+            timeInfo,
             timeColor,
             sortTime,
             overallTime,
             overallDisplay,
             overallColor,
-            hasTime: status === 'finished' || status === 'racing',
-            status,
+            hasTime: timeInfo.status === 'finished' || timeInfo.status === 'racing',
+            status: timeInfo.status,
             completedStages,
-            isRetired: retired
+            isRetired: timeInfo.retired
           };
         }));
       }
@@ -545,9 +557,12 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                     ) : selectedStageId ? (
                       <>
                         <td className="p-4 text-right">
-                          <span className={`text-2xl font-mono ${pilot.timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {pilot.displayTime}
-                          </span>
+                          <StartInformationValue
+                            info={pilot.timeInfo}
+                            fallback={pilot.displayTime}
+                            className={`text-2xl font-mono ${pilot.timeColor}`}
+                            style={{ fontFamily: 'JetBrains Mono, monospace' }}
+                          />
                         </td>
                         <td className="p-4 text-right">
                           <span className={`text-xl font-mono ${pilot.overallColor || 'text-white'}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>

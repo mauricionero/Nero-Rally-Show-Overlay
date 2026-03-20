@@ -24,10 +24,17 @@ import {
 
 const getDisplayedStageSchedule = (stage) => {
   if (!stage) return '';
-  if (isTransitStageType(stage.type)) {
-    return formatStageScheduleRange(stage);
+
+  const stageDate = stage.date || '';
+  const stageTime = isTransitStageType(stage.type)
+    ? formatStageScheduleRange(stage)
+    : (stage.startTime || '');
+
+  if (stageDate && stageTime) {
+    return `${stageDate} ${stageTime}`;
   }
-  return stage.startTime || '';
+
+  return stageDate || stageTime;
 };
 
 const formatClockInput = (value) => {

@@ -84,6 +84,101 @@ export const getRunningTime = (startTime, stageDate, now = new Date()) => {
   }
 };
 
+const formatCountdownTime = (remainingMs) => {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+};
+
+export const startInformationTime = ({
+  pilotId,
+  stageId,
+  startTimes,
+  times,
+  retiredStages,
+  stageDate,
+  now = new Date(),
+  includeLabel = true,
+  startLabel = 'Start',
+  retiredLabel = 'Retired'
+}) => {
+  const startTime = startTimes[pilotId]?.[stageId] || '';
+  const finishTime = times[pilotId]?.[stageId] || '';
+  const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
+  const status = getPilotStatus(pilotId, stageId, startTimes, times, retiredStages, stageDate, now);
+  const stageStartDateTime = getStageDateTime(stageDate, startTime);
+  const remainingToStartMs = stageStartDateTime ? (stageStartDateTime.getTime() - now.getTime()) : null;
+  const elapsedSinceStartMs = stageStartDateTime ? (now.getTime() - stageStartDateTime.getTime()) : null;
+  const shouldShowStartCountdown = status === 'not_started'
+    && startTime
+    && remainingToStartMs !== null
+    && remainingToStartMs > 0
+    && remainingToStartMs <= 60000;
+  const shouldShowRedSignal = status === 'not_started'
+    && startTime
+    && remainingToStartMs !== null
+    && remainingToStartMs > 0
+    && remainingToStartMs <= 5000;
+  const shouldShowGreenSignal = status === 'racing'
+    && elapsedSinceStartMs !== null
+    && elapsedSinceStartMs >= 0
+    && elapsedSinceStartMs < 5000;
+  const signal = shouldShowRedSignal
+    ? {
+        mode: 'red',
+        activeCount: Math.max(1, Math.ceil(remainingToStartMs / 1000)),
+        totalCount: 5
+      }
+    : shouldShowGreenSignal
+      ? {
+          mode: 'green',
+          activeCount: 5,
+          totalCount: 5
+        }
+      : null;
+
+  let label = '';
+  let timer = '';
+  let text = '';
+  let isCountdown = false;
+
+  if (status === 'retired') {
+    label = retiredLabel;
+    text = includeLabel ? retiredLabel : '';
+  } else if (status === 'racing' && startTime) {
+    if (shouldShowGreenSignal) {
+      label = startLabel;
+    }
+    timer = getRunningTime(startTime, stageDate, now);
+    text = timer;
+  } else if (status === 'finished' && finishTime) {
+    timer = finishTime;
+    label = retired ? 'RET' : '';
+    text = retired && includeLabel ? `${finishTime} RET` : finishTime;
+  } else if (startTime) {
+    label = startLabel;
+    timer = shouldShowStartCountdown ? formatCountdownTime(remainingToStartMs) : startTime;
+    isCountdown = shouldShowStartCountdown;
+    text = includeLabel ? `${startLabel}: ${startTime}` : startTime;
+    if (shouldShowStartCountdown) {
+      text = includeLabel ? `${startLabel}: ${timer}` : timer;
+    }
+  }
+
+  return {
+    status,
+    label,
+    timer,
+    text,
+    isCountdown,
+    signal,
+    startTime,
+    finishTime,
+    retired
+  };
+};
+
 export const parseTime = (timeStr) => {
   if (!timeStr) return 0;
   

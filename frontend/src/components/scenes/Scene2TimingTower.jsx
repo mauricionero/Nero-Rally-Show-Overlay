@@ -4,7 +4,8 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, sortPilotsByStatus, parseTime } from '../../utils/rallyHelpers';
+import { StartInformationValue } from '../StartInformationValue.jsx';
+import { getPilotStatus, getReferenceNow, sortPilotsByStatus, parseTime, startInformationTime } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -258,6 +259,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     const hasStream = pilot.streamUrl;
     
     let displayTime = '';
+    let displayTimeInfo = null;
     let timeColor = 'text-zinc-500';
     let statusColor = 'bg-zinc-700';
     
@@ -273,24 +275,33 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       }
     } else {
       // SS Stage logic
-      const startTime = startTimes[pilot.id]?.[currentStageId];
-      const finishTime = times[pilot.id]?.[currentStageId];
-      const retired = isPilotRetiredForStage(pilot.id, currentStageId, retiredStages);
+      const timeInfo = startInformationTime({
+        pilotId: pilot.id,
+        stageId: currentStageId,
+        startTimes,
+        times,
+        retiredStages,
+        stageDate: currentStage?.date,
+        now: sceneNow,
+        startLabel: t('status.start'),
+        retiredLabel: t('status.retired')
+      });
+      displayTimeInfo = timeInfo;
       
       if (data.status === 'retired') {
-        displayTime = t('status.retired');
+        displayTime = timeInfo.text;
         timeColor = 'text-red-400';
         statusColor = 'bg-[#EF4444]';
-      } else if (isFinished && finishTime) {
-        displayTime = retired ? `${finishTime} RET` : finishTime;
-        timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
-        statusColor = retired ? 'bg-[#F59E0B]' : 'bg-[#22C55E]';
-      } else if (isRacing && startTime) {
-        displayTime = getRunningTime(startTime, currentStage?.date, sceneNow);
+      } else if (isFinished && timeInfo.finishTime) {
+        displayTime = timeInfo.text;
+        timeColor = timeInfo.retired ? 'text-amber-400' : 'text-[#22C55E]';
+        statusColor = timeInfo.retired ? 'bg-[#F59E0B]' : 'bg-[#22C55E]';
+      } else if (isRacing && timeInfo.timer) {
+        displayTime = timeInfo.text;
         timeColor = 'text-[#FF8C00]';
         statusColor = 'bg-[#FF8C00]';
-      } else if (startTime) {
-        displayTime = `${t('status.start')}: ${startTime}`;
+      } else if (timeInfo.text) {
+        displayTime = timeInfo.text;
         timeColor = 'text-zinc-500';
       }
     }
@@ -348,9 +359,12 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           
           {/* Time/Gap */}
           <div className="text-right flex-shrink-0 ml-2">
-            <span className={`font-mono text-sm ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {displayTime}
-            </span>
+            <StartInformationValue
+              info={displayTimeInfo}
+              fallback={displayTime}
+              className={`font-mono text-sm ${timeColor}`}
+              style={{ fontFamily: 'JetBrains Mono, monospace' }}
+            />
             {gap && (
               <span className="text-zinc-500 text-xs ml-2 font-mono">{gap}</span>
             )}
