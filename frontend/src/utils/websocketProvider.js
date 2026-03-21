@@ -50,6 +50,7 @@ class WebSocketProvider {
     this.channelId = null;
     this.onMessageCallback = null;
     this.onStatusCallback = null;
+    this.onSnapshotRequestCallback = null;
     this.isConnected = false;
     this.connectionState = 'disconnected';
   }
@@ -57,7 +58,7 @@ class WebSocketProvider {
   /**
    * Connect to a channel using the full key
    */
-  async connect(fullKey, onMessage, onStatus) {
+  async connect(fullKey, onMessage, onStatus, options = {}) {
     const { valid, channelId } = parseChannelKey(fullKey);
     
     if (!valid || !channelId) {
@@ -67,6 +68,7 @@ class WebSocketProvider {
     this.channelId = channelId;
     this.onMessageCallback = onMessage;
     this.onStatusCallback = onStatus;
+    this.onSnapshotRequestCallback = options.onSnapshotRequest || null;
 
     const apiKey = process.env.REACT_APP_ABLY_KEY;
     if (!apiKey) {
@@ -103,11 +105,32 @@ class WebSocketProvider {
 
       // Subscribe to channel
       this.channel = this.client.channels.get(`rally-${channelId}`);
+
+      // Load the latest published snapshot so subscriber clients can
+      // start with the current event state instead of waiting for the
+      // next edit to be made in Setup.
+      if (options.readHistory !== false) {
+        try {
+          const history = await this.channel.history({ limit: 1, direction: 'backwards' });
+          const latestMessage = history?.items?.[0];
+
+          if (latestMessage?.data) {
+            console.log('[WebSocket] Loaded latest snapshot from history');
+            this.onMessageCallback?.(latestMessage.data);
+          }
+        } catch (historyError) {
+          console.warn('[WebSocket] Failed to load channel history:', historyError);
+        }
+      }
       
       // Subscribe to updates
       await this.channel.subscribe('update', (message) => {
         console.log('[WebSocket] Received update:', message.data);
         this.onMessageCallback?.(message.data);
+      });
+
+      await this.channel.subscribe('snapshot-request', () => {
+        this.onSnapshotRequestCallback?.();
       });
 
       // Monitor connection state
@@ -160,6 +183,22 @@ class WebSocketProvider {
       return true;
     } catch (error) {
       console.error('[WebSocket] Publish error:', error);
+      return false;
+    }
+  }
+
+  async requestSnapshot() {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot request snapshot');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('snapshot-request', { timestamp: Date.now() });
+      console.log('[WebSocket] Requested snapshot');
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Snapshot request error:', error);
       return false;
     }
   }

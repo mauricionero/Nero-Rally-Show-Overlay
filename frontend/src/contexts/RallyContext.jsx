@@ -52,6 +52,46 @@ const ensureUniqueEntityIds = (items, prefix) => {
   return changed ? repairedItems : items;
 };
 
+const pruneEmptyNestedValues = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => (
+      item && typeof item === 'object'
+        ? pruneEmptyNestedValues(item)
+        : item
+    ));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const nextObject = {};
+
+  Object.entries(value).forEach(([key, nestedValue]) => {
+    if (nestedValue === '' || nestedValue === null || nestedValue === undefined) {
+      return;
+    }
+
+    const prunedValue = pruneEmptyNestedValues(nestedValue);
+
+    if (Array.isArray(prunedValue)) {
+      nextObject[key] = prunedValue;
+      return;
+    }
+
+    if (prunedValue && typeof prunedValue === 'object') {
+      if (Object.keys(prunedValue).length > 0) {
+        nextObject[key] = prunedValue;
+      }
+      return;
+    }
+
+    nextObject[key] = prunedValue;
+  });
+
+  return nextObject;
+};
+
 export const RallyProvider = ({ children }) => {
   // Event configuration
   const [eventName, setEventName] = useState(() => loadFromStorage('rally_event_name', ''));
@@ -84,6 +124,7 @@ export const RallyProvider = ({ children }) => {
   // WebSocket state
   const [wsEnabled, setWsEnabled] = useState(() => loadFromStorage('rally_ws_enabled', false));
   const [wsChannelKey, setWsChannelKey] = useState(() => loadFromStorage('rally_ws_channel_key', ''));
+  const [wsCanPublish, setWsCanPublish] = useState(false);
   const [wsConnectionStatus, setWsConnectionStatus] = useState('disconnected'); // disconnected, connecting, connected, error
   const [wsError, setWsError] = useState(null);
   const wsProvider = useRef(null);
@@ -118,32 +159,36 @@ export const RallyProvider = ({ children }) => {
   // Apply data from WebSocket message
   const applyWebSocketData = useCallback((data) => {
     if (!data) return;
+
+    const normalizedData = data?.payload && typeof data.payload === 'object'
+      ? data.payload
+      : data;
     
     console.log('[RallyContext] Applying WebSocket data');
     
     // Prevent re-publishing when applying received data
     isPublishing.current = true;
     
-    if (data.eventName !== undefined) setEventName(data.eventName);
-    if (data.positions) setPositions(data.positions);
-    if (data.lapTimes) setLapTimes(data.lapTimes);
-    if (data.stagePilots) setStagePilots(data.stagePilots);
-    if (data.pilots) setPilots(data.pilots);
-    if (data.categories) setCategories(data.categories);
-    if (data.stages) setStages(data.stages);
-    if (data.times) setTimes(data.times);
-    if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
-    if (data.startTimes) setStartTimes(data.startTimes);
-    if (data.retiredStages) setRetiredStages(data.retiredStages);
-    if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
-    if (data.debugDate !== undefined) setDebugDate(data.debugDate);
-    if (data.chromaKey) setChromaKey(data.chromaKey);
-    if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
-    if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
-    if (data.externalMedia) setExternalMedia(data.externalMedia);
-    if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
-    if (data.globalAudio) setGlobalAudio(data.globalAudio);
-    if (data.cameras) setCameras(data.cameras);
+    if (normalizedData.eventName !== undefined) setEventName(normalizedData.eventName);
+    if (normalizedData.positions !== undefined) setPositions(normalizedData.positions);
+    if (normalizedData.lapTimes !== undefined) setLapTimes(normalizedData.lapTimes);
+    if (normalizedData.stagePilots !== undefined) setStagePilots(normalizedData.stagePilots);
+    if (normalizedData.pilots !== undefined) setPilots(normalizedData.pilots);
+    if (normalizedData.categories !== undefined) setCategories(normalizedData.categories);
+    if (normalizedData.stages !== undefined) setStages(normalizedData.stages);
+    if (normalizedData.times !== undefined) setTimes(normalizedData.times);
+    if (normalizedData.arrivalTimes !== undefined) setArrivalTimes(normalizedData.arrivalTimes);
+    if (normalizedData.startTimes !== undefined) setStartTimes(normalizedData.startTimes);
+    if (normalizedData.retiredStages !== undefined) setRetiredStages(normalizedData.retiredStages);
+    if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
+    if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
+    if (normalizedData.chromaKey !== undefined) setChromaKey(normalizedData.chromaKey);
+    if (normalizedData.mapUrl !== undefined) setMapUrl(normalizedData.mapUrl);
+    if (normalizedData.logoUrl !== undefined) setLogoUrl(normalizedData.logoUrl);
+    if (normalizedData.externalMedia !== undefined) setExternalMedia(normalizedData.externalMedia);
+    if (normalizedData.streamConfigs !== undefined) setStreamConfigs(normalizedData.streamConfigs);
+    if (normalizedData.globalAudio !== undefined) setGlobalAudio(normalizedData.globalAudio);
+    if (normalizedData.cameras !== undefined) setCameras(normalizedData.cameras);
     
     // Re-enable publishing after a short delay
     setTimeout(() => {
@@ -161,46 +206,135 @@ export const RallyProvider = ({ children }) => {
     return () => window.removeEventListener('rally-reload-data', handleStorageUpdate);
   }, [reloadData]);
 
+  const buildWebSocketSnapshot = useCallback(() => ({
+    eventName,
+    positions,
+    lapTimes,
+    stagePilots,
+    pilots,
+    categories,
+    stages,
+    times,
+    arrivalTimes,
+    startTimes,
+    retiredStages,
+    currentStageId,
+    debugDate,
+    chromaKey,
+    mapUrl,
+    logoUrl,
+    externalMedia,
+    streamConfigs,
+    globalAudio,
+    cameras,
+    timestamp: Date.now()
+  }), [
+    eventName,
+    positions,
+    lapTimes,
+    stagePilots,
+    pilots,
+    categories,
+    stages,
+    times,
+    arrivalTimes,
+    startTimes,
+    retiredStages,
+    currentStageId,
+    debugDate,
+    chromaKey,
+    mapUrl,
+    logoUrl,
+    externalMedia,
+    streamConfigs,
+    globalAudio,
+    cameras
+  ]);
+
+  const buildWebSocketMessages = useCallback((messageType = 'sync-update') => {
+    const snapshot = buildWebSocketSnapshot();
+    const snapshotId = createEntityId('snapshot');
+    const parts = [
+      { section: 'meta', payload: {
+        eventName: snapshot.eventName,
+        currentStageId: snapshot.currentStageId,
+        debugDate: snapshot.debugDate,
+        chromaKey: snapshot.chromaKey,
+        mapUrl: snapshot.mapUrl,
+        logoUrl: snapshot.logoUrl,
+        globalAudio: snapshot.globalAudio
+      } },
+      { section: 'pilots', payload: { pilots: pruneEmptyNestedValues(snapshot.pilots) } },
+      { section: 'categories', payload: { categories: pruneEmptyNestedValues(snapshot.categories) } },
+      { section: 'stages', payload: { stages: pruneEmptyNestedValues(snapshot.stages) } },
+      { section: 'times', payload: { times: pruneEmptyNestedValues(snapshot.times) } },
+      { section: 'arrivalTimes', payload: { arrivalTimes: pruneEmptyNestedValues(snapshot.arrivalTimes) } },
+      { section: 'startTimes', payload: { startTimes: pruneEmptyNestedValues(snapshot.startTimes) } },
+      { section: 'lapTimes', payload: { lapTimes: pruneEmptyNestedValues(snapshot.lapTimes) } },
+      { section: 'positions', payload: { positions: pruneEmptyNestedValues(snapshot.positions) } },
+      { section: 'stagePilots', payload: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) } },
+      { section: 'retiredStages', payload: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) } },
+      { section: 'cameras', payload: { cameras: pruneEmptyNestedValues(snapshot.cameras) } },
+      { section: 'externalMedia', payload: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) } },
+      { section: 'streamConfigs', payload: { streamConfigs: pruneEmptyNestedValues(snapshot.streamConfigs) } }
+    ];
+
+    const totalParts = parts.length;
+
+    return parts.map((part, partIndex) => ({
+      messageType,
+      snapshotId,
+      section: part.section,
+      partIndex,
+      totalParts,
+      payload: part.payload,
+      timestamp: Date.now()
+    }));
+  }, [buildWebSocketSnapshot]);
+
+  const publishWebSocketMessages = useCallback(async (messageType = 'sync-update') => {
+    if (!wsProvider.current?.isConnected) {
+      return false;
+    }
+
+    const messages = buildWebSocketMessages(messageType);
+
+    for (const message of messages) {
+      const success = await wsProvider.current.publish(message);
+      if (!success) {
+        return false;
+      }
+    }
+
+    return true;
+  }, [buildWebSocketMessages]);
+
   // Publish to WebSocket when data changes
   const publishToWebSocket = useCallback(async () => {
-    if (!wsEnabled || !wsProvider.current?.isConnected || isPublishing.current) {
+    if (!wsEnabled || !wsCanPublish || !wsProvider.current?.isConnected || isPublishing.current) {
       return;
     }
-    
-    const data = {
-      eventName,
-      positions,
-      lapTimes,
-      stagePilots,
-      pilots,
-      categories,
-      stages,
-      times,
-      arrivalTimes,
-      startTimes,
-      retiredStages,
-      currentStageId,
-      debugDate,
-      chromaKey,
-      mapUrl,
-      logoUrl,
-      externalMedia,
-      streamConfigs,
-      globalAudio,
-      cameras,
-      timestamp: Date.now()
-    };
-    
-    await wsProvider.current.publish(data);
-  }, [wsEnabled, eventName, positions, lapTimes, stagePilots, pilots, categories, stages, times, arrivalTimes, startTimes, retiredStages, currentStageId, debugDate, chromaKey, mapUrl, logoUrl, externalMedia, streamConfigs, globalAudio, cameras]);
+
+    await publishWebSocketMessages('sync-update');
+  }, [wsEnabled, wsCanPublish, publishWebSocketMessages]);
+
+  const forceWebSocketFullSync = useCallback(async () => {
+    if (!wsEnabled || !wsCanPublish || !wsProvider.current?.isConnected) {
+      return false;
+    }
+
+    return publishWebSocketMessages('full-snapshot');
+  }, [wsEnabled, wsCanPublish, publishWebSocketMessages]);
 
   // WebSocket connection management
-  const connectWebSocket = useCallback(async (channelKey) => {
+  const connectWebSocket = useCallback(async (channelKey, options = {}) => {
     const { valid } = parseChannelKey(channelKey);
     if (!valid) {
       setWsError('Invalid channel key format');
       return false;
     }
+
+    const canPublish = options.readOnly !== true;
 
     try {
       setWsConnectionStatus('connecting');
@@ -218,13 +352,36 @@ export const RallyProvider = ({ children }) => {
         (status, provider, error) => {
           setWsConnectionStatus(status);
           if (error) setWsError(error);
+        },
+        {
+          readHistory: canPublish ? false : true,
+          onSnapshotRequest: canPublish
+            ? () => {
+                publishWebSocketMessages('full-snapshot');
+              }
+            : null
         }
       );
       
       setWsChannelKey(channelKey);
+      setWsCanPublish(canPublish);
       localStorage.setItem('rally_ws_channel_key', JSON.stringify(channelKey));
       setWsEnabled(true);
       localStorage.setItem('rally_ws_enabled', JSON.stringify(true));
+
+      if (canPublish) {
+        await publishWebSocketMessages('full-snapshot');
+      } else {
+        await wsProvider.current.requestSnapshot();
+
+        [1000, 3000, 5000].forEach((delay) => {
+          window.setTimeout(() => {
+            if (wsProvider.current?.isConnected) {
+              wsProvider.current.requestSnapshot();
+            }
+          }, delay);
+        });
+      }
       
       return true;
     } catch (error) {
@@ -232,7 +389,7 @@ export const RallyProvider = ({ children }) => {
       setWsError(error.message);
       return false;
     }
-  }, [applyWebSocketData]);
+  }, [applyWebSocketData, publishWebSocketMessages]);
 
   const disconnectWebSocket = useCallback(() => {
     if (wsProvider.current) {
@@ -241,6 +398,7 @@ export const RallyProvider = ({ children }) => {
     }
     setWsConnectionStatus('disconnected');
     setWsEnabled(false);
+    setWsCanPublish(false);
     localStorage.setItem('rally_ws_enabled', JSON.stringify(false));
   }, []);
 
@@ -1082,6 +1240,7 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl,
     setCurrentStageId,
     setGlobalAudio,
+    forceWebSocketFullSync,
     // CRUD operations
     addPilot,
     updatePilot,

@@ -44,7 +44,7 @@ export default function Overlay() {
     if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
       setAutoConnectAttempted(true);
       console.log('[Overlay] Auto-connecting with URL key:', wsKey);
-      connectWebSocket(wsKey);
+      connectWebSocket(wsKey, { readOnly: true });
     }
   }, [searchParams, wsConnectionStatus, connectWebSocket, autoConnectAttempted]);
 
@@ -101,7 +101,7 @@ export default function Overlay() {
 
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
-    const success = await connectWebSocket(wsKeyInput.trim());
+    const success = await connectWebSocket(wsKeyInput.trim(), { readOnly: true });
     if (success) {
       setShowWsPanel(false);
       setWsKeyInput('');

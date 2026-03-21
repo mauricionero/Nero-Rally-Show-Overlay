@@ -41,6 +41,10 @@ header:
   websocket: "Websocket"
   websocketSetupHint: "Connect it in Config > Live sync (websocket): generate a key, connect, then this button will be enabled."
   websocketReadyHint: "Opens the overlay with the active websocket connection key."
+  forceSync: "Force Sync"
+  sendFullSync: "Send Full Sync"
+  forceSyncSuccess: "Full sync sent over websocket."
+  forceSyncError: "Could not send the full websocket sync."
 
 # ===========================================
 # SETUP PAGE - TABS
