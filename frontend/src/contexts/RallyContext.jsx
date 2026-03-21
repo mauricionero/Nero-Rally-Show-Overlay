@@ -318,14 +318,6 @@ export const RallyProvider = ({ children }) => {
     await publishWebSocketMessages('sync-update');
   }, [wsEnabled, wsCanPublish, publishWebSocketMessages]);
 
-  const forceWebSocketFullSync = useCallback(async () => {
-    if (!wsEnabled || !wsCanPublish || !wsProvider.current?.isConnected) {
-      return false;
-    }
-
-    return publishWebSocketMessages('full-snapshot');
-  }, [wsEnabled, wsCanPublish, publishWebSocketMessages]);
-
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey, options = {}) => {
     const { valid } = parseChannelKey(channelKey);
@@ -1240,7 +1232,6 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl,
     setCurrentStageId,
     setGlobalAudio,
-    forceWebSocketFullSync,
     // CRUD operations
     addPilot,
     updatePilot,

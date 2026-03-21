@@ -15,7 +15,8 @@ import {
   SERVICE_PARK_STAGE_TYPE,
   SS_STAGE_TYPE,
   SUPER_PRIME_STAGE_TYPE,
-  getStageTitle
+  getStageTitle,
+  isManualStartStageType
 } from '../../utils/stageTypes.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
@@ -55,6 +56,26 @@ const normalizeDate = (value) => {
   }
 
   return trimmed;
+};
+
+const parseClockTimeToMinutes = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/);
+  if (!match) {
+    return null;
+  }
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
 };
 
 const parseCsvLine = (line, delimiter) => {
@@ -173,6 +194,7 @@ export default function BulkLoadTab() {
   const [timeCsv, setTimeCsv] = useState('');
   const [updateExistingPilots, setUpdateExistingPilots] = useState(false);
   const [preserveEmptyPilotFields, setPreserveEmptyPilotFields] = useState(false);
+  const [inferPilotOffsetsFromStartTime, setInferPilotOffsetsFromStartTime] = useState(false);
   const [selectedTimesStageId, setSelectedTimesStageId] = useState('');
   const [pilotResult, setPilotResult] = useState(createEmptyResult());
   const [stageResult, setStageResult] = useState(createEmptyResult());
@@ -207,7 +229,17 @@ export default function BulkLoadTab() {
     }
 
     const existingPilotsByName = new Map(pilots.map((pilot) => [normalizeRecordName(pilot.name), pilot]));
-    const importedNames = new Set();
+    const existingPilotsByCarNumber = new Map();
+    pilots.forEach((pilot) => {
+      const carNumberKey = normalizeNumberKey(pilot.carNumber);
+      if (!carNumberKey) {
+        return;
+      }
+
+      const existing = existingPilotsByCarNumber.get(carNumberKey) || [];
+      existingPilotsByCarNumber.set(carNumberKey, [...existing, pilot]);
+    });
+    const importedPilotKeys = new Set();
     const errors = [];
     let importedCount = 0;
     let updatedCount = 0;
@@ -215,28 +247,51 @@ export default function BulkLoadTab() {
     parsed.rows.forEach(({ rowNumber, values }) => {
       const name = (values.name || '').trim();
       const nameKey = normalizeRecordName(name);
-      const existingPilot = existingPilotsByName.get(nameKey);
+      const carNumber = (values.carNumber || '').trim();
+      const carNumberKey = normalizeNumberKey(carNumber);
+      const pilotsMatchingCarNumber = carNumberKey ? (existingPilotsByCarNumber.get(carNumberKey) || []) : [];
+      const existingPilotByName = nameKey ? existingPilotsByName.get(nameKey) : null;
+      const existingPilotByCarNumber = pilotsMatchingCarNumber[0] || null;
+      const rowIdentifier = name || carNumber || '-';
+      const importIdentityKey = carNumberKey ? `car:${carNumberKey}` : nameKey;
 
-      if (!name) {
-        errors.push({ rowNumber, name: values.name || '-', message: t('bulkLoad.errors.nameRequired') });
+      if (carNumberKey && pilotsMatchingCarNumber.length > 1) {
+        errors.push({ rowNumber, name: rowIdentifier, message: t('bulkLoad.errors.ambiguousNumber') });
         return;
       }
 
-      if (importedNames.has(nameKey)) {
-        errors.push({ rowNumber, name, message: t('bulkLoad.errors.duplicateInImport') });
+      if (existingPilotByName && existingPilotByCarNumber && existingPilotByName.id !== existingPilotByCarNumber.id) {
+        errors.push({ rowNumber, name: rowIdentifier, message: t('bulkLoad.errors.identifierMismatch') });
+        return;
+      }
+
+      const existingPilot = existingPilotByCarNumber || existingPilotByName;
+
+      if (!name && !(updateExistingPilots && existingPilot)) {
+        errors.push({ rowNumber, name: rowIdentifier, message: t('bulkLoad.errors.nameRequired') });
+        return;
+      }
+
+      if (!importIdentityKey) {
+        errors.push({ rowNumber, name: rowIdentifier, message: t('bulkLoad.errors.nameRequired') });
+        return;
+      }
+
+      if (importedPilotKeys.has(importIdentityKey)) {
+        errors.push({ rowNumber, name: rowIdentifier, message: t('bulkLoad.errors.duplicateInImport') });
         return;
       }
 
       if (values.category && !categoryMap[normalizeLookupKey(values.category)]) {
-        errors.push({ rowNumber, name, message: t('bulkLoad.errors.categoryNotFound') });
+        errors.push({ rowNumber, name: rowIdentifier, message: t('bulkLoad.errors.categoryNotFound') });
         return;
       }
 
       const nextPilotData = {
-        name,
+        name: name || existingPilot?.name || '',
         team: (values.team || '').trim(),
         car: (values.car || '').trim(),
-        carNumber: (values.carNumber || '').trim(),
+        carNumber,
         categoryId: values.category ? categoryMap[normalizeLookupKey(values.category)] : null,
         startOrder: parseInt(values.startOrder, 10) || 999,
         timeOffsetMinutes: parseInt(values.timeOffsetMinutes, 10) || 0,
@@ -246,7 +301,7 @@ export default function BulkLoadTab() {
 
       if (existingPilot) {
         if (!updateExistingPilots) {
-          errors.push({ rowNumber, name, message: t('bulkLoad.errors.duplicateName') });
+          errors.push({ rowNumber, name: rowIdentifier, message: t('bulkLoad.errors.duplicateName') });
           return;
         }
 
@@ -271,7 +326,7 @@ export default function BulkLoadTab() {
         importedCount += 1;
       }
 
-      importedNames.add(nameKey);
+      importedPilotKeys.add(importIdentityKey);
     });
 
     const summary = t('bulkLoad.importSummaryPilots', { created: importedCount, updated: updatedCount, failed: errors.length });
@@ -363,16 +418,15 @@ export default function BulkLoadTab() {
     const pilotNumberMap = new Map();
 
     pilots.forEach((pilot) => {
-      const identifiers = [pilot.carNumber, pilot.startOrder]
-        .map((value) => normalizeNumberKey(value))
-        .filter(Boolean);
+      const carNumberKey = normalizeNumberKey(pilot.carNumber);
+      if (!carNumberKey) {
+        return;
+      }
 
-      identifiers.forEach((identifier) => {
-        const existing = pilotNumberMap.get(identifier) || [];
-        if (!existing.some((entry) => entry.id === pilot.id)) {
-          pilotNumberMap.set(identifier, [...existing, pilot]);
-        }
-      });
+      const existing = pilotNumberMap.get(carNumberKey) || [];
+      if (!existing.some((entry) => entry.id === pilot.id)) {
+        pilotNumberMap.set(carNumberKey, [...existing, pilot]);
+      }
     });
 
     const importedPilots = new Set();
@@ -380,7 +434,7 @@ export default function BulkLoadTab() {
     const errors = [];
 
     parsed.rows.forEach(({ rowNumber, values }) => {
-      const number = (values.number || values.carNumber || values.startOrder || '').trim();
+      const number = (values.number || values.carNumber || '').trim();
       const pilotName = (values.pilot || values.name || '').trim();
       const numberKey = normalizeNumberKey(number);
       const pilotKey = normalizeLookupKey(pilotName);
@@ -436,6 +490,24 @@ export default function BulkLoadTab() {
         arrivalTime: resolvedArrivalTime || undefined,
         startTime: startTime || undefined
       });
+
+      if (
+        inferPilotOffsetsFromStartTime
+        && startTime
+        && stage?.startTime
+        && !isManualStartStageType(stage.type)
+        && stage.type !== LAP_RACE_STAGE_TYPE
+      ) {
+        const stageStartMinutes = parseClockTimeToMinutes(stage.startTime);
+        const pilotStartMinutes = parseClockTimeToMinutes(startTime);
+
+        if (stageStartMinutes !== null && pilotStartMinutes !== null) {
+          updatePilot(pilot.id, {
+            timeOffsetMinutes: pilotStartMinutes - stageStartMinutes
+          });
+        }
+      }
+
       importedPilots.add(pilot.id);
     });
 
@@ -644,6 +716,17 @@ export default function BulkLoadTab() {
               {TIME_EXAMPLE}
             </code>
           </div>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <Checkbox
+              checked={inferPilotOffsetsFromStartTime}
+              onCheckedChange={(checked) => setInferPilotOffsetsFromStartTime(checked === true)}
+            />
+            <div>
+              <p className="text-sm text-white">{t('bulkLoad.inferPilotOffsetsFromStartTime')}</p>
+              <p className="text-xs text-zinc-500">{t('bulkLoad.inferPilotOffsetsFromStartTimeDesc')}</p>
+            </div>
+          </label>
 
           <Textarea
             value={timeCsv}

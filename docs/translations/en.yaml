@@ -41,10 +41,6 @@ header:
   websocket: "Websocket"
   websocketSetupHint: "Connect it in Config > Live sync (websocket): generate a key, connect, then this button will be enabled."
   websocketReadyHint: "Opens the overlay with the active websocket connection key."
-  forceSync: "Force Sync"
-  sendFullSync: "Send Full Sync"
-  forceSyncSuccess: "Full sync sent over websocket."
-  forceSyncError: "Could not send the full websocket sync."
 
 # ===========================================
 # SETUP PAGE - TABS
@@ -377,6 +373,8 @@ bulkLoad:
   selectStagePlaceholder: "Select a stage"
   selectStageFirst: "Select a stage first."
   timesHint: "Blank cells are ignored, so you can paste partial timing updates without clearing existing values. Use the number column whenever possible. If totalTime is provided and a start time is known, arrivalTime is calculated automatically."
+  inferPilotOffsetsFromStartTime: "Infer Pilot Offsets From Start Time"
+  inferPilotOffsetsFromStartTimeDesc: "When a row contains startTime, update the pilot time offset from the difference between the imported start time and the selected stage start."
   updateExistingPilots: "Update Existing Pilots"
   updateExistingPilotsDesc: "If an imported pilot name matches exactly, overwrite that pilot instead of rejecting the row."
   preserveEmptyPilotFields: "Keep Existing Values For Empty Fields"

@@ -6,7 +6,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { Play, RefreshCw, VideoOff, Wifi } from 'lucide-react';
+import { Play, VideoOff, Wifi } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl } from '../utils/overlayUrls.js';
 
 // app version constant
@@ -24,23 +24,13 @@ import DebugTab from '../components/setup/DebugTab.jsx';
 
 export default function Setup() {
   const { t } = useTranslation();
-  const { wsChannelKey, wsConnectionStatus, forceWebSocketFullSync } = useRally();
+  const { wsChannelKey, wsConnectionStatus } = useRally();
   const [hideStreams, setHideStreams] = useState(false);
   const hasWebSocketOverlay = wsConnectionStatus === 'connected' && Boolean(wsChannelKey);
 
   const handleGoLive = (url) => {
     window.open(url, '_blank');
     toast.success('Overlay page opened in new tab');
-  };
-
-  const handleForceSync = async () => {
-    const success = await forceWebSocketFullSync();
-
-    if (success) {
-      toast.success(t('header.forceSyncSuccess'));
-    } else {
-      toast.error(t('header.forceSyncError'));
-    }
   };
 
   return (
@@ -109,23 +99,6 @@ export default function Setup() {
                 </TooltipProvider>
               </div>
 
-              <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
-                <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-                  {t('header.forceSync')}
-                </div>
-                <Button
-                  onClick={handleForceSync}
-                  disabled={!hasWebSocketOverlay}
-                  className={hasWebSocketOverlay
-                    ? 'min-w-[138px] bg-zinc-800 hover:bg-zinc-700 text-white uppercase font-bold disabled:opacity-100'
-                    : 'min-w-[138px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
-                  }
-                  data-testid="force-websocket-sync-button"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  {t('header.sendFullSync')}
-                </Button>
-              </div>
             </div>
             {/* version tag */}
             <div className="text-xs text-zinc-500">v{VERSION}</div>

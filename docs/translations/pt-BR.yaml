@@ -41,10 +41,6 @@ header:
   websocket: "Websocket"
   websocketSetupHint: "Conecte em Config > Live sync (websocket): gere uma chave, conecte e então este botão será habilitado."
   websocketReadyHint: "Abre o overlay com a chave ativa da conexão websocket."
-  forceSync: "Forçar Sync"
-  sendFullSync: "Enviar Sync Completo"
-  forceSyncSuccess: "Sync completo enviado pelo websocket."
-  forceSyncError: "Não foi possível enviar o sync completo pelo websocket."
 
 # ===========================================
 # PÁGINA SETUP - ABAS
@@ -377,6 +373,8 @@ bulkLoad:
   selectStagePlaceholder: "Selecione uma etapa"
   selectStageFirst: "Selecione uma etapa primeiro."
   timesHint: "Campos em branco sao ignorados, entao voce pode colar atualizacoes parciais sem apagar os valores existentes. Sempre que puder, use a coluna number. Se totalTime vier preenchido e houver um horario de largada conhecido, arrivalTime sera calculado automaticamente."
+  inferPilotOffsetsFromStartTime: "Inferir Offsets Dos Pilotos Pelo Horario De Largada"
+  inferPilotOffsetsFromStartTimeDesc: "Quando a linha tiver startTime, atualize o offset do piloto pela diferenca entre o horario importado e o horario da etapa selecionada."
   updateExistingPilots: "Atualizar Pilotos Existentes"
   updateExistingPilotsDesc: "Se o nome importado bater exatamente com um piloto existente, atualize esse piloto em vez de rejeitar a linha."
   preserveEmptyPilotFields: "Manter Valores Existentes Em Campos Vazios"
