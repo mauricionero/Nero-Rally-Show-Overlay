@@ -45,6 +45,9 @@ export function StartInformationValue({ info, fallback = '', className = '', sty
         <>
           {info.label ? `${info.label}: ` : ''}
           <StartSignalDots signal={info.signal} />
+          {info.signal.mode === 'green' && Number.isFinite(info.signal.seconds) && (
+            <span className="ml-2">{info.signal.seconds}</span>
+          )}
         </>
       )
     : (fallback || info?.text || '');

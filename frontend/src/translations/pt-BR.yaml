@@ -353,6 +353,7 @@ status:
   finished: "Finalizado"
   notStarted: "Não Largou"
   retired: "Retirado"
+  alert: "⚠"
   start: "Largada"
   active: "Ativo"
   inactive: "Inativo"

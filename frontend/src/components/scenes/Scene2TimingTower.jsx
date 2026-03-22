@@ -5,7 +5,7 @@ import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { StartInformationValue } from '../StartInformationValue.jsx';
-import { getPilotStatus, getReferenceNow, sortPilotsByStatus, parseTime, startInformationTime } from '../../utils/rallyHelpers';
+import { getPilotStatus, getReferenceNow, sortPilotsByStatus, parseTime, startInformationTime, getStageDateTime } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -96,7 +96,7 @@ const formatTime = (ms) => {
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert
   } = useRally();
   const { t } = useTranslation();
   
@@ -176,10 +176,20 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     const sortedPilots = sortPilotsByStatus(pilots, categories, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
     return sortedPilots.map((pilot, index) => {
       const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
+      const startTime = startTimes[pilot.id]?.[currentStageId];
+      const stageStartDateTime = status === 'not_started' && startTime
+        ? getStageDateTime(currentStage?.date, startTime)
+        : null;
+      const remainingMs = stageStartDateTime ? stageStartDateTime.getTime() - sceneNow.getTime() : null;
+      const preStart = status === 'not_started'
+        && remainingMs !== null
+        && remainingMs > 0
+        && remainingMs <= 10000;
       return {
         pilot,
         position: index + 1,
         status,
+        preStart,
         isFinished: status === 'finished',
         isRacing: status === 'racing'
       };
@@ -227,9 +237,13 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     );
   }
 
-  const racing = sortedPilotsData.filter(d => d.status === 'racing');
+  const onStage = sortedPilotsData.filter(d => d.status === 'racing' || d.preStart);
+  const onStageOrdered = [...onStage].sort((a, b) => {
+    if (a.preStart === b.preStart) return 0;
+    return a.preStart ? 1 : -1;
+  });
   const finished = sortedPilotsData.filter(d => d.status === 'finished');
-  const notStarted = sortedPilotsData.filter(d => d.status === 'not_started');
+  const notStarted = sortedPilotsData.filter(d => d.status === 'not_started' && !d.preStart);
   const retired = sortedPilotsData.filter(d => d.status === 'retired');
   const leader = finished[0];
 
@@ -257,6 +271,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     const category = categories.find(c => c.id === pilot.categoryId);
     const isExpanded = expandedPilotId === pilot.id;
     const hasStream = pilot.streamUrl;
+    const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
     
     let displayTime = '';
     let displayTimeInfo = null;
@@ -344,7 +359,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           
           {/* Position */}
           <div className="w-8 flex-shrink-0 ml-2">
-            <span className="text-[#FF4500] font-bold text-sm">{position}</span>
+            <span className="text-[#FF4500] font-bold text-sm">{index + 1}</span>
           </div>
           
           {/* Status indicator */}
@@ -352,9 +367,16 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           
           {/* Pilot name */}
           <div className="flex-1 min-w-0">
-            <span className="text-white text-sm font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              {rowDisplayName}
-            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-white text-sm font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {rowDisplayName}
+              </span>
+              {alert && (
+                <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                  {t('status.alert')}
+                </span>
+              )}
+            </div>
           </div>
           
           {/* Time/Gap */}
@@ -473,7 +495,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         </div>
 
         {/* Racing Section */}
-        {racing.length > 0 && (
+        {onStageOrdered.length > 0 && (
           <div className="mb-2">
             <div className="px-3 py-1 bg-[#FF8C00]/20 border-l-2 border-[#FF8C00]">
               <span className="text-[#FF8C00] text-xs font-bold uppercase flex items-center gap-1">
@@ -481,7 +503,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 {isLapRace ? t('scene2.racing') : t('scene2.onStage')}
               </span>
             </div>
-            {racing.map((data, index) => renderPilotRow(data, index))}
+            {onStageOrdered.map((data, index) => renderPilotRow(data, index))}
           </div>
         )}
 

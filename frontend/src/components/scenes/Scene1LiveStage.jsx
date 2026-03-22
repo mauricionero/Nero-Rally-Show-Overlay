@@ -94,7 +94,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
-    cameras, externalMedia, debugDate, retiredStages
+    cameras, externalMedia, debugDate, retiredStages, isStageAlert
   } = useRally();
   const { t } = useTranslation();
   const initialSceneConfig = useMemo(
@@ -552,6 +552,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             const pilot = item;
             const category = categories.find(c => c.id === pilot.categoryId);
             const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
+            const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
             
             let displayTime = '';
             let displayTimeInfo = null;
@@ -618,10 +619,17 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 )}
                 <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1), -1px -1px 2px rgba(0,0,0,1)' }}>
-                      <span className="text-zinc-400 text-base mr-2" style={{ textShadow: '0 0 6px rgba(0,0,0,1)' }}>#{pilot.startOrder || '?'}</span>
-                      {pilot.name}
-                    </p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-white font-bold text-lg uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1), -1px -1px 2px rgba(0,0,0,1)' }}>
+                        <span className="text-zinc-400 text-base mr-2" style={{ textShadow: '0 0 6px rgba(0,0,0,1)' }}>#{pilot.startOrder || '?'}</span>
+                        {pilot.name}
+                      </p>
+                      {alert && (
+                        <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          {t('status.alert')}
+                        </span>
+                      )}
+                    </div>
                     {displayTime && (
                       <StartInformationValue
                         as="p"
@@ -696,6 +704,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 {sortedPilotsWithPositions.map(({ pilot, position, completedLaps, isFinished }) => {
                   const category = categories.find(c => c.id === pilot.categoryId);
                   const pilotMeta = [pilot.car, pilot.team].filter(Boolean).join(' • ');
+                  const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
                   
                   let borderColor = 'border-zinc-700';
                   let timeDisplay = '';
@@ -757,9 +766,16 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                           <span className="block text-[#FF4500] font-bold text-sm leading-none mb-1">P{position}</span>
                         )}
                         <div className="min-w-0 space-y-0.5">
-                          <p className="text-white text-sm font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                            {abbreviateTickerName(pilot.name)}
-                          </p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-white text-sm font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                              {abbreviateTickerName(pilot.name)}
+                            </p>
+                            {alert && (
+                              <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                {t('status.alert')}
+                              </span>
+                            )}
+                          </div>
                           {pilotMeta && (
                             <p className="text-zinc-400 text-[11px] leading-tight truncate">
                               {pilotMeta}

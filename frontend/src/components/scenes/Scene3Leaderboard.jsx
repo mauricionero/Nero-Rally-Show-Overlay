@@ -97,7 +97,7 @@ const formatOverallTime = (totalSeconds) => {
 };
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId } = useRally();
+  const { pilots, stages, times, startTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert } = useRally();
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
   const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
@@ -308,6 +308,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
 
   const leader = leaderboard.find(p => p.hasTime);
   const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
+  const alertStageId = selectedStageId || currentStageId || null;
 
   // Get stage icon based on type
   const getStageIcon = (type) => {
@@ -474,6 +475,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 
                 const category = categories.find(c => c.id === pilot.categoryId);
                 const pilotMeta = [pilot.car, pilot.team].filter(Boolean).join(' • ');
+                const alert = alertStageId ? isStageAlert(pilot.id, alertStageId) : false;
 
                 return (
                   <tr
@@ -518,6 +520,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                             <span className="text-white text-xl font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               {pilot.name}
                             </span>
+                            {alert && (
+                              <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                {t('status.alert')}
+                              </span>
+                            )}
                             {pilot.isRetired && (
                               <span className="flex-shrink-0 bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
                                 RET

@@ -106,6 +106,7 @@ export const RallyProvider = ({ children }) => {
   const [arrivalTimes, setArrivalTimes] = useState(() => loadFromStorage('rally_arrival_times', {}));
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [retiredStages, setRetiredStages] = useState(() => loadFromStorage('rally_retired_stages', {}));
+  const [stageAlerts, setStageAlerts] = useState(() => loadFromStorage('rally_stage_alerts', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
@@ -143,6 +144,7 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
     setStartTimes(loadFromStorage('rally_start_times', {}));
     setRetiredStages(loadFromStorage('rally_retired_stages', {}));
+    setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setDebugDate(loadFromStorage('rally_debug_date', ''));
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
@@ -180,6 +182,7 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.arrivalTimes !== undefined) setArrivalTimes(normalizedData.arrivalTimes);
     if (normalizedData.startTimes !== undefined) setStartTimes(normalizedData.startTimes);
     if (normalizedData.retiredStages !== undefined) setRetiredStages(normalizedData.retiredStages);
+    if (normalizedData.stageAlerts !== undefined) setStageAlerts(normalizedData.stageAlerts);
     if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
     if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
     if (normalizedData.chromaKey !== undefined) setChromaKey(normalizedData.chromaKey);
@@ -218,6 +221,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     retiredStages,
+    stageAlerts,
     currentStageId,
     debugDate,
     chromaKey,
@@ -240,6 +244,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     retiredStages,
+    stageAlerts,
     currentStageId,
     debugDate,
     chromaKey,
@@ -274,6 +279,7 @@ export const RallyProvider = ({ children }) => {
       { section: 'positions', payload: { positions: pruneEmptyNestedValues(snapshot.positions) } },
       { section: 'stagePilots', payload: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) } },
       { section: 'retiredStages', payload: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) } },
+      { section: 'stageAlerts', payload: { stageAlerts: pruneEmptyNestedValues(snapshot.stageAlerts) } },
       { section: 'cameras', payload: { cameras: pruneEmptyNestedValues(snapshot.cameras) } },
       { section: 'externalMedia', payload: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) } },
       { section: 'streamConfigs', payload: { streamConfigs: pruneEmptyNestedValues(snapshot.streamConfigs) } }
@@ -465,6 +471,11 @@ export const RallyProvider = ({ children }) => {
     localStorage.setItem('rally_retired_stages', JSON.stringify(retiredStages));
     updateDataVersion();
   }, [retiredStages]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_stage_alerts', JSON.stringify(stageAlerts));
+    updateDataVersion();
+  }, [stageAlerts]);
 
   useEffect(() => {
     localStorage.setItem('rally_debug_date', JSON.stringify(debugDate));
@@ -692,6 +703,11 @@ export const RallyProvider = ({ children }) => {
       delete nextRetiredStages[id];
       return nextRetiredStages;
     });
+    setStageAlerts(prev => {
+      const nextStageAlerts = { ...prev };
+      delete nextStageAlerts[id];
+      return nextStageAlerts;
+    });
     setStreamConfigs(prev => {
       const nextStreamConfigs = { ...prev };
       delete nextStreamConfigs[id];
@@ -850,6 +866,15 @@ export const RallyProvider = ({ children }) => {
       const newStagePilots = { ...prev };
       delete newStagePilots[id];
       return newStagePilots;
+    });
+    setStageAlerts(prev => {
+      const newStageAlerts = { ...prev };
+      Object.keys(newStageAlerts).forEach(pilotId => {
+        if (newStageAlerts[pilotId]) {
+          delete newStageAlerts[pilotId][id];
+        }
+      });
+      return newStageAlerts;
     });
   };
 
@@ -1071,6 +1096,31 @@ export const RallyProvider = ({ children }) => {
     });
   };
 
+  const isStageAlert = (pilotId, stageId) => {
+    return !!stageAlerts?.[pilotId]?.[stageId];
+  };
+
+  const setStageAlert = (pilotId, stageId, alert) => {
+    setStageAlerts((prev) => {
+      const next = { ...prev };
+      const nextPilotStages = { ...(next[pilotId] || {}) };
+
+      if (alert) {
+        nextPilotStages[stageId] = stageId;
+      } else {
+        delete nextPilotStages[stageId];
+      }
+
+      if (Object.keys(nextPilotStages).length > 0) {
+        next[pilotId] = nextPilotStages;
+      } else {
+        delete next[pilotId];
+      }
+
+      return next;
+    });
+  };
+
   // Stream configuration functions
   const getStreamConfig = (pilotId) => {
     return streamConfigs[pilotId] || {
@@ -1126,6 +1176,7 @@ export const RallyProvider = ({ children }) => {
       arrivalTimes,
       startTimes,
       retiredStages,
+      stageAlerts,
       streamConfigs,
       globalAudio,
       cameras,
@@ -1150,6 +1201,7 @@ export const RallyProvider = ({ children }) => {
       if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
       if (data.startTimes) setStartTimes(data.startTimes);
       if (data.retiredStages) setRetiredStages(data.retiredStages);
+      if (data.stageAlerts) setStageAlerts(data.stageAlerts);
       if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.cameras) setCameras(data.cameras);
@@ -1182,6 +1234,7 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes({});
     setStartTimes({});
     setRetiredStages({});
+    setStageAlerts({});
     setDebugDate('');
     setStreamConfigs({});
     setCameras([]);
@@ -1208,6 +1261,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     retiredStages,
+    stageAlerts,
     debugDate,
     streamConfigs,
     globalAudio,
@@ -1257,6 +1311,8 @@ export const RallyProvider = ({ children }) => {
     bulkImportTimingEntries,
     setRetiredFromStage,
     isRetiredStage,
+    setStageAlert,
+    isStageAlert,
     // Lap time functions
     setLapTime,
     getLapTime,

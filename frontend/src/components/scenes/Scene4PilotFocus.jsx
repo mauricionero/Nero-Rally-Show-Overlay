@@ -84,7 +84,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages
+    lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert
   } = useRally();
   const { t } = useTranslation();
   
@@ -133,6 +133,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const focusPilot = pilots.find(p => p.id === selectedPilotId);
   const selectedStage = stages.find(s => s.id === selectedStageId);
   const isLapRace = isLapRaceStageType(selectedStage?.type);
+  const hasStageAlert = focusPilot && selectedStageId
+    ? isStageAlert(focusPilot.id, selectedStageId)
+    : false;
 
   // Get pilot's stage times with sorted stages
   const sortedStages = useMemo(() => {
@@ -384,6 +387,11 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                 <h2 className="text-3xl font-bold uppercase text-white truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {focusPilot.name}
                 </h2>
+                {hasStageAlert && (
+                  <span className="inline-block bg-amber-500/30 text-amber-200 text-[11px] font-bold px-2 py-0.5 rounded">
+                    {t('status.alert')}
+                  </span>
+                )}
                 {focusPilot.carNumber && (
                   <span className="inline-block bg-[#FF4500] text-white text-sm font-bold px-2 py-0.5 rounded">
                     #{focusPilot.carNumber}
@@ -675,6 +683,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   pilotStageData.map((item) => {
                     const Icon = getStageIcon(item.stage.type);
                     const stageColor = getStageTypeColor(item.stage.type);
+                    const alert = focusPilot ? isStageAlert(focusPilot.id, item.stage.id) : false;
                     
                     return (
                       <div 
@@ -687,12 +696,17 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                         onClick={() => setSelectedStageId(item.stage.id)}
                       >
                         <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <Icon className="w-4 h-4" style={{ color: stageColor }} />
-                            <span className="text-zinc-400 uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                              {isSpecialStageType(item.stage.type) && item.stage.ssNumber ? getStageNumberLabel(item.stage) : item.stage.name}
-                            </span>
-                          </div>
+                            <div className="flex items-center gap-2">
+                              <Icon className="w-4 h-4" style={{ color: stageColor }} />
+                              <span className="text-zinc-400 uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                                {isSpecialStageType(item.stage.type) && item.stage.ssNumber ? getStageNumberLabel(item.stage) : item.stage.name}
+                              </span>
+                              {alert && (
+                                <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                  {t('status.alert')}
+                                </span>
+                              )}
+                            </div>
                           <span className={`text-lg font-mono ${
                             item.status === 'racing' ? 'text-[#FACC15]' :
                             item.status === 'finished' ? 'text-white' :

@@ -39,6 +39,10 @@ export const isPilotRetiredForStage = (pilotId, stageId, retiredStages) => {
   return !!retiredStages?.[pilotId]?.[stageId];
 };
 
+export const isPilotAlertForStage = (pilotId, stageId, stageAlerts) => {
+  return !!stageAlerts?.[pilotId]?.[stageId];
+};
+
 export const getPilotStatus = (pilotId, stageId, startTimes, times, retiredStages, stageDate, now = new Date()) => {
   const startTime = startTimes[pilotId]?.[stageId];
   const finishTime = times[pilotId]?.[stageId];
@@ -133,6 +137,7 @@ export const startInformationTime = ({
     : shouldShowGreenSignal
       ? {
           mode: 'green',
+          seconds: Math.min(4, Math.max(0, Math.floor((elapsedSinceStartMs || 0) / 1000))),
           activeCount: 5,
           totalCount: 5
         }

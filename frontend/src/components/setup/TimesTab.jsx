@@ -2,17 +2,18 @@ import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
-import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { TimeInput } from '../TimeInput.jsx';
 import CurrentStageCard from './CurrentStageCard.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
-import { X, Clock, Flag, RotateCcw, Car, Timer, CheckSquare, Square, ChevronDown } from 'lucide-react';
+import { X, Clock, Flag, RotateCcw, Car, Timer, ChevronDown } from 'lucide-react';
+import LapRaceStageCard from './LapRaceStageCard.jsx';
 import {
   getStageNumberLabel,
   isLapRaceStageType,
@@ -48,6 +49,26 @@ const formatClockInput = (value) => {
 };
 
 const isValidClockTime = (value) => /^\d{2}:\d{2}$/.test(value);
+
+const parseTotalTimeToMs = (timeStr) => {
+  if (!timeStr) return null;
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return null;
+  const hours = parts.length === 3 ? parseInt(parts[0]) : 0;
+  const mins = parts.length === 3 ? parseInt(parts[1]) : parseInt(parts[0]);
+  const secsAndMs = parts.length === 3 ? parts[2] : parts[1];
+  const [secs, ms] = secsAndMs.split('.');
+  if (!Number.isFinite(mins)) return null;
+  return (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
+};
+
+const formatMsAsTotalTime = (ms) => {
+  if (!Number.isFinite(ms) || ms < 0) return '--';
+  const totalSeconds = ms / 1000;
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = (totalSeconds % 60).toFixed(3).padStart(6, '0');
+  return `${mins}:${secs}`;
+};
 
 const getPilotStartOrderForTimes = (pilot) => {
   const numericValue = Number(pilot?.startOrder);
@@ -145,7 +166,7 @@ const getStageTypeColor = (type) => {
   }
 };
 
-function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false }) {
+function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false, layout = 'cards' }) {
   const { t } = useTranslation();
   const {
     setTime,
@@ -155,8 +176,64 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     setStartTime,
     getStartTime,
     setRetiredFromStage,
-    isRetiredStage
+    isRetiredStage,
+    setStageAlert,
+    isStageAlert
   } = useRally();
+
+  const categoryStats = useMemo(() => {
+    const statsByCategory = new Map();
+
+    sortedPilots.forEach((pilot) => {
+      const category = categoryMap.get(pilot.categoryId);
+      if (!category) return;
+
+      const existing = statsByCategory.get(category.id) || {
+        category,
+        values: []
+      };
+
+      const totalTime = getTime(pilot.id, stage.id);
+      const totalMs = parseTotalTimeToMs(totalTime);
+      if (Number.isFinite(totalMs)) {
+        existing.values.push(totalMs);
+      }
+      statsByCategory.set(category.id, existing);
+    });
+
+    const stats = Array.from(statsByCategory.values())
+      .map((entry) => {
+        const values = entry.values;
+        const count = values.length;
+        if (count === 0) {
+          return {
+            category: entry.category,
+            avg: null,
+            deviation: null,
+            order: categoryOrderById.get(entry.category.id) ?? Number.MAX_SAFE_INTEGER
+          };
+        }
+
+        const avg = values.reduce((sum, val) => sum + val, 0) / count;
+        const variance = values.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / count;
+        const deviation = Math.sqrt(variance);
+
+        return {
+          category: entry.category,
+          avg,
+          deviation,
+          order: categoryOrderById.get(entry.category.id) ?? Number.MAX_SAFE_INTEGER
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.order - b.order);
+
+    return stats;
+  }, [sortedPilots, categoryMap, categoryOrderById, getTime, stage.id]);
+
+  const categoryStatsById = useMemo(() => (
+    new Map(categoryStats.map((stat) => [stat.category.id, stat]))
+  ), [categoryStats]);
 
   const stageSortedPilots = useMemo(() => (
     [...sortedPilots].sort((a, b) => {
@@ -223,150 +300,487 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
   };
 
   return (
-    <div className="grid gap-2" style={pilotTimingGridStyle}>
-      {stageSortedPilots.map((pilot) => {
-        const category = categoryMap.get(pilot.categoryId);
-        const startTimeValue = manualStartTime
-          ? getStartTime(pilot.id, stage.id)
-          : getPilotScheduledStartTime(stage, pilot);
-        const retired = isRetiredStage(pilot.id, stage.id);
-        const hasRecordedTime = !!getTime(pilot.id, stage.id);
-
-        return (
-          <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
-            {category && (
-              <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l" style={{ backgroundColor: category.color }} />
-            )}
-            <CardContent className="p-2 pl-3">
-              {/* Pilot Header */}
-              <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
-                <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                {pilot.carNumber && (
-                  <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
-                    {pilot.carNumber}
-                  </span>
-                )}
-                <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {pilot.name}
+    <div className="space-y-3">
+      {categoryStats.length > 0 && (
+        <div className="flex items-center gap-3 bg-[#09090B] border border-zinc-700 rounded px-3 py-2">
+          <div className="text-xs font-bold text-white uppercase">{t('times.avg')}</div>
+          <div className="flex flex-wrap gap-2">
+            {categoryStats.map((stat) => (
+              <div
+                key={stat.category.id}
+                className="text-xs text-zinc-200 bg-[#18181B] border border-zinc-700 rounded px-2 py-1"
+              >
+                <span className="font-bold" style={{ color: stat.category.color }}>
+                  {stat.category.name}
                 </span>
-                {retired && (
-                  <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                    RET
-                  </span>
-                )}
+                <span className="ml-2 font-mono">
+                  {formatMsAsTotalTime(stat.avg)} ± {formatMsAsTotalTime(stat.deviation)}
+                </span>
               </div>
-              
-              {/* Start Time */}
-              <div className="mb-2">
-                <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
-                <div className="flex items-center gap-1">
-                  {manualStartTime ? (
-                    <>
-                      <Input
-                        value={startTimeValue}
-                        onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
-                        placeholder={t('times.placeholder.shortTime')}
+            ))}
+          </div>
+        </div>
+      )}
+      {layout === 'table' ? (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-700">
+                <th className="text-left text-white uppercase font-bold p-2 min-w-[220px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {t('scene3.pilot')}
+                </th>
+                <th className="text-left text-zinc-400 uppercase font-bold p-2 min-w-[180px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {t('times.startTime')}
+                </th>
+                <th className="text-left text-zinc-400 uppercase font-bold p-2 min-w-[180px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {t('times.arrivalTime')}
+                </th>
+                <th className="text-left text-zinc-400 uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {t('times.totalTime')}
+                </th>
+                <th className="text-left text-zinc-400 uppercase font-bold p-2 min-w-[90px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {t('status.retired')}
+                </th>
+                <th className="text-left text-zinc-400 uppercase font-bold p-2 min-w-[90px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {t('status.alert')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {stageSortedPilots.map((pilot) => {
+                const category = categoryMap.get(pilot.categoryId);
+                const startTimeValue = manualStartTime
+                  ? getStartTime(pilot.id, stage.id)
+                  : getPilotScheduledStartTime(stage, pilot);
+                const retired = isRetiredStage(pilot.id, stage.id);
+                const alert = isStageAlert(pilot.id, stage.id);
+                const hasRecordedTime = !!getTime(pilot.id, stage.id);
+                const totalTime = getTime(pilot.id, stage.id);
+                const totalMs = parseTotalTimeToMs(totalTime);
+                const categoryStats = category ? categoryStatsById.get(category.id) : null;
+                const avgMs = categoryStats?.avg;
+                const deviationMs = categoryStats?.deviation;
+                const warningThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
+                  ? avgMs + deviationMs
+                  : null;
+                const dangerThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
+                  ? avgMs + 2 * deviationMs
+                  : null;
+                const alertLevel = Number.isFinite(totalMs) && Number.isFinite(warningThreshold)
+                  ? (totalMs > dangerThreshold ? 'danger' : totalMs > warningThreshold ? 'warning' : null)
+                  : null;
+                const alertColor = alertLevel === 'danger' ? 'text-red-400' : 'text-amber-300';
+
+                return (
+                  <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
+                    <td className="p-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-6 rounded" style={{ backgroundColor: category?.color || 'transparent' }} />
+                        {alertLevel && (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className={`${alertColor} text-xs font-bold cursor-default`}>
+                                  {t('status.alert')}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[220px] bg-zinc-900 text-zinc-100 border border-zinc-700 text-xs">
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-white">
+                                    {alertLevel === 'danger' ? t('times.avgAlertDanger') : t('times.avgAlertWarning')}
+                                  </div>
+                                  <div className="text-zinc-300">
+                                    {t('times.avg')}: {formatMsAsTotalTime(avgMs)} ± {formatMsAsTotalTime(deviationMs)}
+                                  </div>
+                                  <div className="text-zinc-400">
+                                    {t('times.avgThreshold')}: {formatMsAsTotalTime(alertLevel === 'danger' ? dangerThreshold : warningThreshold)}
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                        {pilot.carNumber && (
+                          <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
+                            {pilot.carNumber}
+                          </span>
+                        )}
+                        <span className="text-white font-bold text-sm uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {pilot.name}
+                        </span>
+                        {alert && (
+                          <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            {t('status.alert')}
+                          </span>
+                        )}
+                        {retired && (
+                          <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            RET
+                          </span>
+                        )}
+                        {retired && (
+                          <span className={`text-[10px] font-bold uppercase ${hasRecordedTime ? 'text-amber-400' : 'text-red-400'}`}>
+                            {hasRecordedTime ? `${t('status.retired')} + ${t('times.totalTime')}` : t('status.retired')}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-1">
+                        {manualStartTime ? (
+                          <>
+                            <Input
+                              value={startTimeValue}
+                              onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
+                              placeholder={t('times.placeholder.shortTime')}
+                              className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                              inputMode="numeric"
+                            />
+                            <button
+                              onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                              className="h-7 w-7 flex-shrink-0 text-zinc-400 hover:text-[#FF4500] transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center"
+                              title={t('times.now')}
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleStartTimeChange(pilot.id, '')}
+                              className="h-7 w-4 flex-shrink-0 text-zinc-500 hover:text-red-500 transition-colors flex items-center justify-center"
+                              title={t('common.clear')}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </>
+                        ) : (
+                          <Input
+                            value={startTimeValue}
+                            readOnly
+                            placeholder="--:--"
+                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-1">
+                        <TimeInput
+                          value={getArrivalTime(pilot.id, stage.id)}
+                          onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
+                          placeholder={t('times.placeholder.time')}
+                          className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-28"
+                        />
+                        <button
+                          onClick={() => {
+                            const currentTime = getCurrentTimeString();
+                            handleArrivalTimeChange(pilot.id, currentTime);
+                          }}
+                          className="h-7 w-7 flex-shrink-0 text-zinc-400 hover:text-[#FF4500] transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center"
+                          title={t('times.now')}
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setArrivalTime(pilot.id, stage.id, '');
+                            setTime(pilot.id, stage.id, '');
+                          }}
+                          className="h-7 w-4 flex-shrink-0 text-zinc-500 hover:text-red-500 transition-colors flex items-center justify-center"
+                          title={t('common.clear')}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      <TimeInput
+                        value={getTime(pilot.id, stage.id)}
+                        onChange={(val) => handleTotalTimeChange(pilot.id, val)}
+                        placeholder={t('times.placeholder.totalTime')}
+                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-28"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={retired}
+                          onCheckedChange={(checked) => setRetiredFromStage(pilot.id, stage.id, checked === true)}
+                        />
+                        <span className="text-[11px] text-zinc-400 uppercase">{t('status.retired')}</span>
+                      </label>
+                    </td>
+                    <td className="p-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={alert}
+                          onCheckedChange={(checked) => setStageAlert(pilot.id, stage.id, checked === true)}
+                        />
+                        <span className="text-[11px] text-zinc-400 uppercase">{t('status.alert')}</span>
+                      </label>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="grid gap-2" style={pilotTimingGridStyle}>
+          {stageSortedPilots.map((pilot) => {
+            const category = categoryMap.get(pilot.categoryId);
+            const startTimeValue = manualStartTime
+              ? getStartTime(pilot.id, stage.id)
+              : getPilotScheduledStartTime(stage, pilot);
+            const retired = isRetiredStage(pilot.id, stage.id);
+            const alert = isStageAlert(pilot.id, stage.id);
+            const hasRecordedTime = !!getTime(pilot.id, stage.id);
+            const totalTime = getTime(pilot.id, stage.id);
+            const totalMs = parseTotalTimeToMs(totalTime);
+            const categoryStats = category ? categoryStatsById.get(category.id) : null;
+            const avgMs = categoryStats?.avg;
+            const deviationMs = categoryStats?.deviation;
+            const warningThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
+              ? avgMs + deviationMs
+              : null;
+            const dangerThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
+              ? avgMs + 2 * deviationMs
+              : null;
+            const alertLevel = Number.isFinite(totalMs) && Number.isFinite(warningThreshold)
+              ? (totalMs > dangerThreshold ? 'danger' : totalMs > warningThreshold ? 'warning' : null)
+              : null;
+            const alertColor = alertLevel === 'danger' ? 'text-red-400' : 'text-amber-300';
+
+            return (
+              <Card key={pilot.id} className="bg-[#09090B] border-zinc-700 relative">
+                {category && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l" style={{ backgroundColor: category.color }} />
+                )}
+                <CardContent className="p-2 pl-3">
+                  {/* Pilot Header */}
+                  <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
+                    {alertLevel && (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={`${alertColor} text-xs font-bold cursor-default`}>
+                              {t('status.alert')}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[220px] bg-zinc-900 text-zinc-100 border border-zinc-700 text-xs">
+                            <div className="space-y-1">
+                              <div className="font-semibold text-white">
+                                {alertLevel === 'danger' ? t('times.avgAlertDanger') : t('times.avgAlertWarning')}
+                              </div>
+                              <div className="text-zinc-300">
+                                {t('times.avg')}: {formatMsAsTotalTime(avgMs)} ± {formatMsAsTotalTime(deviationMs)}
+                              </div>
+                              <div className="text-zinc-400">
+                                {t('times.avgThreshold')}: {formatMsAsTotalTime(alertLevel === 'danger' ? dangerThreshold : warningThreshold)}
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                    {pilot.carNumber && (
+                      <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
+                        {pilot.carNumber}
+                      </span>
+                    )}
+                    <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {pilot.name}
+                    </span>
+                    {alert && (
+                      <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                        {t('status.alert')}
+                      </span>
+                    )}
+                    {retired && (
+                      <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                        RET
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Start Time */}
+                  <div className="mb-2">
+                    <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
+                    <div className="flex items-center gap-1">
+                      {manualStartTime ? (
+                        <>
+                          <Input
+                            value={startTimeValue}
+                            onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
+                            placeholder={t('times.placeholder.shortTime')}
+                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                            inputMode="numeric"
+                          />
+                          <button
+                            onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                            className="h-7 w-7 flex-shrink-0 text-zinc-400 hover:text-[#FF4500] transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center"
+                            title={t('times.now')}
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleStartTimeChange(pilot.id, '')}
+                            className="h-7 w-4 flex-shrink-0 text-zinc-500 hover:text-red-500 transition-colors flex items-center justify-center"
+                            title={t('common.clear')}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <Input
+                          value={startTimeValue}
+                          readOnly
+                          placeholder="--:--"
+                          className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7"
+                        />
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Arrival Time */}
+                  <div className="mb-2">
+                    <Label className="text-xs text-zinc-400">{t('times.arrivalTime')}</Label>
+                    <div className="flex items-center gap-1">
+                      <TimeInput
+                        value={getArrivalTime(pilot.id, stage.id)}
+                        onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
+                        placeholder={t('times.placeholder.time')}
                         className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                        inputMode="numeric"
                       />
                       <button
-                        onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                        onClick={() => {
+                          const currentTime = getCurrentTimeString();
+                          handleArrivalTimeChange(pilot.id, currentTime);
+                        }}
                         className="h-7 w-7 flex-shrink-0 text-zinc-400 hover:text-[#FF4500] transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center"
                         title={t('times.now')}
                       >
                         <Clock className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => handleStartTimeChange(pilot.id, '')}
+                        onClick={() => {
+                          setArrivalTime(pilot.id, stage.id, '');
+                          setTime(pilot.id, stage.id, '');
+                        }}
                         className="h-7 w-4 flex-shrink-0 text-zinc-500 hover:text-red-500 transition-colors flex items-center justify-center"
                         title={t('common.clear')}
                       >
                         <X className="w-3 h-3" />
                       </button>
-                    </>
-                  ) : (
-                    <Input
-                      value={startTimeValue}
-                      readOnly
-                      placeholder="--:--"
-                      className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7"
-                    />
-                  )}
-                </div>
-              </div>
-              
-              {/* Arrival Time */}
-              <div className="mb-2">
-                <Label className="text-xs text-zinc-400">{t('times.arrivalTime')}</Label>
-                <div className="flex items-center gap-1">
-                  <TimeInput
-                    value={getArrivalTime(pilot.id, stage.id)}
-                    onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
-                    placeholder={t('times.placeholder.time')}
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                  />
-                  <button
-                    onClick={() => {
-                      const currentTime = getCurrentTimeString();
-                      handleArrivalTimeChange(pilot.id, currentTime);
-                    }}
-                    className="h-7 w-7 flex-shrink-0 text-zinc-400 hover:text-[#FF4500] transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center"
-                    title={t('times.now')}
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setArrivalTime(pilot.id, stage.id, '');
-                      setTime(pilot.id, stage.id, '');
-                    }}
-                    className="h-7 w-4 flex-shrink-0 text-zinc-500 hover:text-red-500 transition-colors flex items-center justify-center"
-                    title={t('common.clear')}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-              
-              {/* Total Time */}
-              <div>
-                <Label className="text-xs text-zinc-400">{t('times.totalTime')}</Label>
-                <div className="flex items-center gap-1">
-                  <TimeInput
-                    value={getTime(pilot.id, stage.id)}
-                    onChange={(val) => handleTotalTimeChange(pilot.id, val)}
-                    placeholder={t('times.placeholder.totalTime')}
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                  />
-                </div>
-              </div>
+                    </div>
+                  </div>
+                  
+                  {/* Total Time */}
+                  <div>
+                    <Label className="text-xs text-zinc-400">{t('times.totalTime')}</Label>
+                    <div className="flex items-center gap-1">
+                      <TimeInput
+                        value={getTime(pilot.id, stage.id)}
+                        onChange={(val) => handleTotalTimeChange(pilot.id, val)}
+                        placeholder={t('times.placeholder.totalTime')}
+                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                      />
+                    </div>
+                  </div>
 
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={retired}
-                    onCheckedChange={(checked) => setRetiredFromStage(pilot.id, stage.id, checked === true)}
-                  />
-                  <span className="text-[11px] text-zinc-400 uppercase">{t('status.retired')}</span>
-                </label>
-                {retired && (
-                  <span className={`text-[11px] font-bold uppercase ${hasRecordedTime ? 'text-amber-400' : 'text-red-400'}`}>
-                    {hasRecordedTime ? `${t('status.retired')} + ${t('times.totalTime')}` : t('status.retired')}
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={retired}
+                        onCheckedChange={(checked) => setRetiredFromStage(pilot.id, stage.id, checked === true)}
+                      />
+                      <span className="text-[11px] text-zinc-400 uppercase">{t('status.retired')}</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={alert}
+                        onCheckedChange={(checked) => setStageAlert(pilot.id, stage.id, checked === true)}
+                      />
+                      <span className="text-[11px] text-zinc-400 uppercase">{t('status.alert')}</span>
+                    </label>
+                    {retired && (
+                      <span className={`text-[11px] font-bold uppercase ${hasRecordedTime ? 'text-amber-400' : 'text-red-400'}`}>
+                        {hasRecordedTime ? `${t('status.retired')} + ${t('times.totalTime')}` : t('status.retired')}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 // Liaison/Service Park Stage Component - Simple start/end per pilot
-function LiaisonStageCard({ stage, sortedPilots, categoryMap }) {
+function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards' }) {
   const { t } = useTranslation();
   const stageSortedPilots = sortedPilots;
+
+  if (layout === 'table') {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-zinc-700">
+              <th className="text-left text-white uppercase font-bold p-2 min-w-[220px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {t('scene3.pilot')}
+              </th>
+              <th className="text-left text-zinc-400 uppercase font-bold p-2 min-w-[180px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {t('times.startTime')}
+              </th>
+              <th className="text-left text-zinc-400 uppercase font-bold p-2 min-w-[180px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {t('times.endTime')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {stageSortedPilots.map((pilot) => {
+              const category = categoryMap.get(pilot.categoryId);
+              const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
+              const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
+              return (
+                <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
+                  <td className="p-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 rounded" style={{ backgroundColor: category?.color || 'transparent' }} />
+                      <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                      <span className="text-white font-bold text-sm uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {pilot.name}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      value={inferredStartTime}
+                      readOnly
+                      placeholder="--:--"
+                      className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      value={inferredEndTime}
+                      readOnly
+                      placeholder="--:--"
+                      className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-2" style={pilotTimingGridStyle}>
@@ -421,200 +835,12 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap }) {
   );
 }
 
-// Lap Race Stage Component - Laps x Pilots matrix with pilot selection
-function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById }) {
-  const { t } = useTranslation();
-  const {
-    setLapTime,
-    getLapTime,
-    getPilotLapTimes,
-    getStagePilots,
-    togglePilotInStage,
-    selectAllPilotsInStage,
-    deselectAllPilotsInStage,
-    updateStage
-  } = useRally();
-
-  const selectedPilotIds = getStagePilots(stage.id);
-  const selectedPilotIdSet = useMemo(() => new Set(selectedPilotIds), [selectedPilotIds]);
-  const selectedPilots = useMemo(() => (
-    sortedPilots
-      .filter((pilot) => selectedPilotIdSet.has(pilot.id))
-      .sort((a, b) => {
-        const pilotAHasTime = getPilotLapTimes(a.id, stage.id).some((lapTime) => Boolean((lapTime || '').trim()));
-        const pilotBHasTime = getPilotLapTimes(b.id, stage.id).some((lapTime) => Boolean((lapTime || '').trim()));
-
-        if (pilotAHasTime !== pilotBHasTime) {
-          return pilotAHasTime ? -1 : 1;
-        }
-
-        return comparePilotsForTimes(a, b, categoryOrderById);
-      })
-  ), [sortedPilots, selectedPilotIdSet, getPilotLapTimes, stage.id, categoryOrderById]);
-  
-  const lapsArray = Array.from({ length: stage.numberOfLaps || 5 }, (_, i) => i);
-  const allSelected = selectedPilotIds.length === pilots.length;
-  const noneSelected = selectedPilotIds.length === 0;
-
-  return (
-    <div className="space-y-4">
-      {/* Race Start Time */}
-      <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
-        <Label className="text-white whitespace-nowrap">{t('times.raceStartTime')}:</Label>
-        <Input
-          value={stage.startTime || ''}
-          onChange={(e) => updateStage(stage.id, { startTime: e.target.value })}
-          placeholder="HH:MM:SS"
-          className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => updateStage(stage.id, { startTime: getCurrentTimeString().slice(0, 8) })}
-          className="border-zinc-700 text-white"
-        >
-          <Clock className="w-3 h-3 mr-1" />
-          {t('times.now')}
-        </Button>
-      </div>
-
-      {/* Pilot Selection */}
-      <div className="p-3 bg-[#09090B] rounded border border-zinc-700">
-        <div className="flex items-center justify-between mb-2">
-          <Label className="text-white">{t('times.pilotsInRace')} ({selectedPilotIds.length}/{pilots.length})</Label>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => selectAllPilotsInStage(stage.id)}
-              className={`text-xs ${allSelected ? 'text-green-500' : 'text-zinc-400'}`}
-            >
-              <CheckSquare className="w-3 h-3 mr-1" />
-              {t('common.all')}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => deselectAllPilotsInStage(stage.id)}
-              className={`text-xs ${noneSelected ? 'text-red-500' : 'text-zinc-400'}`}
-            >
-              <Square className="w-3 h-3 mr-1" />
-              {t('common.none')}
-            </Button>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {sortedPilots.map(pilot => (
-            <label
-              key={pilot.id}
-              className={`flex items-center gap-1 px-2 py-1 rounded cursor-pointer transition-colors ${
-                selectedPilotIdSet.has(pilot.id)
-                  ? 'bg-[#FF4500]/20 border border-[#FF4500]'
-                  : 'bg-zinc-800 border border-zinc-700'
-              }`}
-            >
-              <Checkbox
-                checked={selectedPilotIdSet.has(pilot.id)}
-                onCheckedChange={() => togglePilotInStage(stage.id, pilot.id)}
-                className="w-3 h-3"
-              />
-              <span className="text-white text-xs">{pilot.name}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Lap Times Matrix */}
-      {selectedPilots.length === 0 ? (
-        <div className="text-center py-8 text-zinc-500">
-          {t('times.selectPilots')}
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-zinc-700">
-                <th className="text-left text-white uppercase font-bold p-2 sticky left-0 bg-[#18181B] z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {t('scene3.pilot')}
-                </th>
-                {lapsArray.map((lapIndex) => (
-                  <th key={lapIndex} className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    <div>{t('times.lap')} {lapIndex + 1}</div>
-                    <div className="text-xs text-zinc-400 font-normal">{t('times.time')} / {t('times.duration')}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {selectedPilots.map((pilot) => {
-                const category = categoryMap.get(pilot.categoryId);
-                return (
-                  <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
-                    <td className="p-2 sticky left-0 bg-[#18181B] z-10">
-                      <div className="flex items-center gap-2">
-                        {category && (
-                          <div className="w-1 h-6 rounded" style={{ backgroundColor: category.color }} />
-                        )}
-                        <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                        <span className="text-white font-bold text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          {pilot.name}
-                        </span>
-                      </div>
-                    </td>
-                    {lapsArray.map((lapIndex) => {
-                      const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
-                      const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, stage.id, lapIndex - 1) : null;
-                      const lapDuration = calculateLapDuration(lapTime, prevLapTime, stage.startTime);
-                      
-                      return (
-                        <td key={lapIndex} className="p-2">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1">
-                              <TimeInput
-                                value={lapTime}
-                                onChange={(val) => setLapTime(pilot.id, stage.id, lapIndex, val)}
-                                placeholder={t('times.placeholder.time')}
-                                className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                              />
-                              <button
-                                onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString())}
-                                className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                                title={t('times.now')}
-                              >
-                                <Clock className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setLapTime(pilot.id, stage.id, lapIndex, '')}
-                                className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
-                                title={t('common.clear')}
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                            {lapDuration && (
-                              <div className="text-xs text-[#22C55E] font-mono text-center">
-                                {lapDuration}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function TimesTab() {
   const { t } = useTranslation();
   const { pilots, stages, categories, currentStageId } = useRally();
   const [showCompetitiveStagesOnly, setShowCompetitiveStagesOnly] = useState(true);
+  const [showTimesAsCards, setShowTimesAsCards] = useState(false);
   const categoryOrderById = useMemo(() => (
     new Map(categories.map((category, index) => [category.id, getCategoryDisplayOrder(category, index + 1)]))
   ), [categories]);
@@ -661,15 +887,27 @@ export default function TimesTab() {
     <div className="space-y-6">
       <CurrentStageCard />
 
-      <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-[#18181B] px-4 py-3">
-        <Checkbox
-          id="times-competitive-only"
-          checked={showCompetitiveStagesOnly}
-          onCheckedChange={(checked) => setShowCompetitiveStagesOnly(checked === true)}
-        />
-        <Label htmlFor="times-competitive-only" className="text-sm text-white cursor-pointer">
-          {t('times.showCompetitiveStagesOnly')}
-        </Label>
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-[#18181B] px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Checkbox
+            id="times-competitive-only"
+            checked={showCompetitiveStagesOnly}
+            onCheckedChange={(checked) => setShowCompetitiveStagesOnly(checked === true)}
+          />
+          <Label htmlFor="times-competitive-only" className="text-sm text-white cursor-pointer">
+            {t('times.showCompetitiveStagesOnly')}
+          </Label>
+        </div>
+        <div className="flex items-center gap-3">
+          <Checkbox
+            id="times-view-table"
+            checked={showTimesAsCards}
+            onCheckedChange={(checked) => setShowTimesAsCards(checked === true)}
+          />
+          <Label htmlFor="times-view-table" className="text-sm text-white cursor-pointer">
+            {t('times.showTimesAsCards')}
+          </Label>
+        </div>
       </div>
 
       {sortedStages.length === 0 && (
@@ -721,10 +959,16 @@ export default function TimesTab() {
                     categoryOrderById={categoryOrderById}
                     pilotById={pilotById}
                     manualStartTime={isManualStartStageType(stage.type)}
+                    layout={showTimesAsCards ? 'cards' : 'table'}
                   />
                 )}
                 {isTransitStageType(stage.type) && (
-                  <LiaisonStageCard stage={stage} sortedPilots={sortedPilots} categoryMap={categoryMap} />
+                  <LiaisonStageCard
+                    stage={stage}
+                    sortedPilots={sortedPilots}
+                    categoryMap={categoryMap}
+                    layout={showTimesAsCards ? 'cards' : 'table'}
+                  />
                 )}
                 {isLapRaceStageType(stage.type) && (
                   <LapRaceStageCard
@@ -733,6 +977,7 @@ export default function TimesTab() {
                     sortedPilots={sortedPilots}
                     categoryMap={categoryMap}
                     categoryOrderById={categoryOrderById}
+                    comparePilotsForTimes={comparePilotsForTimes}
                   />
                 )}
               </CardContent>
