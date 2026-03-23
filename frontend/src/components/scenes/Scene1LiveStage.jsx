@@ -5,10 +5,11 @@ import { LeftControls } from '../LeftControls.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { StartInformationValue } from '../StartInformationValue.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import StatusPill from '../StatusPill.jsx';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { Button } from '../ui/button';
-import { getReferenceNow, sortPilotsByStatus, startInformationTime } from '../../utils/rallyHelpers';
+import * as rallyHelpers from '../../utils/rallyHelpers';
 import { ChevronLeft, ChevronRight, Flag, Maximize2, Minimize2, RotateCcw, Video } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
@@ -92,7 +93,7 @@ const calculateLapRacePositions = (pilots, stageId, lapTimes, stagePilots, numbe
 
 export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
-    pilots, stages, currentStageId, startTimes, times, categories, 
+    pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
     cameras, externalMedia, debugDate, retiredStages, isStageAlert
   } = useRally();
@@ -138,7 +139,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const draftLayout = LAYOUTS.find(l => l.id === draftSelectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
-  const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
+  const sceneNow = useMemo(() => rallyHelpers.getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   
   // Calculate sorted pilots based on stage type
   const sortedPilotsWithPositions = useMemo(() => {
@@ -151,7 +152,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     }
     
     // For SS and other types, use the existing sort
-    const sorted = sortPilotsByStatus(pilots, categories, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
+    const sorted = rallyHelpers.sortPilotsByStatus(pilots, categories, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
     return sorted.map((pilot, index) => ({ pilot, position: index + 1 }));
   }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, retiredStages, sceneNow]);
 
@@ -553,6 +554,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             const category = categories.find(c => c.id === pilot.categoryId);
             const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
             const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
+            const jumpStart = currentStageId ? rallyHelpers.isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false;
             
             let displayTime = '';
             let displayTimeInfo = null;
@@ -575,7 +577,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               }
             } else if (isSSStage) {
               // SS Stage display (original logic)
-              const timeInfo = startInformationTime({
+              const timeInfo = rallyHelpers.startInformationTime({
                 pilotId: pilot.id,
                 stageId: currentStageId,
                 startTimes,
@@ -625,9 +627,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                         {pilot.name}
                       </p>
                       {alert && (
-                        <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                          {t('status.alert')}
-                        </span>
+                        <StatusPill
+                          variant="alert"
+                          text={t('status.alert')}
+                          tooltipTitle={t('status.alertLabel')}
+                          tooltipText={t('status.alertTooltip')}
+                        />
+                      )}
+                      {jumpStart && (
+                        <StatusPill
+                          variant="jumpStart"
+                          text={t('status.jumpStart')}
+                          tooltipTitle={t('times.jumpStart')}
+                          tooltipText={t('times.jumpStartTooltip')}
+                        />
                       )}
                     </div>
                     {displayTime && (
@@ -705,6 +718,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   const category = categories.find(c => c.id === pilot.categoryId);
                   const pilotMeta = [pilot.car, pilot.team].filter(Boolean).join(' • ');
                   const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
+                  const jumpStart = currentStageId ? rallyHelpers.isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false;
                   
                   let borderColor = 'border-zinc-700';
                   let timeDisplay = '';
@@ -722,7 +736,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       timeColor = 'text-[#FACC15]';
                     }
                   } else if (isSSStage) {
-                    timeInfo = startInformationTime({
+                    timeInfo = rallyHelpers.startInformationTime({
                       pilotId: pilot.id,
                       stageId: currentStageId,
                       startTimes,
@@ -771,9 +785,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                               {abbreviateTickerName(pilot.name)}
                             </p>
                             {alert && (
-                              <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                {t('status.alert')}
-                              </span>
+                              <StatusPill
+                                variant="alert"
+                                text={t('status.alert')}
+                                tooltipTitle={t('status.alertLabel')}
+                                tooltipText={t('status.alertTooltip')}
+                              />
+                            )}
+                            {jumpStart && (
+                              <StatusPill
+                                variant="jumpStart"
+                                text={t('status.jumpStart')}
+                                tooltipTitle={t('times.jumpStart')}
+                                tooltipText={t('times.jumpStartTooltip')}
+                              />
                             )}
                           </div>
                           {pilotMeta && (

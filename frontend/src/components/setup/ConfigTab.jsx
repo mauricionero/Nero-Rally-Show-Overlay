@@ -35,6 +35,7 @@ export default function ConfigTab() {
     wsChannelKey,
     wsConnectionStatus,
     wsError,
+    lastTimesSyncAt,
     connectWebSocket,
     disconnectWebSocket,
     generateNewChannelKey
@@ -115,7 +116,7 @@ export default function ConfigTab() {
       toast.error('Please generate or enter a channel key');
       return;
     }
-    const success = await connectWebSocket(newKey);
+    const success = await connectWebSocket(newKey, { role: 'setup' });
     if (success) {
       toast.success('Connected to WebSocket channel');
     } else {
@@ -330,6 +331,9 @@ export default function ConfigTab() {
                 <Copy className="w-4 h-4 mr-2" />
                 Copy Overlay URL with Key
               </Button>
+              <div className="text-xs text-zinc-400">
+                Last times sync: {lastTimesSyncAt ? new Date(lastTimesSyncAt).toLocaleTimeString() : '--'}
+              </div>
               <Button
                 onClick={disconnectWebSocket}
                 variant="destructive"

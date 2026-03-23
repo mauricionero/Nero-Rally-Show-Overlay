@@ -7,3 +7,11 @@ export const getLocalOverlayUrl = () => {
 export const getWebSocketOverlayUrl = (channelKey) => {
   return `${getLocalOverlayUrl()}?ws=${encodeURIComponent(channelKey)}`;
 };
+
+export const getLocalTimesUrl = () => {
+  return `${window.location.origin}${getBasePath()}/times`;
+};
+
+export const getWebSocketTimesUrl = (channelKey) => {
+  return `${getLocalTimesUrl()}?ws=${encodeURIComponent(channelKey)}`;
+};

@@ -51,8 +51,25 @@ class WebSocketProvider {
     this.onMessageCallback = null;
     this.onStatusCallback = null;
     this.onSnapshotRequestCallback = null;
+    this.onTimesSyncRequestCallback = null;
+    this.onTimesLineRequestCallback = null;
+    this.onTimesLineResponseCallback = null;
     this.isConnected = false;
     this.connectionState = 'disconnected';
+  }
+
+  async loadChannelHistory(limit = 50) {
+    if (!this.channel) {
+      return [];
+    }
+
+    try {
+      const history = await this.channel.history({ limit, direction: 'backwards' });
+      return Array.isArray(history?.items) ? history.items : [];
+    } catch (error) {
+      console.warn('[WebSocket] Failed to load channel history:', error);
+      return [];
+    }
   }
 
   /**
@@ -69,6 +86,11 @@ class WebSocketProvider {
     this.onMessageCallback = onMessage;
     this.onStatusCallback = onStatus;
     this.onSnapshotRequestCallback = options.onSnapshotRequest || null;
+    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
+    this.onTimesLineRequestCallback = options.onTimesLineRequest || null;
+    this.onTimesLineResponseCallback = options.onTimesLineResponse || null;
+    this.onTimesSyncAckCallback = options.onTimesSyncAck || null;
+    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
 
     const apiKey = process.env.REACT_APP_ABLY_KEY;
     if (!apiKey) {
@@ -106,20 +128,47 @@ class WebSocketProvider {
       // Subscribe to channel
       this.channel = this.client.channels.get(`rally-${channelId}`);
 
-      // Load the latest published snapshot so subscriber clients can
-      // start with the current event state instead of waiting for the
-      // next edit to be made in Setup.
+      // Load the latest published full snapshot so subscriber clients can
+      // start with a coherent state instead of replaying an arbitrary
+      // partial section update from history.
       if (options.readHistory !== false) {
-        try {
-          const history = await this.channel.history({ limit: 1, direction: 'backwards' });
-          const latestMessage = history?.items?.[0];
+        const historyItems = await this.loadChannelHistory(200);
+        const sessionManifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
+        const latestSnapshotVersion = Number(sessionManifestMessage?.data?.latestSnapshotVersion || 0);
 
-          if (latestMessage?.data) {
-            console.log('[WebSocket] Loaded latest snapshot from history');
-            this.onMessageCallback?.(latestMessage.data);
+        if (latestSnapshotVersion > 0) {
+          const snapshotMessages = historyItems
+            .filter((message) => {
+              if (message?.name !== 'update') return false;
+              const messageVersion = Number(message?.data?.snapshotVersion || 0);
+              return message?.data?.messageType === 'full-snapshot' && messageVersion === latestSnapshotVersion;
+            })
+            .sort((a, b) => {
+              const aIndex = Number.isFinite(a?.data?.partIndex) ? a.data.partIndex : 0;
+              const bIndex = Number.isFinite(b?.data?.partIndex) ? b.data.partIndex : 0;
+              return aIndex - bIndex;
+            });
+
+          if (snapshotMessages.length > 0) {
+            console.log('[WebSocket] Loaded latest full snapshot from history');
+            snapshotMessages.forEach((message) => {
+              this.onMessageCallback?.(message.data);
+            });
+          } else {
+            const latestUpdateMessage = historyItems.find((message) => message?.name === 'update');
+
+            if (latestUpdateMessage?.data) {
+              console.log('[WebSocket] Loaded latest update from history');
+              this.onMessageCallback?.(latestUpdateMessage.data);
+            }
           }
-        } catch (historyError) {
-          console.warn('[WebSocket] Failed to load channel history:', historyError);
+        } else {
+          const latestUpdateMessage = historyItems.find((message) => message?.name === 'update');
+
+          if (latestUpdateMessage?.data) {
+            console.log('[WebSocket] Loaded latest snapshot from history');
+            this.onMessageCallback?.(latestUpdateMessage.data);
+          }
         }
       }
       
@@ -131,6 +180,22 @@ class WebSocketProvider {
 
       await this.channel.subscribe('snapshot-request', () => {
         this.onSnapshotRequestCallback?.();
+      });
+
+      await this.channel.subscribe('times-sync-request', (message) => {
+        this.onTimesSyncRequestCallback?.(message?.data);
+      });
+
+      await this.channel.subscribe('times-line-request', (message) => {
+        this.onTimesLineRequestCallback?.(message?.data);
+      });
+
+      await this.channel.subscribe('times-line-response', (message) => {
+        this.onTimesLineResponseCallback?.(message?.data);
+      });
+
+      await this.channel.subscribe('times-sync-ack', (message) => {
+        this.onTimesSyncAckCallback?.(message?.data);
       });
 
       // Monitor connection state
@@ -202,6 +267,110 @@ class WebSocketProvider {
       return false;
     }
   }
+
+  async publishTimesSyncRequest(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot request times sync');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-sync-request', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times sync request error:', error);
+      return false;
+    }
+  }
+
+  async publishTimesLineRequest(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot request timing line');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-line-request', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times line request error:', error);
+      return false;
+    }
+  }
+
+  async publishTimesLineResponse(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot respond with timing line');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-line-response', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times line response error:', error);
+      return false;
+    }
+  }
+
+  async publishTimesSyncAck(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot ack times sync');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-sync-ack', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times sync ack error:', error);
+      return false;
+    }
+  }
+
+  async publishBootstrapMarker(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot publish bootstrap marker');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('bootstrap-marker', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Bootstrap marker error:', error);
+      return false;
+    }
+  }
+
+  async loadBootstrapMarker() {
+    const historyItems = await this.loadChannelHistory(100);
+    const bootstrapMessage = historyItems.find((message) => message?.name === 'bootstrap-marker');
+    return bootstrapMessage?.data || null;
+  }
+
+  async publishSessionManifest(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot publish session manifest');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('session-manifest', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Session manifest error:', error);
+      return false;
+    }
+  }
+
+  async loadSessionManifest() {
+    const historyItems = await this.loadChannelHistory(100);
+    const manifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
+    return manifestMessage?.data || null;
+  }
+
+  
 
   /**
    * Disconnect from the channel

@@ -47,7 +47,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
   return `${mins}:${secs.padStart(6, '0')}`;
 };
 
-export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, comparePilotsForTimes }) {
+export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, comparePilotsForTimes, isReadOnly = false }) {
   const { t } = useTranslation();
   const {
     setLapTime,
@@ -119,19 +119,21 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
   return (
     <div className="space-y-4">
       {/* Race Start Time */}
-      <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
+      <div className={`flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700 ${isReadOnly ? 'opacity-80' : ''}`}>
         <Label className="text-white whitespace-nowrap">{t('times.raceStartTime')}:</Label>
         <Input
           value={stage.startTime || ''}
           onChange={(e) => updateStage(stage.id, { startTime: e.target.value })}
           placeholder="HH:MM:SS"
           className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
+          readOnly={isReadOnly}
         />
         <Button
           size="sm"
           variant="outline"
           onClick={() => updateStage(stage.id, { startTime: getCurrentTimeString().slice(0, 8) })}
           className="border-zinc-700 text-white"
+          disabled={isReadOnly}
         >
           <Clock className="w-3 h-3 mr-1" />
           {t('times.now')}
@@ -139,7 +141,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
       </div>
 
       {/* Pilot Selection */}
-      <div className="p-3 bg-[#09090B] rounded border border-zinc-700">
+      <div className={`p-3 bg-[#09090B] rounded border border-zinc-700 ${isReadOnly ? 'opacity-80' : ''}`}>
         <div className="flex items-center justify-between mb-2">
           <Label className="text-white">{t('times.pilotsInRace')} ({selectedPilotIds.length}/{pilots.length})</Label>
           <div className="flex gap-2">
@@ -148,6 +150,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
               variant="ghost"
               onClick={() => selectAllPilotsInStage(stage.id)}
               className={`text-xs ${allSelected ? 'text-green-500' : 'text-zinc-400'}`}
+              disabled={isReadOnly}
             >
               <CheckSquare className="w-3 h-3 mr-1" />
               {t('common.all')}
@@ -157,6 +160,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
               variant="ghost"
               onClick={() => deselectAllPilotsInStage(stage.id)}
               className={`text-xs ${noneSelected ? 'text-red-500' : 'text-zinc-400'}`}
+              disabled={isReadOnly}
             >
               <Square className="w-3 h-3 mr-1" />
               {t('common.none')}
@@ -180,6 +184,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                   checked={selectedPilotIdSet.has(pilot.id)}
                   onCheckedChange={() => togglePilotInStage(stage.id, pilot.id)}
                   className="w-3 h-3"
+                  disabled={isReadOnly}
                 />
                 <span className="text-white text-xs">{pilot.name}</span>
               </label>
@@ -222,10 +227,10 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                       </div>
                     </td>
                   </tr>
-                  {selectedPilots
-                    .filter((pilot) => bucket.pilots.some((p) => p.id === pilot.id))
-                    .map((pilot) => (
-                      <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
+                {selectedPilots
+                  .filter((pilot) => bucket.pilots.some((p) => p.id === pilot.id))
+                  .map((pilot) => (
+                    <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
                         <td className="p-2 sticky left-0 bg-[#18181B] z-10">
                           <div className="flex items-center gap-2">
                             <div className="w-1 h-6 rounded" style={{ backgroundColor: bucket.color }} />
@@ -249,11 +254,13 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                                     onChange={(val) => setLapTime(pilot.id, stage.id, lapIndex, val)}
                                     placeholder={t('times.placeholder.time')}
                                     className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                                    readOnly={isReadOnly}
                                   />
                                   <button
                                     onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString())}
                                     className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
                                     title={t('times.now')}
+                                    disabled={isReadOnly}
                                   >
                                     <Clock className="w-4 h-4" />
                                   </button>
@@ -261,6 +268,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                                     onClick={() => setLapTime(pilot.id, stage.id, lapIndex, '')}
                                     className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
                                     title={t('common.clear')}
+                                    disabled={isReadOnly}
                                   >
                                     <X className="w-3 h-3" />
                                   </button>

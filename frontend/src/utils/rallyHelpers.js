@@ -43,6 +43,40 @@ export const isPilotAlertForStage = (pilotId, stageId, stageAlerts) => {
   return !!stageAlerts?.[pilotId]?.[stageId];
 };
 
+export const parseClockTimeToSeconds = (value) => {
+  if (!value) return null;
+  const parts = value.split(':');
+  if (parts.length < 2) return null;
+
+  const hours = Number(parts[0]);
+  const minutes = Number(parts[1]);
+  let seconds = 0;
+
+  if (parts.length >= 3) {
+    const [secs, ms] = parts[2].split('.');
+    seconds = Number(secs) + (ms ? Number(`0.${ms}`) : 0);
+  }
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+    return null;
+  }
+
+  return hours * 3600 + minutes * 60 + seconds;
+};
+
+export const isJumpStartForStage = (pilotId, stageId, startTimes, realStartTimes) => {
+  const ideal = startTimes?.[pilotId]?.[stageId];
+  const real = realStartTimes?.[pilotId]?.[stageId];
+  const idealSeconds = parseClockTimeToSeconds(ideal);
+  const realSeconds = parseClockTimeToSeconds(real);
+
+  if (!Number.isFinite(idealSeconds) || !Number.isFinite(realSeconds)) {
+    return false;
+  }
+
+  return realSeconds < idealSeconds;
+};
+
 export const getPilotStatus = (pilotId, stageId, startTimes, times, retiredStages, stageDate, now = new Date()) => {
   const startTime = startTimes[pilotId]?.[stageId];
   const finishTime = times[pilotId]?.[stageId];

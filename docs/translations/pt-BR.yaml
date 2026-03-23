@@ -139,10 +139,13 @@ theRace:
 # ABA TEMPOS
 # ===========================================
 times:
-  startTime: "Horário de Largada"
+  startTime: "Ideal"
+  realStartTime: "Real"
   arrivalTime: "Horário de Chegada"
   totalTime: "Tempo Total"
   endTime: "Horário Final"
+  jumpStart: "Queima de largada"
+  jumpStartTooltip: "Tempo real antes do ideal (penalidade)."
   avg: "MÉD"
   avgAlertWarning: "Acima da MÉD + DESV"
   avgAlertDanger: "Acima da MÉD + 2×DESV"
@@ -164,6 +167,12 @@ times:
     time: "HH:MM:SS.000"
     shortTime: "HH:MM"
     totalTime: "MM:SS.000"
+  syncLine: "Solicitar tempos deste piloto de sistemas remotos"
+  syncLinePending: "Solicitando dados do Times..."
+  syncLineUpdated: "Atualizado pelo Times."
+  syncLineNoChange: "Times respondeu. Sem mudanças."
+  syncLineNoData: "Times não tem dados para esta linha."
+  syncLineError: "Não foi possível solicitar dados do Times."
 
 # ===========================================
 # ABA STREAMS
@@ -359,7 +368,11 @@ status:
   finished: "Finalizado"
   notStarted: "Não Largou"
   retired: "Retirado"
-  alert: "⚠"
+  alert: "⚠️"
+  alertLabel: "Alerta"
+  alertTooltip: "Alerta manual para esta etapa."
+  info: "i"
+  jumpStart: "⚡"
   start: "Largada"
   active: "Ativo"
   inactive: "Inativo"

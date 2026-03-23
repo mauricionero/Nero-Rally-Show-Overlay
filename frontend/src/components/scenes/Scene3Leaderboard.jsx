@@ -5,9 +5,10 @@ import { LeftControls } from '../LeftControls.jsx';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
+import StatusPill from '../StatusPill.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { StartInformationValue } from '../StartInformationValue.jsx';
-import { parseTime, getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, startInformationTime } from '../../utils/rallyHelpers';
+import { parseTime, getPilotStatus, getReferenceNow, getRunningTime, isPilotRetiredForStage, startInformationTime, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
@@ -97,7 +98,7 @@ const formatOverallTime = (totalSeconds) => {
 };
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert } = useRally();
+  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert } = useRally();
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
   const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
@@ -476,6 +477,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 const category = categories.find(c => c.id === pilot.categoryId);
                 const pilotMeta = [pilot.car, pilot.team].filter(Boolean).join(' • ');
                 const alert = alertStageId ? isStageAlert(pilot.id, alertStageId) : false;
+                const jumpStart = alertStageId ? isJumpStartForStage(pilot.id, alertStageId, startTimes, realStartTimes) : false;
 
                 return (
                   <tr
@@ -521,9 +523,20 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                               {pilot.name}
                             </span>
                             {alert && (
-                              <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                {t('status.alert')}
-                              </span>
+                              <StatusPill
+                                variant="alert"
+                                text={t('status.alert')}
+                                tooltipTitle={t('status.alertLabel')}
+                                tooltipText={t('status.alertTooltip')}
+                              />
+                            )}
+                            {jumpStart && (
+                              <StatusPill
+                                variant="jumpStart"
+                                text={t('status.jumpStart')}
+                                tooltipTitle={t('times.jumpStart')}
+                                tooltipText={t('times.jumpStartTooltip')}
+                              />
                             )}
                             {pilot.isRetired && (
                               <span className="flex-shrink-0 bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
