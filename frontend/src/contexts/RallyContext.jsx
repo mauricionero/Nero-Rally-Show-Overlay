@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getWebSocketProvider, generateChannelKey, parseChannelKey, PROVIDER_NAME } from '../utils/websocketProvider';
 import WsMessageReceiver from '../utils/wsMessageReceiver.js';
 import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
@@ -134,18 +134,60 @@ export const RallyProvider = ({ children }) => {
   const [wsRole, setWsRole] = useState('client');
   const [wsPublishSections, setWsPublishSections] = useState(null);
   const [clientRole, setClientRole] = useState('client');
+  const [sessionManifest, setSessionManifest] = useState(() => loadFromStorage('rally_ws_session_manifest', null));
+  const [latestSnapshotVersion, setLatestSnapshotVersion] = useState(() => loadFromStorage('rally_ws_snapshot_version', 0));
+  const [dirtySetupSections, setDirtySetupSections] = useState(() => loadFromStorage('rally_dirty_setup_sections', []));
+  const [lastSetupEditAt, setLastSetupEditAt] = useState(() => loadFromStorage('rally_setup_last_edit_at', 0));
+  const [lastSetupSyncAt, setLastSetupSyncAt] = useState(() => loadFromStorage('rally_setup_last_sync_at', 0));
   const [dirtyTimingSections, setDirtyTimingSections] = useState(() => loadFromStorage('rally_dirty_times', []));
+  const [timingSectionTouchedAt, setTimingSectionTouchedAt] = useState(() => loadFromStorage('rally_timing_section_touched_at', {}));
+  const [timingLineVersions, setTimingLineVersions] = useState(() => loadFromStorage('rally_timing_line_versions', {}));
   const [lastTimesEditAt, setLastTimesEditAt] = useState(() => loadFromStorage('rally_times_last_edit_at', 0));
   const [lastTimesSyncAt, setLastTimesSyncAt] = useState(() => loadFromStorage('rally_times_last_sync_at', 0));
   const [lastTimesAckAt, setLastTimesAckAt] = useState(() => loadFromStorage('rally_times_last_ack_at', 0));
   const [lastTimesAckedEditAt, setLastTimesAckedEditAt] = useState(() => loadFromStorage('rally_times_last_acked_edit_at', 0));
   const [lineSyncResults, setLineSyncResults] = useState({});
+  const setupPublishTimer = useRef(null);
+  const setupPendingSections = useRef(new Set());
+  const setupDirtyTrackingReady = useRef(false);
+  const bulkSyncModeRef = useRef(false);
   const timesPublishTimer = useRef(null);
-  const timesPendingSections = useRef(new Set());
+  const timesPendingLineKeys = useRef(new Set());
   const wsProvider = useRef(null);
   const wsMessageReceiver = useRef(null);
   const isPublishing = useRef(false);
   const storageReloadTimeout = useRef(null);
+  const wsRoleRef = useRef(wsRole);
+  const pendingLocalTimingSectionsRef = useRef(new Set());
+  const timingLineVersionsRef = useRef(timingLineVersions);
+  const publishDirtyTimingSectionsRef = useRef(null);
+  const publishDirtySetupSectionsRef = useRef(null);
+  const publishDirtyTimingDeltasRef = useRef(null);
+  const publishSetupSnapshotRef = useRef(null);
+  const logicalTimestampRef = useRef(loadFromStorage('rally_logical_timestamp', 0));
+  const timesRef = useRef(times);
+  const arrivalTimesRef = useRef(arrivalTimes);
+  const startTimesRef = useRef(startTimes);
+  const realStartTimesRef = useRef(realStartTimes);
+  const lapTimesRef = useRef(lapTimes);
+  const positionsRef = useRef(positions);
+  const stagePilotsRef = useRef(stagePilots);
+  const retiredStagesRef = useRef(retiredStages);
+  const stageAlertsRef = useRef(stageAlerts);
+
+  const getNextLogicalTimestamp = useCallback(() => {
+    const now = Date.now();
+    const next = now > logicalTimestampRef.current
+      ? now
+      : logicalTimestampRef.current + 1;
+    logicalTimestampRef.current = next;
+    localStorage.setItem('rally_logical_timestamp', JSON.stringify(next));
+    return next;
+  }, []);
+
+  const buildTimingLineKey = useCallback((section, pilotId = null, stageId = null) => (
+    `${section}:${pilotId ?? '_'}:${stageId ?? '_'}`
+  ), []);
 
   // Reload all data from localStorage
   const reloadData = useCallback(() => {
@@ -176,8 +218,333 @@ export const RallyProvider = ({ children }) => {
   }, [wsRole]);
 
   // Apply data from WebSocket message
+  useEffect(() => {
+    wsRoleRef.current = wsRole;
+  }, [wsRole]);
+
+  useEffect(() => {
+    timingLineVersionsRef.current = timingLineVersions;
+  }, [timingLineVersions]);
+
+  useEffect(() => {
+    timesRef.current = times;
+  }, [times]);
+
+  useEffect(() => {
+    arrivalTimesRef.current = arrivalTimes;
+  }, [arrivalTimes]);
+
+  useEffect(() => {
+    startTimesRef.current = startTimes;
+  }, [startTimes]);
+
+  useEffect(() => {
+    realStartTimesRef.current = realStartTimes;
+  }, [realStartTimes]);
+
+  useEffect(() => {
+    lapTimesRef.current = lapTimes;
+  }, [lapTimes]);
+
+  useEffect(() => {
+    positionsRef.current = positions;
+  }, [positions]);
+
+  useEffect(() => {
+    stagePilotsRef.current = stagePilots;
+  }, [stagePilots]);
+
+  useEffect(() => {
+    retiredStagesRef.current = retiredStages;
+  }, [retiredStages]);
+
+  useEffect(() => {
+    stageAlertsRef.current = stageAlerts;
+  }, [stageAlerts]);
+
+  useEffect(() => {
+    const nextPendingSections = new Set(
+      clientRole === 'times'
+        ? (Array.isArray(dirtyTimingSections) ? dirtyTimingSections : [])
+          .filter((section) => Number(timingSectionTouchedAt?.[section] || 0) > Number(lastTimesAckedEditAt || 0))
+        : []
+    );
+    pendingLocalTimingSectionsRef.current = nextPendingSections;
+  }, [clientRole, dirtyTimingSections, lastTimesAckedEditAt, timingSectionTouchedAt]);
+
+  const getTimingLineCurrentValue = useCallback((section, pilotId, stageId) => {
+    switch (section) {
+      case 'times':
+        return timesRef.current?.[pilotId]?.[stageId] || '';
+      case 'arrivalTimes':
+        return arrivalTimesRef.current?.[pilotId]?.[stageId] || '';
+      case 'startTimes':
+        return startTimesRef.current?.[pilotId]?.[stageId] || '';
+      case 'realStartTimes':
+        return realStartTimesRef.current?.[pilotId]?.[stageId] || '';
+      case 'lapTimes':
+        return lapTimesRef.current?.[pilotId]?.[stageId] || [];
+      case 'positions':
+        return positionsRef.current?.[pilotId]?.[stageId] ?? null;
+      case 'stagePilots':
+        return stagePilotsRef.current?.[stageId] || [];
+      case 'retiredStages':
+        return !!retiredStagesRef.current?.[pilotId]?.[stageId];
+      case 'stageAlerts':
+        return !!stageAlertsRef.current?.[pilotId]?.[stageId];
+      default:
+        return null;
+    }
+  }, []);
+
+  const setTimingLineValue = useCallback((section, pilotId, stageId, value) => {
+    switch (section) {
+      case 'times':
+        setTimes((prev) => ({
+          ...prev,
+          [pilotId]: {
+            ...(prev[pilotId] || {}),
+            [stageId]: value || ''
+          }
+        }));
+        break;
+      case 'arrivalTimes':
+        setArrivalTimes((prev) => ({
+          ...prev,
+          [pilotId]: {
+            ...(prev[pilotId] || {}),
+            [stageId]: value || ''
+          }
+        }));
+        break;
+      case 'startTimes':
+        setStartTimes((prev) => ({
+          ...prev,
+          [pilotId]: {
+            ...(prev[pilotId] || {}),
+            [stageId]: value || ''
+          }
+        }));
+        break;
+      case 'realStartTimes':
+        setRealStartTimes((prev) => ({
+          ...prev,
+          [pilotId]: {
+            ...(prev[pilotId] || {}),
+            [stageId]: value || ''
+          }
+        }));
+        break;
+      case 'lapTimes':
+        setLapTimes((prev) => ({
+          ...prev,
+          [pilotId]: {
+            ...(prev[pilotId] || {}),
+            [stageId]: Array.isArray(value) ? [...value] : []
+          }
+        }));
+        break;
+      case 'positions':
+        setPositions((prev) => ({
+          ...prev,
+          [pilotId]: {
+            ...(prev[pilotId] || {}),
+            [stageId]: value ?? null
+          }
+        }));
+        break;
+      case 'stagePilots':
+        setStagePilots((prev) => ({
+          ...prev,
+          [stageId]: Array.isArray(value) ? [...value] : []
+        }));
+        break;
+      case 'retiredStages':
+        setRetiredStages((prev) => {
+          const next = { ...prev };
+          const nextPilotStages = { ...(next[pilotId] || {}) };
+          if (value) {
+            nextPilotStages[stageId] = stageId;
+          } else {
+            delete nextPilotStages[stageId];
+          }
+          if (Object.keys(nextPilotStages).length > 0) {
+            next[pilotId] = nextPilotStages;
+          } else {
+            delete next[pilotId];
+          }
+          return next;
+        });
+        break;
+      case 'stageAlerts':
+        setStageAlerts((prev) => {
+          const next = { ...prev };
+          const nextPilotStages = { ...(next[pilotId] || {}) };
+          if (value) {
+            nextPilotStages[stageId] = stageId;
+          } else {
+            delete nextPilotStages[stageId];
+          }
+          if (Object.keys(nextPilotStages).length > 0) {
+            next[pilotId] = nextPilotStages;
+          } else {
+            delete next[pilotId];
+          }
+          return next;
+        });
+        break;
+      default:
+        break;
+    }
+  }, []);
+
+  const publishTimingDeltaEntries = useCallback(async (entries) => {
+    if (!wsProvider.current?.isConnected || !Array.isArray(entries) || entries.length === 0) {
+      return false;
+    }
+
+    return wsProvider.current.publish({
+      messageType: 'timing-delta',
+      entries,
+      timestamp: getNextLogicalTimestamp()
+    });
+  }, [getNextLogicalTimestamp]);
+
+  const buildPendingTimingDeltaEntries = useCallback((since = null, pendingOnly = false) => {
+    const versionEntries = Object.values(timingLineVersionsRef.current || {});
+
+    return versionEntries
+      .filter((entry) => {
+        if (!entry?.section) return false;
+        if (pendingOnly && Number(entry.localVersion || 0) <= Number(entry.ackedVersion || 0)) {
+          return false;
+        }
+        if (since !== null && Number(entry.updatedAt || 0) <= Number(since || 0)) {
+          return false;
+        }
+        return true;
+      })
+      .map((entry) => ({
+        key: buildTimingLineKey(entry.section, entry.pilotId, entry.stageId),
+        section: entry.section,
+        pilotId: entry.pilotId ?? null,
+        stageId: entry.stageId ?? null,
+        localVersion: Number(entry.localVersion || 0),
+        value: getTimingLineCurrentValue(entry.section, entry.pilotId, entry.stageId)
+      }));
+  }, [buildTimingLineKey, getTimingLineCurrentValue]);
+
+  const markTimingLineDirty = useCallback((section, pilotId = null, stageId = null) => {
+    if (clientRole !== 'times') {
+      return;
+    }
+
+    const updatedAt = getNextLogicalTimestamp();
+    const key = buildTimingLineKey(section, pilotId, stageId);
+
+    timesPendingLineKeys.current.add(key);
+    setTimingLineVersions((prev) => {
+      const current = prev?.[key] || {};
+      const nextLocalVersion = Math.max(
+        Number(current.localVersion || 0),
+        Number(current.ackedVersion || 0),
+        Number(current.appliedVersion || 0)
+      ) + 1;
+
+      return {
+        ...(prev || {}),
+        [key]: {
+          ...current,
+          key,
+          section,
+          pilotId,
+          stageId,
+          localVersion: nextLocalVersion,
+          ackedVersion: Number(current.ackedVersion || 0),
+          appliedVersion: Math.max(Number(current.appliedVersion || 0), nextLocalVersion),
+          updatedAt
+        }
+      };
+    });
+  }, [buildTimingLineKey, clientRole, getNextLogicalTimestamp]);
+
   const applyWebSocketData = useCallback((data) => {
     if (!data) return;
+
+    if (data?.messageType === 'timing-delta' && Array.isArray(data.entries)) {
+      setWsLastMessageAt(Date.now());
+      isPublishing.current = true;
+
+      const acceptedEntries = [];
+
+      data.entries.forEach((entry) => {
+        const key = entry?.key || buildTimingLineKey(entry?.section, entry?.pilotId, entry?.stageId);
+        const currentVersionEntry = timingLineVersionsRef.current?.[key] || {};
+        const incomingVersion = Number(entry?.localVersion || 0);
+        const localVersion = Number(currentVersionEntry.localVersion || 0);
+        const appliedVersion = Number(currentVersionEntry.appliedVersion || 0);
+
+        if (!entry?.section || !incomingVersion) {
+          return;
+        }
+
+        if (wsRoleRef.current === 'times' && localVersion > incomingVersion) {
+          return;
+        }
+
+        if (incomingVersion <= appliedVersion) {
+          return;
+        }
+
+        setTimingLineValue(entry.section, entry.pilotId ?? null, entry.stageId ?? null, entry.value);
+        acceptedEntries.push({
+          key,
+          section: entry.section,
+          pilotId: entry.pilotId ?? null,
+          stageId: entry.stageId ?? null,
+          localVersion: incomingVersion
+        });
+      });
+
+      if (acceptedEntries.length > 0) {
+        setTimingLineVersions((prev) => {
+          const next = { ...(prev || {}) };
+          acceptedEntries.forEach((entry) => {
+            const current = next[entry.key] || {};
+            next[entry.key] = {
+              ...current,
+              key: entry.key,
+              section: entry.section,
+              pilotId: entry.pilotId,
+              stageId: entry.stageId,
+              localVersion: Math.max(Number(current.localVersion || 0), entry.localVersion),
+              ackedVersion: Number(current.ackedVersion || 0),
+              appliedVersion: Math.max(Number(current.appliedVersion || 0), entry.localVersion),
+              updatedAt: Math.max(Number(current.updatedAt || 0), Number(data?.timestamp || 0))
+            };
+          });
+          return next;
+        });
+      }
+
+      if (wsRoleRef.current === 'setup' && acceptedEntries.length > 0) {
+        const nextSyncAt = typeof data?.timestamp === 'number' ? data.timestamp : getNextLogicalTimestamp();
+        setLastTimesSyncAt(nextSyncAt);
+        wsProvider.current?.publishTimesSyncAck?.({
+          receivedAt: nextSyncAt,
+          lineAcks: acceptedEntries.map((entry) => ({
+            key: entry.key,
+            localVersion: entry.localVersion
+          })),
+          timestamp: getNextLogicalTimestamp()
+        });
+      }
+
+      setTimeout(() => {
+        isPublishing.current = false;
+      }, 100);
+      return;
+    }
 
     let normalizedData = data?.payload && typeof data.payload === 'object'
       ? data.payload
@@ -212,7 +579,7 @@ export const RallyProvider = ({ children }) => {
       || normalizedData.stageAlerts !== undefined
     );
 
-    if (wsRole === 'setup' && isTimingPayload) {
+    if (wsRoleRef.current === 'setup' && isTimingPayload) {
       const nextSyncAt = typeof data?.timestamp === 'number' ? data.timestamp : Date.now();
       setLastTimesSyncAt(nextSyncAt);
       wsProvider.current?.publishTimesSyncAck?.({
@@ -220,20 +587,22 @@ export const RallyProvider = ({ children }) => {
         timestamp: Date.now()
       });
     }
+
+    const shouldPreserveLocalTimingSection = (sectionKey) => pendingLocalTimingSectionsRef.current.has(sectionKey);
     
     if (normalizedData.eventName !== undefined) setEventName(normalizedData.eventName);
-    if (normalizedData.positions !== undefined) setPositions(normalizedData.positions);
-    if (normalizedData.lapTimes !== undefined) setLapTimes(normalizedData.lapTimes);
-    if (normalizedData.stagePilots !== undefined) setStagePilots(normalizedData.stagePilots);
+    if (normalizedData.positions !== undefined && !shouldPreserveLocalTimingSection('positions')) setPositions(normalizedData.positions);
+    if (normalizedData.lapTimes !== undefined && !shouldPreserveLocalTimingSection('lapTimes')) setLapTimes(normalizedData.lapTimes);
+    if (normalizedData.stagePilots !== undefined && !shouldPreserveLocalTimingSection('stagePilots')) setStagePilots(normalizedData.stagePilots);
     if (normalizedData.pilots !== undefined) setPilots(normalizedData.pilots);
     if (normalizedData.categories !== undefined) setCategories(normalizedData.categories);
     if (normalizedData.stages !== undefined) setStages(normalizedData.stages);
-    if (normalizedData.times !== undefined) setTimes(normalizedData.times);
-    if (normalizedData.arrivalTimes !== undefined) setArrivalTimes(normalizedData.arrivalTimes);
-    if (normalizedData.startTimes !== undefined) setStartTimes(normalizedData.startTimes);
-    if (normalizedData.realStartTimes !== undefined) setRealStartTimes(normalizedData.realStartTimes);
-    if (normalizedData.retiredStages !== undefined) setRetiredStages(normalizedData.retiredStages);
-    if (normalizedData.stageAlerts !== undefined) setStageAlerts(normalizedData.stageAlerts);
+    if (normalizedData.times !== undefined && !shouldPreserveLocalTimingSection('times')) setTimes(normalizedData.times);
+    if (normalizedData.arrivalTimes !== undefined && !shouldPreserveLocalTimingSection('arrivalTimes')) setArrivalTimes(normalizedData.arrivalTimes);
+    if (normalizedData.startTimes !== undefined && !shouldPreserveLocalTimingSection('startTimes')) setStartTimes(normalizedData.startTimes);
+    if (normalizedData.realStartTimes !== undefined && !shouldPreserveLocalTimingSection('realStartTimes')) setRealStartTimes(normalizedData.realStartTimes);
+    if (normalizedData.retiredStages !== undefined && !shouldPreserveLocalTimingSection('retiredStages')) setRetiredStages(normalizedData.retiredStages);
+    if (normalizedData.stageAlerts !== undefined && !shouldPreserveLocalTimingSection('stageAlerts')) setStageAlerts(normalizedData.stageAlerts);
     if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
     if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
     if (normalizedData.chromaKey !== undefined) setChromaKey(normalizedData.chromaKey);
@@ -248,7 +617,7 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 100);
-  }, []);
+  }, [buildTimingLineKey, getNextLogicalTimestamp, setTimingLineValue]);
 
   // Listen for external data updates
   useEffect(() => {
@@ -332,9 +701,10 @@ export const RallyProvider = ({ children }) => {
     cameras
   ]);
 
-  const buildWebSocketMessages = useCallback((messageType = 'sync-update', allowedSections = null) => {
+  const buildWebSocketMessages = useCallback((messageType = 'sync-update', allowedSections = null, extraMeta = {}) => {
     const snapshot = buildWebSocketSnapshot();
     const snapshotId = createEntityId('snapshot');
+    const messageTimestamp = getNextLogicalTimestamp();
     const allParts = [
       { section: 'meta', payload: {
         eventName: snapshot.eventName,
@@ -374,10 +744,11 @@ export const RallyProvider = ({ children }) => {
       section: part.section,
       partIndex,
       totalParts,
+      ...extraMeta,
       payload: part.payload,
-      timestamp: Date.now()
+      timestamp: messageTimestamp
     }));
-  }, [buildWebSocketSnapshot]);
+  }, [buildWebSocketSnapshot, getNextLogicalTimestamp]);
 
   const buildWebSocketPayload = useCallback((allowedSections = null) => {
     const snapshot = buildWebSocketSnapshot();
@@ -420,12 +791,34 @@ export const RallyProvider = ({ children }) => {
     return allParts;
   }, [buildWebSocketSnapshot]);
 
-  const publishWebSocketMessages = useCallback(async (messageType = 'sync-update', allowedSections = null) => {
+  const timingSectionKeys = useMemo(() => ([
+    'times',
+    'arrivalTimes',
+    'startTimes',
+    'realStartTimes',
+    'lapTimes',
+    'positions',
+    'stagePilots',
+    'retiredStages',
+    'stageAlerts'
+  ]), []);
+
+  const setupBaseSectionKeys = useMemo(() => ([
+    'meta',
+    'pilots',
+    'categories',
+    'stages',
+    'cameras',
+    'externalMedia',
+    'streamConfigs'
+  ]), []);
+
+  const publishWebSocketMessages = useCallback(async (messageType = 'sync-update', allowedSections = null, extraMeta = {}) => {
     if (!wsProvider.current?.isConnected) {
       return false;
     }
 
-    const messages = buildWebSocketMessages(messageType, allowedSections);
+    const messages = buildWebSocketMessages(messageType, allowedSections, extraMeta);
 
     for (const message of messages) {
       const success = await wsProvider.current.publish(message);
@@ -437,7 +830,7 @@ export const RallyProvider = ({ children }) => {
     return true;
   }, [buildWebSocketMessages]);
 
-  const publishWebSocketBundle = useCallback(async (messageType = 'sync-update', allowedSections = null) => {
+  const publishWebSocketBundle = useCallback(async (messageType = 'sync-update', allowedSections = null, extraMeta = {}) => {
     if (!wsProvider.current?.isConnected) {
       return false;
     }
@@ -446,24 +839,86 @@ export const RallyProvider = ({ children }) => {
     const data = {
       messageType,
       section: 'bundle',
+      ...extraMeta,
       payload,
-      timestamp: Date.now()
+      timestamp: getNextLogicalTimestamp()
     };
 
     const estimatedSize = JSON.stringify(data).length;
     if (estimatedSize > 60000) {
-      return publishWebSocketMessages(messageType, allowedSections);
+      return publishWebSocketMessages(messageType, allowedSections, extraMeta);
     }
 
     return wsProvider.current.publish(data);
-  }, [buildWebSocketPayload, publishWebSocketMessages]);
+  }, [buildWebSocketPayload, getNextLogicalTimestamp, publishWebSocketMessages]);
+
+  const publishSessionManifestUpdate = useCallback(async (partialManifest = {}, baseManifest = null) => {
+    if (!wsProvider.current?.isConnected) {
+      return null;
+    }
+
+    const previousManifest = baseManifest || sessionManifest || {};
+    const nextManifest = {
+      ...previousManifest,
+      ...partialManifest,
+      channelKey: partialManifest.channelKey || wsChannelKey || previousManifest.channelKey || '',
+      sessionId: partialManifest.sessionId || previousManifest.sessionId || createEntityId('session'),
+      initializedAt: partialManifest.initializedAt || previousManifest.initializedAt || Date.now(),
+      latestSnapshotVersion: Number(partialManifest.latestSnapshotVersion ?? previousManifest.latestSnapshotVersion ?? latestSnapshotVersion ?? 0),
+      lastSnapshotAt: Number(partialManifest.lastSnapshotAt ?? previousManifest.lastSnapshotAt ?? 0),
+      latestSetupSyncAt: Number(partialManifest.latestSetupSyncAt ?? previousManifest.latestSetupSyncAt ?? lastSetupSyncAt ?? 0),
+      latestTimesSyncAt: Number(partialManifest.latestTimesSyncAt ?? previousManifest.latestTimesSyncAt ?? lastTimesSyncAt ?? 0),
+      updatedAt: Date.now()
+    };
+
+    const published = await wsProvider.current.publishSessionManifest(nextManifest);
+    if (!published) {
+      return null;
+    }
+
+    setSessionManifest(nextManifest);
+    setLatestSnapshotVersion(nextManifest.latestSnapshotVersion || 0);
+    return nextManifest;
+  }, [lastSetupSyncAt, lastTimesSyncAt, latestSnapshotVersion, sessionManifest, wsChannelKey]);
+
+  const publishSetupSnapshot = useCallback(async (channelKey, allowedSections = null, baseManifest = null) => {
+    const previousManifest = baseManifest || sessionManifest || {};
+    const nextSnapshotVersion = Math.max(
+      Number(previousManifest.latestSnapshotVersion || 0),
+      Number(latestSnapshotVersion || 0)
+    ) + 1;
+    const snapshotTimestamp = Date.now();
+
+    const published = await publishWebSocketBundle('full-snapshot', allowedSections, {
+      snapshotVersion: nextSnapshotVersion
+    });
+
+    if (!published) {
+      return null;
+    }
+
+    setLatestSnapshotVersion(nextSnapshotVersion);
+
+    return publishSessionManifestUpdate({
+      channelKey: channelKey || previousManifest.channelKey || wsChannelKey || '',
+      sessionId: previousManifest.sessionId || createEntityId('session'),
+      initializedAt: previousManifest.initializedAt || snapshotTimestamp,
+      latestSnapshotVersion: nextSnapshotVersion,
+      lastSnapshotAt: snapshotTimestamp
+    }, previousManifest);
+  }, [latestSnapshotVersion, publishSessionManifestUpdate, publishWebSocketBundle, sessionManifest, wsChannelKey]);
 
   const markTimingSectionDirty = useCallback((section) => {
+    if (clientRole === 'setup') {
+      setupPendingSections.current.add(section);
+      return;
+    }
+
     if (clientRole !== 'times') {
       return;
     }
 
-    const now = Date.now();
+    const now = getNextLogicalTimestamp();
     setDirtyTimingSections((prev) => {
       const next = Array.isArray(prev) ? [...prev] : [];
       if (!next.includes(section)) {
@@ -471,25 +926,84 @@ export const RallyProvider = ({ children }) => {
       }
       return next;
     });
+    setTimingSectionTouchedAt((prev) => ({
+      ...(prev || {}),
+      [section]: now
+    }));
     setLastTimesEditAt(now);
+  }, [clientRole, getNextLogicalTimestamp]);
+
+  const markSetupSectionDirty = useCallback((section) => {
+    if (clientRole !== 'setup' || !setupDirtyTrackingReady.current || isPublishing.current) {
+      return;
+    }
+
+    const now = Date.now();
+    setDirtySetupSections((prev) => {
+      const next = Array.isArray(prev) ? [...prev] : [];
+      if (!next.includes(section)) {
+        next.push(section);
+      }
+      return next;
+    });
+    setLastSetupEditAt(now);
   }, [clientRole]);
 
-  const clearDirtyTimingSections = useCallback(() => {
-    setDirtyTimingSections([]);
-  }, []);
-
   const publishDirtyTimingSections = useCallback(async () => {
-    if (!Array.isArray(dirtyTimingSections) || dirtyTimingSections.length === 0) {
+    const entries = buildPendingTimingDeltaEntries(null, true);
+
+    if (entries.length === 0) {
       return false;
     }
 
-    return publishWebSocketBundle('sync-update', dirtyTimingSections);
-  }, [dirtyTimingSections, publishWebSocketBundle]);
+    return publishTimingDeltaEntries(entries);
+  }, [buildPendingTimingDeltaEntries, publishTimingDeltaEntries]);
 
-  const publishTimingSnapshot = useCallback(async () => {
-    const timingSections = ['times', 'arrivalTimes', 'startTimes', 'realStartTimes', 'lapTimes', 'positions', 'stagePilots', 'retiredStages', 'stageAlerts'];
-    return publishWebSocketBundle('sync-update', timingSections);
-  }, [publishWebSocketBundle]);
+  useEffect(() => {
+    publishDirtyTimingSectionsRef.current = publishDirtyTimingSections;
+  }, [publishDirtyTimingSections]);
+
+  useEffect(() => {
+    publishDirtyTimingDeltasRef.current = publishDirtyTimingSections;
+  }, [publishDirtyTimingSections]);
+
+  const publishDirtySetupSections = useCallback(async (sections = null) => {
+    const nextSections = Array.isArray(sections) && sections.length > 0
+      ? sections
+      : dirtySetupSections;
+
+    if (!Array.isArray(nextSections) || nextSections.length === 0) {
+      return false;
+    }
+
+    const syncAt = Date.now();
+    const published = await publishWebSocketBundle('sync-update', nextSections);
+    if (!published) {
+      return false;
+    }
+
+    const publishedBaseSections = nextSections.filter((section) => setupBaseSectionKeys.includes(section));
+    const publishedTimingSections = nextSections.filter((section) => timingSectionKeys.includes(section));
+
+    if (publishedBaseSections.length > 0) {
+      setLastSetupSyncAt(syncAt);
+      setDirtySetupSections((prev) => prev.filter((section) => !publishedBaseSections.includes(section)));
+    }
+
+    if (publishedTimingSections.length > 0) {
+      setLastTimesSyncAt(syncAt);
+    }
+
+    await publishSessionManifestUpdate({
+      ...(publishedBaseSections.length > 0 ? { latestSetupSyncAt: syncAt } : {}),
+      ...(publishedTimingSections.length > 0 ? { latestTimesSyncAt: syncAt } : {})
+    });
+    return true;
+  }, [dirtySetupSections, publishSessionManifestUpdate, publishWebSocketBundle, setupBaseSectionKeys, timingSectionKeys]);
+
+  useEffect(() => {
+    publishDirtySetupSectionsRef.current = publishDirtySetupSections;
+  }, [publishDirtySetupSections]);
 
   const buildLineSyncKey = (pilotId, stageId) => `${pilotId}:${stageId}`;
 
@@ -529,12 +1043,40 @@ export const RallyProvider = ({ children }) => {
       return;
     }
 
-    if (wsRole === 'times') {
-      const sections = Array.isArray(wsPublishSections) && wsPublishSections.length > 0
-        ? wsPublishSections
-        : ['times', 'arrivalTimes', 'startTimes', 'realStartTimes', 'lapTimes', 'positions', 'stagePilots', 'retiredStages', 'stageAlerts'];
+    if (wsRole === 'setup') {
+      const sections = Array.from(new Set([
+        ...(Array.isArray(dirtySetupSections) ? dirtySetupSections : []),
+        ...Array.from(setupPendingSections.current)
+      ]));
 
-      sections.forEach((section) => timesPendingSections.current.add(section));
+      if (sections.length === 0) {
+        return;
+      }
+
+      sections.forEach((section) => setupPendingSections.current.add(section));
+
+      if (setupPublishTimer.current) {
+        return;
+      }
+
+      setupPublishTimer.current = window.setTimeout(async () => {
+        setupPublishTimer.current = null;
+        const pending = Array.from(setupPendingSections.current);
+        setupPendingSections.current.clear();
+        if (pending.length > 0) {
+          await publishDirtySetupSectionsRef.current?.(pending);
+        }
+      }, 2000);
+
+      return;
+    }
+
+    if (wsRole === 'times') {
+      const pendingEntries = buildPendingTimingDeltaEntries(null, true);
+
+      if (pendingEntries.length === 0) {
+        return;
+      }
 
       if (timesPublishTimer.current) {
         return;
@@ -542,18 +1084,14 @@ export const RallyProvider = ({ children }) => {
 
       timesPublishTimer.current = window.setTimeout(async () => {
         timesPublishTimer.current = null;
-        const pending = Array.from(timesPendingSections.current);
-        timesPendingSections.current.clear();
-        if (pending.length > 0) {
-          await publishWebSocketBundle('sync-update', pending);
-        }
+        await publishDirtyTimingDeltasRef.current?.();
       }, 1200);
 
       return;
     }
 
     await publishWebSocketMessages('sync-update', wsPublishSections);
-  }, [wsEnabled, wsCanPublish, publishWebSocketMessages, publishWebSocketBundle, wsPublishSections, wsRole]);
+  }, [buildPendingTimingDeltaEntries, dirtySetupSections, publishDirtySetupSections, wsEnabled, wsCanPublish, publishWebSocketMessages, wsPublishSections, wsRole]);
 
   // WebSocket connection management
   const connectWebSocket = useCallback(async (channelKey, options = {}) => {
@@ -565,12 +1103,12 @@ export const RallyProvider = ({ children }) => {
 
     const canPublish = options.readOnly !== true;
     const shouldReadHistory = options.readHistory ?? !canPublish;
-    const shouldRequestSnapshot = options.requestSnapshot ?? !canPublish;
+    const shouldRequestSnapshot = options.requestSnapshot ?? (!canPublish && !shouldReadHistory);
     const shouldPublishSnapshot = options.publishSnapshot ?? canPublish;
     const role = options.role || 'client';
     const allowedSections = options.allowedSections ?? (
       role === 'times'
-        ? ['times', 'arrivalTimes', 'startTimes', 'realStartTimes', 'lapTimes', 'positions', 'stagePilots', 'retiredStages', 'stageAlerts']
+        ? timingSectionKeys
         : null
     );
 
@@ -597,9 +1135,9 @@ export const RallyProvider = ({ children }) => {
         },
         {
           readHistory: shouldReadHistory,
-          onSnapshotRequest: canPublish
+          onSnapshotRequest: canPublish && role === 'setup'
             ? () => {
-                publishWebSocketMessages('full-snapshot', allowedSections);
+                publishSetupSnapshot(channelKey, allowedSections);
               }
             : null
           ,
@@ -607,7 +1145,11 @@ export const RallyProvider = ({ children }) => {
             if (role !== 'times') return;
             const since = Number(payload?.since || 0);
             if (lastTimesEditAt > since) {
-              publishTimingSnapshot();
+              const entries = buildPendingTimingDeltaEntries(since, false);
+
+              if (entries.length > 0) {
+                publishTimingDeltaEntries(entries);
+              }
             }
           }
           ,
@@ -814,9 +1356,36 @@ export const RallyProvider = ({ children }) => {
           onTimesSyncAck: (payload) => {
             if (role !== 'times') return;
             const receivedAt = Number(payload?.receivedAt || 0);
-            if (!Number.isFinite(receivedAt)) return;
+            const lineAcks = Array.isArray(payload?.lineAcks) ? payload.lineAcks : [];
+
+            if (!Number.isFinite(receivedAt) && lineAcks.length === 0) return;
+
+            if (lineAcks.length > 0) {
+              setTimingLineVersions((prev) => {
+                const next = { ...(prev || {}) };
+                lineAcks.forEach((ack) => {
+                  const key = ack?.key;
+                  const ackVersion = Number(ack?.localVersion || 0);
+                  if (!key || !ackVersion) return;
+
+                  const current = next[key] || {};
+                  next[key] = {
+                    ...current,
+                    ackedVersion: Math.max(Number(current.ackedVersion || 0), ackVersion)
+                  };
+
+                  if (Number(next[key].localVersion || 0) <= Number(next[key].ackedVersion || 0)) {
+                    timesPendingLineKeys.current.delete(key);
+                  }
+                });
+                return next;
+              });
+            }
+
             setLastTimesAckAt(Date.now());
-            setLastTimesAckedEditAt(receivedAt);
+            if (Number.isFinite(receivedAt)) {
+              setLastTimesAckedEditAt(receivedAt);
+            }
           }
         }
       );
@@ -830,8 +1399,33 @@ export const RallyProvider = ({ children }) => {
       setWsEnabled(true);
       localStorage.setItem('rally_ws_enabled', JSON.stringify(true));
 
+      const isSetupRole = role === 'setup';
+      const existingManifest = isSetupRole
+        ? await wsProvider.current.loadSessionManifest()
+        : null;
+
+      if (existingManifest) {
+        setSessionManifest(existingManifest);
+        setLatestSnapshotVersion(Number(existingManifest.latestSnapshotVersion || 0));
+      }
+
       if (shouldPublishSnapshot) {
-        await publishWebSocketMessages('full-snapshot', allowedSections);
+        if (isSetupRole) {
+          if (existingManifest?.sessionId) {
+            if (dirtySetupSections.length > 0) {
+              await publishDirtySetupSections(dirtySetupSections);
+            }
+            await publishSessionManifestUpdate({
+              channelKey,
+              latestSetupSyncAt: Number(existingManifest.latestSetupSyncAt || lastSetupSyncAt || 0),
+              latestTimesSyncAt: Number(existingManifest.latestTimesSyncAt || lastTimesSyncAt || 0)
+            }, existingManifest);
+          } else {
+            await publishSetupSnapshot(channelKey, allowedSections, existingManifest);
+          }
+        } else {
+          await publishWebSocketMessages('full-snapshot', allowedSections);
+        }
       } else if (shouldRequestSnapshot) {
         await wsProvider.current.requestSnapshot();
 
@@ -846,7 +1440,7 @@ export const RallyProvider = ({ children }) => {
 
       if (role === 'times') {
         window.setTimeout(() => {
-          publishDirtyTimingSections();
+          publishDirtyTimingSectionsRef.current?.();
         }, 500);
       }
 
@@ -867,13 +1461,32 @@ export const RallyProvider = ({ children }) => {
     applyWebSocketData,
     publishWebSocketMessages,
     publishDirtyTimingSections,
-    publishTimingSnapshot,
+    publishDirtySetupSections,
+    publishSetupSnapshot,
+    publishSessionManifestUpdate,
+    buildPendingTimingDeltaEntries,
+    publishTimingDeltaEntries,
+    timingSectionKeys,
+    timingSectionTouchedAt,
+    dirtySetupSections,
     lastTimesEditAt,
     lastTimesSyncAt,
+    lastSetupSyncAt,
     publishWebSocketBundle
   ]);
 
   const disconnectWebSocket = useCallback(() => {
+    if (setupPublishTimer.current) {
+      window.clearTimeout(setupPublishTimer.current);
+      setupPublishTimer.current = null;
+    }
+    if (timesPublishTimer.current) {
+      window.clearTimeout(timesPublishTimer.current);
+      timesPublishTimer.current = null;
+    }
+    setupPendingSections.current.clear();
+    timesPendingLineKeys.current.clear();
+
     if (wsProvider.current) {
       wsProvider.current.disconnect();
       wsProvider.current = null;
@@ -909,6 +1522,18 @@ export const RallyProvider = ({ children }) => {
   }, [dirtyTimingSections]);
 
   useEffect(() => {
+    localStorage.setItem('rally_timing_section_touched_at', JSON.stringify(timingSectionTouchedAt));
+  }, [timingSectionTouchedAt]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_timing_line_versions', JSON.stringify(timingLineVersions));
+  }, [timingLineVersions]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_dirty_setup_sections', JSON.stringify(dirtySetupSections));
+  }, [dirtySetupSections]);
+
+  useEffect(() => {
     if (clientRole !== 'times') return;
     if (!dirtyTimingSections || dirtyTimingSections.length === 0) return;
     if (!lastTimesAckedEditAt) return;
@@ -939,12 +1564,29 @@ export const RallyProvider = ({ children }) => {
     localStorage.setItem('rally_times_last_acked_edit_at', JSON.stringify(lastTimesAckedEditAt));
   }, [lastTimesAckedEditAt]);
 
+  useEffect(() => {
+    localStorage.setItem('rally_setup_last_edit_at', JSON.stringify(lastSetupEditAt));
+  }, [lastSetupEditAt]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_setup_last_sync_at', JSON.stringify(lastSetupSyncAt));
+  }, [lastSetupSyncAt]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_ws_session_manifest', JSON.stringify(sessionManifest));
+  }, [sessionManifest]);
+
+  useEffect(() => {
+    localStorage.setItem('rally_ws_snapshot_version', JSON.stringify(latestSnapshotVersion));
+  }, [latestSnapshotVersion]);
+
   
 
   useEffect(() => {
     localStorage.setItem('rally_event_name', JSON.stringify(eventName));
     updateDataVersion();
-  }, [eventName]);
+    markSetupSectionDirty('meta');
+  }, [eventName, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_positions', JSON.stringify(positions));
@@ -964,17 +1606,20 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
     updateDataVersion();
-  }, [pilots]);
+    markSetupSectionDirty('pilots');
+  }, [pilots, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_categories', JSON.stringify(categories));
     updateDataVersion();
-  }, [categories]);
+    markSetupSectionDirty('categories');
+  }, [categories, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_stages', JSON.stringify(stages));
     updateDataVersion();
-  }, [stages]);
+    markSetupSectionDirty('stages');
+  }, [stages, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_times', JSON.stringify(times));
@@ -1009,7 +1654,8 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('rally_debug_date', JSON.stringify(debugDate));
     updateDataVersion();
-  }, [debugDate]);
+    markSetupSectionDirty('meta');
+  }, [debugDate, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     setStartTimes((prev) => {
@@ -1123,41 +1769,66 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('rally_current_stage', JSON.stringify(currentStageId));
     updateDataVersion();
-  }, [currentStageId]);
+    markSetupSectionDirty('meta');
+  }, [currentStageId, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_chroma_key', JSON.stringify(chromaKey));
-  }, [chromaKey]);
+    updateDataVersion();
+    markSetupSectionDirty('meta');
+  }, [chromaKey, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_map_url', JSON.stringify(mapUrl));
     updateDataVersion();
-  }, [mapUrl]);
+    markSetupSectionDirty('meta');
+  }, [mapUrl, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_logo_url', JSON.stringify(logoUrl));
     updateDataVersion();
-  }, [logoUrl]);
+    markSetupSectionDirty('meta');
+  }, [logoUrl, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_stream_configs', JSON.stringify(streamConfigs));
     updateDataVersion();
-  }, [streamConfigs]);
+    markSetupSectionDirty('streamConfigs');
+  }, [streamConfigs, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_global_audio', JSON.stringify(globalAudio));
     updateDataVersion();
-  }, [globalAudio]);
+    markSetupSectionDirty('meta');
+  }, [globalAudio, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_cameras', JSON.stringify(cameras));
     updateDataVersion();
-  }, [cameras]);
+    markSetupSectionDirty('cameras');
+  }, [cameras, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
     localStorage.setItem('rally_external_media', JSON.stringify(externalMedia));
     updateDataVersion();
-  }, [externalMedia]);
+    markSetupSectionDirty('externalMedia');
+  }, [externalMedia, markSetupSectionDirty, updateDataVersion]);
+
+  useEffect(() => {
+    if (!setupDirtyTrackingReady.current) {
+      setupDirtyTrackingReady.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (wsRole !== 'setup' || !wsEnabled || !wsProvider.current?.isConnected || !lastTimesSyncAt) {
+      return;
+    }
+
+    publishSessionManifestUpdate({
+      latestTimesSyncAt: lastTimesSyncAt
+    });
+  }, [lastTimesSyncAt, publishSessionManifestUpdate, wsEnabled, wsRole]);
 
   // CRUD for external media items
   const addExternalMedia = (item) => {
@@ -1432,6 +2103,7 @@ export const RallyProvider = ({ children }) => {
       [stageId]: pilotIds
     }));
     markTimingSectionDirty('stagePilots');
+    markTimingLineDirty('stagePilots', null, stageId);
   };
 
   const togglePilotInStage = (stageId, pilotId) => {
@@ -1444,6 +2116,7 @@ export const RallyProvider = ({ children }) => {
       }
     });
     markTimingSectionDirty('stagePilots');
+    markTimingLineDirty('stagePilots', null, stageId);
   };
 
   const selectAllPilotsInStage = (stageId) => {
@@ -1452,6 +2125,7 @@ export const RallyProvider = ({ children }) => {
       [stageId]: pilots.map(p => p.id)
     }));
     markTimingSectionDirty('stagePilots');
+    markTimingLineDirty('stagePilots', null, stageId);
   };
 
   const deselectAllPilotsInStage = (stageId) => {
@@ -1460,6 +2134,7 @@ export const RallyProvider = ({ children }) => {
       [stageId]: []
     }));
     markTimingSectionDirty('stagePilots');
+    markTimingLineDirty('stagePilots', null, stageId);
   };
 
   // Lap times functions
@@ -1477,6 +2152,7 @@ export const RallyProvider = ({ children }) => {
       };
     });
     markTimingSectionDirty('lapTimes');
+    markTimingLineDirty('lapTimes', pilotId, stageId);
   };
 
   const getLapTime = (pilotId, stageId, lapIndex) => {
@@ -1497,6 +2173,7 @@ export const RallyProvider = ({ children }) => {
       }
     }));
     markTimingSectionDirty('positions');
+    markTimingLineDirty('positions', pilotId, stageId);
   };
 
   const getPosition = (pilotId, stageId) => {
@@ -1539,6 +2216,7 @@ export const RallyProvider = ({ children }) => {
       }
     }));
     markTimingSectionDirty('times');
+    markTimingLineDirty('times', pilotId, stageId);
   };
 
   const getTime = (pilotId, stageId) => {
@@ -1554,6 +2232,7 @@ export const RallyProvider = ({ children }) => {
       }
     }));
     markTimingSectionDirty('arrivalTimes');
+    markTimingLineDirty('arrivalTimes', pilotId, stageId);
   };
 
   const getArrivalTime = (pilotId, stageId) => {
@@ -1569,6 +2248,7 @@ export const RallyProvider = ({ children }) => {
       }
     }));
     markTimingSectionDirty('startTimes');
+    markTimingLineDirty('startTimes', pilotId, stageId);
   };
 
   const getStartTime = (pilotId, stageId) => {
@@ -1584,6 +2264,7 @@ export const RallyProvider = ({ children }) => {
       }
     }));
     markTimingSectionDirty('realStartTimes');
+    markTimingLineDirty('realStartTimes', pilotId, stageId);
   };
 
   const getRealStartTime = (pilotId, stageId) => {
@@ -1626,6 +2307,17 @@ export const RallyProvider = ({ children }) => {
     markTimingSectionDirty('times');
     markTimingSectionDirty('arrivalTimes');
     markTimingSectionDirty('startTimes');
+    entries.forEach((entry) => {
+      if (entry.totalTime !== undefined && entry.totalTime !== null && entry.totalTime !== '') {
+        markTimingLineDirty('times', entry.pilotId, entry.stageId);
+      }
+      if (entry.arrivalTime !== undefined && entry.arrivalTime !== null && entry.arrivalTime !== '') {
+        markTimingLineDirty('arrivalTimes', entry.pilotId, entry.stageId);
+      }
+      if (entry.startTime !== undefined && entry.startTime !== null && entry.startTime !== '') {
+        markTimingLineDirty('startTimes', entry.pilotId, entry.stageId);
+      }
+    });
   };
 
   const isRetiredStage = (pilotId, stageId) => {
@@ -1665,6 +2357,9 @@ export const RallyProvider = ({ children }) => {
       return next;
     });
     markTimingSectionDirty('retiredStages');
+    affectedStageIds.forEach((affectedStageId) => {
+      markTimingLineDirty('retiredStages', pilotId, affectedStageId);
+    });
   };
 
   const isStageAlert = (pilotId, stageId) => {
@@ -1691,6 +2386,7 @@ export const RallyProvider = ({ children }) => {
       return next;
     });
     markTimingSectionDirty('stageAlerts');
+    markTimingLineDirty('stageAlerts', pilotId, stageId);
   };
 
   // Stream configuration functions
@@ -1857,6 +2553,11 @@ export const RallyProvider = ({ children }) => {
     wsRole,
     wsPublishSections,
     clientRole,
+    sessionManifest,
+    latestSnapshotVersion,
+    dirtySetupSections,
+    lastSetupEditAt,
+    lastSetupSyncAt,
     dirtyTimingSections,
     lastTimesEditAt,
     lastTimesSyncAt,

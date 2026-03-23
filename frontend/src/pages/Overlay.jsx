@@ -108,20 +108,23 @@ export default function Overlay() {
   }, []);
 
   const wsMessageAgeMs = wsLastMessageAt ? Math.max(0, connectionNow - wsLastMessageAt) : null;
-  const connectionQuality = (() => {
-    if (!wsEnabled) return { color: 'bg-zinc-700', label: t('header.local') };
-    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] animate-pulse', label: t('config.connecting') };
-    if (wsConnectionStatus === 'connected') {
-      if (wsMessageAgeMs === null || wsMessageAgeMs <= 1000) return { color: 'bg-[#22C55E]', label: 'Great' };
-      if (wsMessageAgeMs <= 5000) return { color: 'bg-[#84CC16]', label: 'Good' };
-      if (wsMessageAgeMs <= 15000) return { color: 'bg-[#FACC15]', label: 'Fair' };
-      if (wsMessageAgeMs <= 30000) return { color: 'bg-[#F97316]', label: 'Poor' };
-      return { color: 'bg-[#EF4444]', label: 'Bad' };
-    }
-    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316]', label: 'Suspended' };
-    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444]', label: 'Failed' };
-    return { color: 'bg-zinc-700', label: 'Disconnected' };
+  const connectionBadge = (() => {
+    if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
+    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', label: t('config.connecting') };
+    if (wsConnectionStatus === 'connected') return { color: 'bg-[#22C55E] text-black border-transparent', label: 'Live' };
+    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316] text-black border-transparent', label: 'Suspended' };
+    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', label: 'Failed' };
+    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
   })();
+  const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && wsMessageAgeMs !== null
+    ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
+    : 0;
+  const activityGlow = activityProgress > 0
+    ? `0 0 ${8 + (18 * activityProgress)}px rgba(34, 197, 94, ${0.18 + (0.5 * activityProgress)})`
+    : '0 0 0 rgba(34, 197, 94, 0)';
+  const activityFill = activityProgress > 0
+    ? `rgba(34, 197, 94, ${0.2 + (0.8 * activityProgress)})`
+    : 'rgba(63, 63, 70, 0.45)';
 
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
@@ -201,45 +204,65 @@ export default function Overlay() {
             </label>
 
             {/* WebSocket Status/Button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setShowWsPanel(!showWsPanel)}
-                    className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${
-                      wsEnabled
-                        ? `${connectionQuality.color} text-black border-transparent`
-                        : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700'
-                    }`}
-                    data-testid="ws-status-button"
-                  >
-                    {wsConnectionStatus === 'connected' ? (
-                      <>
-                        <Wifi className="w-3 h-3" />
-                        <span>Live</span>
-                      </>
-                    ) : (
-                      <>
-                        <WifiOff className="w-3 h-3" />
-                        <span>{t('header.connect')}</span>
-                      </>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                  <div className="text-xs">
-                    <div className="font-semibold">WebSocket</div>
-                    <div>Status: {wsConnectionStatus}</div>
-                    <div>Quality: {connectionQuality.label}</div>
-                    {wsMessageAgeMs !== null && (
-                      <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            
-            {/* Heartbeat indicator removed in favor of Live badge colors */}
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setShowWsPanel(!showWsPanel)}
+                      className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${connectionBadge.color}`}
+                      data-testid="ws-status-button"
+                    >
+                      {wsConnectionStatus === 'connected' ? (
+                        <>
+                          <Wifi className="w-3 h-3" />
+                          <span>{connectionBadge.label}</span>
+                        </>
+                      ) : (
+                        <>
+                          <WifiOff className="w-3 h-3" />
+                          <span>{connectionBadge.label}</span>
+                        </>
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                    <div className="text-xs">
+                      <div className="font-semibold">WebSocket Connection</div>
+                      <div>Status: {wsConnectionStatus}</div>
+                      <div>State badge only reflects socket connection state.</div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
+                      style={{
+                        backgroundColor: activityFill,
+                        boxShadow: activityGlow
+                      }}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                    <div className="text-xs">
+                      <div className="font-semibold">Message Activity</div>
+                      {wsMessageAgeMs !== null ? (
+                        <>
+                          <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
+                          <div>LED fades from full brightness to off over 30 seconds.</div>
+                        </>
+                      ) : (
+                        <div>No WebSocket messages received yet.</div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
         </div>
         

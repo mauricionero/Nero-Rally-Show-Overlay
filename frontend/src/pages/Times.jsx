@@ -81,20 +81,25 @@ export default function Times() {
   }, [wsEnabled]);
 
   const connectionAgeMs = wsLastMessageAt ? Math.max(0, connectionNow - wsLastMessageAt) : null;
-  const connectionQuality = (() => {
-    if (!wsEnabled) return { color: 'bg-zinc-700', label: t('header.local') };
-    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] animate-pulse', label: t('config.connecting') };
-    if (wsConnectionStatus === 'connected') {
-      if (connectionAgeMs === null || connectionAgeMs <= 1000) return { color: 'bg-[#22C55E]', label: 'Great' };
-      if (connectionAgeMs <= 5000) return { color: 'bg-[#84CC16]', label: 'Good' };
-      if (connectionAgeMs <= 15000) return { color: 'bg-[#FACC15]', label: 'Fair' };
-      if (connectionAgeMs <= 30000) return { color: 'bg-[#F97316]', label: 'Poor' };
-      return { color: 'bg-[#EF4444]', label: 'Bad' };
-    }
-    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316]', label: 'Suspended' };
-    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444]', label: 'Failed' };
-    return { color: 'bg-zinc-700', label: 'Disconnected' };
+  const connectionLed = (() => {
+    if (!wsEnabled) return { color: 'rgba(63, 63, 70, 0.65)', glow: '0 0 0 rgba(0,0,0,0)', label: 'Local only' };
+    if (wsConnectionStatus === 'connecting') return { color: 'rgba(250, 204, 21, 1)', glow: '0 0 12px rgba(250, 204, 21, 0.45)', label: t('config.connecting') };
+    if (wsConnectionStatus === 'connected') return { color: 'rgba(34, 197, 94, 1)', glow: '0 0 12px rgba(34, 197, 94, 0.45)', label: t('config.connected') };
+    if (wsConnectionStatus === 'suspended') return { color: 'rgba(249, 115, 22, 1)', glow: '0 0 12px rgba(249, 115, 22, 0.35)', label: 'Suspended' };
+    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'rgba(239, 68, 68, 1)', glow: '0 0 12px rgba(239, 68, 68, 0.35)', label: 'Failed' };
+    return { color: 'rgba(63, 63, 70, 0.65)', glow: '0 0 0 rgba(0,0,0,0)', label: 'Disconnected' };
   })();
+  const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && connectionAgeMs !== null
+    ? Math.max(0, 1 - (connectionAgeMs / 30000))
+    : 0;
+  const activityLed = {
+    color: activityProgress > 0
+      ? `rgba(34, 197, 94, ${0.2 + (0.8 * activityProgress)})`
+      : 'rgba(63, 63, 70, 0.45)',
+    glow: activityProgress > 0
+      ? `0 0 ${8 + (18 * activityProgress)}px rgba(34, 197, 94, ${0.18 + (0.5 * activityProgress)})`
+      : '0 0 0 rgba(0,0,0,0)'
+  };
 
   const headerStage = selectedStage;
   const StageIcon = headerStage ? getStageTypeIcon(headerStage.type) : Flag;
@@ -162,28 +167,50 @@ export default function Times() {
                     <span>{t('times.noStageSelected')}</span>
                   </>
                 )}
-                {wsEnabled && (
+                <div className="ml-2 flex items-center gap-2">
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
-                          className={`ml-2 inline-flex w-2.5 h-2.5 rounded-full ${connectionQuality.color}`}
+                          className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
+                          style={{ backgroundColor: connectionLed.color, boxShadow: connectionLed.glow }}
                           aria-label={`WebSocket ${wsConnectionStatus}`}
                         />
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
                         <div className="text-xs">
-                          <div className="font-semibold">WebSocket</div>
+                          <div className="font-semibold">WebSocket Connection</div>
                           <div>Status: {wsConnectionStatus}</div>
-                          <div>Quality: {connectionQuality.label}</div>
-                          {connectionAgeMs !== null && (
-                            <div>Last message: {Math.round(connectionAgeMs / 1000)}s ago</div>
+                          <div>{connectionLed.label}</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
+                          style={{ backgroundColor: activityLed.color, boxShadow: activityLed.glow }}
+                          aria-label="WebSocket activity"
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                        <div className="text-xs">
+                          <div className="font-semibold">Message Activity</div>
+                          {connectionAgeMs !== null ? (
+                            <>
+                              <div>Last message: {Math.round(connectionAgeMs / 1000)}s ago</div>
+                              <div>LED fades from full brightness to off over 30 seconds.</div>
+                            </>
+                          ) : (
+                            <div>No WebSocket messages received yet.</div>
                           )}
                         </div>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                )}
+                </div>
               </div>
             </div>
           </div>
