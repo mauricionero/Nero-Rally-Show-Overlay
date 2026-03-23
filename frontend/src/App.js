@@ -4,6 +4,7 @@ import { RallyProvider } from './contexts/RallyContext.jsx';
 import { TranslationProvider } from './contexts/TranslationContext.jsx';
 import Setup from './pages/Setup.jsx';
 import Overlay from './pages/Overlay.jsx';
+import Times from './pages/Times.jsx';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
@@ -18,6 +19,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Setup />} />
             <Route path="/overlay" element={<Overlay />} />
+            <Route path="/times" element={<Times />} />
           </Routes>
           <Toaster position="top-right" />
         </BrowserRouter>

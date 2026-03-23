@@ -51,6 +51,9 @@ class WebSocketProvider {
     this.onMessageCallback = null;
     this.onStatusCallback = null;
     this.onSnapshotRequestCallback = null;
+    this.onTimesSyncRequestCallback = null;
+    this.onTimesLineRequestCallback = null;
+    this.onTimesLineResponseCallback = null;
     this.isConnected = false;
     this.connectionState = 'disconnected';
   }
@@ -69,6 +72,11 @@ class WebSocketProvider {
     this.onMessageCallback = onMessage;
     this.onStatusCallback = onStatus;
     this.onSnapshotRequestCallback = options.onSnapshotRequest || null;
+    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
+    this.onTimesLineRequestCallback = options.onTimesLineRequest || null;
+    this.onTimesLineResponseCallback = options.onTimesLineResponse || null;
+    this.onTimesSyncAckCallback = options.onTimesSyncAck || null;
+    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
 
     const apiKey = process.env.REACT_APP_ABLY_KEY;
     if (!apiKey) {
@@ -131,6 +139,22 @@ class WebSocketProvider {
 
       await this.channel.subscribe('snapshot-request', () => {
         this.onSnapshotRequestCallback?.();
+      });
+
+      await this.channel.subscribe('times-sync-request', (message) => {
+        this.onTimesSyncRequestCallback?.(message?.data);
+      });
+
+      await this.channel.subscribe('times-line-request', (message) => {
+        this.onTimesLineRequestCallback?.(message?.data);
+      });
+
+      await this.channel.subscribe('times-line-response', (message) => {
+        this.onTimesLineResponseCallback?.(message?.data);
+      });
+
+      await this.channel.subscribe('times-sync-ack', (message) => {
+        this.onTimesSyncAckCallback?.(message?.data);
       });
 
       // Monitor connection state
@@ -202,6 +226,68 @@ class WebSocketProvider {
       return false;
     }
   }
+
+  async publishTimesSyncRequest(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot request times sync');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-sync-request', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times sync request error:', error);
+      return false;
+    }
+  }
+
+  async publishTimesLineRequest(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot request timing line');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-line-request', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times line request error:', error);
+      return false;
+    }
+  }
+
+  async publishTimesLineResponse(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot respond with timing line');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-line-response', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times line response error:', error);
+      return false;
+    }
+  }
+
+  async publishTimesSyncAck(data) {
+    if (!this.isConnected || !this.channel) {
+      console.warn('[WebSocket] Not connected, cannot ack times sync');
+      return false;
+    }
+
+    try {
+      await this.channel.publish('times-sync-ack', data);
+      return true;
+    } catch (error) {
+      console.error('[WebSocket] Times sync ack error:', error);
+      return false;
+    }
+  }
+
+  
 
   /**
    * Disconnect from the channel

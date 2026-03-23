@@ -10,6 +10,7 @@ import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
 
 // version constant
@@ -26,6 +27,7 @@ export default function Overlay() {
     wsEnabled,
     wsConnectionStatus,
     wsError,
+    wsLastMessageAt,
     connectWebSocket,
     disconnectWebSocket
   } = useRally();
@@ -35,6 +37,7 @@ export default function Overlay() {
   const [wsKeyInput, setWsKeyInput] = useState('');
   const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
   const [hideStreams, setHideStreams] = useState(false);
+  const [connectionNow, setConnectionNow] = useState(() => Date.now());
 
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
@@ -44,7 +47,7 @@ export default function Overlay() {
     if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
       setAutoConnectAttempted(true);
       console.log('[Overlay] Auto-connecting with URL key:', wsKey);
-      connectWebSocket(wsKey, { readOnly: true });
+      connectWebSocket(wsKey, { readOnly: true, role: 'overlay' });
     }
   }, [searchParams, wsConnectionStatus, connectWebSocket, autoConnectAttempted]);
 
@@ -99,9 +102,30 @@ export default function Overlay() {
     return () => clearInterval(interval);
   }, [dataVersion]);
 
+  useEffect(() => {
+    const interval = setInterval(() => setConnectionNow(Date.now()), 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const wsMessageAgeMs = wsLastMessageAt ? Math.max(0, connectionNow - wsLastMessageAt) : null;
+  const connectionQuality = (() => {
+    if (!wsEnabled) return { color: 'bg-zinc-700', label: t('header.local') };
+    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] animate-pulse', label: t('config.connecting') };
+    if (wsConnectionStatus === 'connected') {
+      if (wsMessageAgeMs === null || wsMessageAgeMs <= 1000) return { color: 'bg-[#22C55E]', label: 'Great' };
+      if (wsMessageAgeMs <= 5000) return { color: 'bg-[#84CC16]', label: 'Good' };
+      if (wsMessageAgeMs <= 15000) return { color: 'bg-[#FACC15]', label: 'Fair' };
+      if (wsMessageAgeMs <= 30000) return { color: 'bg-[#F97316]', label: 'Poor' };
+      return { color: 'bg-[#EF4444]', label: 'Bad' };
+    }
+    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316]', label: 'Suspended' };
+    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444]', label: 'Failed' };
+    return { color: 'bg-zinc-700', label: 'Disconnected' };
+  })();
+
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
-    const success = await connectWebSocket(wsKeyInput.trim(), { readOnly: true });
+    const success = await connectWebSocket(wsKeyInput.trim(), { readOnly: true, role: 'overlay' });
     if (success) {
       setShowWsPanel(false);
       setWsKeyInput('');
@@ -177,43 +201,45 @@ export default function Overlay() {
             </label>
 
             {/* WebSocket Status/Button */}
-            <button
-              onClick={() => setShowWsPanel(!showWsPanel)}
-              className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all ${
-                wsConnectionStatus === 'connected'
-                  ? 'bg-[#22C55E]/20 text-[#22C55E] border border-[#22C55E]/50'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-              }`}
-              data-testid="ws-status-button"
-            >
-              {wsConnectionStatus === 'connected' ? (
-                <>
-                  <Wifi className="w-3 h-3" />
-                  <span>Live</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3 h-3" />
-                  <span>{t('header.connect')}</span>
-                </>
-              )}
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setShowWsPanel(!showWsPanel)}
+                    className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${
+                      wsEnabled
+                        ? `${connectionQuality.color} text-black border-transparent`
+                        : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700'
+                    }`}
+                    data-testid="ws-status-button"
+                  >
+                    {wsConnectionStatus === 'connected' ? (
+                      <>
+                        <Wifi className="w-3 h-3" />
+                        <span>Live</span>
+                      </>
+                    ) : (
+                      <>
+                        <WifiOff className="w-3 h-3" />
+                        <span>{t('header.connect')}</span>
+                      </>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                  <div className="text-xs">
+                    <div className="font-semibold">WebSocket</div>
+                    <div>Status: {wsConnectionStatus}</div>
+                    <div>Quality: {connectionQuality.label}</div>
+                    {wsMessageAgeMs !== null && (
+                      <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
-            {/* Heartbeat indicator */}
-            <div className="flex items-center gap-2 min-w-[85px]">
-              <div 
-                className={`w-3 h-3 rounded-full transition-all duration-200 flex-shrink-0 ${
-                  wsConnectionStatus === 'connected' ? 'bg-[#22C55E]' :
-                  heartbeatStatus === 'checking' ? 'bg-[#22C55E] animate-pulse' :
-                  heartbeatStatus === 'changed' ? 'bg-[#FF4500] animate-pulse' :
-                  'bg-zinc-700'
-                }`}
-              />
-              <span className="text-xs text-zinc-500 whitespace-nowrap">
-                {wsConnectionStatus === 'connected' ? 'WebSocket' :
-                 heartbeatStatus === 'changed' ? t('header.updated') : t('header.local')}
-              </span>
-            </div>
+            {/* Heartbeat indicator removed in favor of Live badge colors */}
           </div>
         </div>
         

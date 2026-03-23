@@ -8,7 +8,8 @@ import { StartInformationValue } from '../StartInformationValue.jsx';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
-import { getReferenceNow, hasStageDateTimePassed, startInformationTime } from '../../utils/rallyHelpers';
+import StatusPill from '../StatusPill.jsx';
+import { getReferenceNow, hasStageDateTimePassed, startInformationTime, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -83,7 +84,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
-    pilots, stages, times, startTimes, currentStageId, chromaKey, logoUrl,
+    pilots, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
     lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert
   } = useRally();
   const { t } = useTranslation();
@@ -135,6 +136,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const isLapRace = isLapRaceStageType(selectedStage?.type);
   const hasStageAlert = focusPilot && selectedStageId
     ? isStageAlert(focusPilot.id, selectedStageId)
+    : false;
+  const hasJumpStart = focusPilot && selectedStageId
+    ? isJumpStartForStage(focusPilot.id, selectedStageId, startTimes, realStartTimes)
     : false;
 
   // Get pilot's stage times with sorted stages
@@ -388,9 +392,22 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   {focusPilot.name}
                 </h2>
                 {hasStageAlert && (
-                  <span className="inline-block bg-amber-500/30 text-amber-200 text-[11px] font-bold px-2 py-0.5 rounded">
-                    {t('status.alert')}
-                  </span>
+                  <StatusPill
+                    variant="alert"
+                    text={t('status.alert')}
+                    className="text-[11px] px-2"
+                    tooltipTitle={t('status.alertLabel')}
+                    tooltipText={t('status.alertTooltip')}
+                  />
+                )}
+                {hasJumpStart && (
+                  <StatusPill
+                    variant="jumpStart"
+                    text={t('status.jumpStart')}
+                    className="text-[11px] px-2"
+                    tooltipTitle={t('times.jumpStart')}
+                    tooltipText={t('times.jumpStartTooltip')}
+                  />
                 )}
                 {focusPilot.carNumber && (
                   <span className="inline-block bg-[#FF4500] text-white text-sm font-bold px-2 py-0.5 rounded">
@@ -684,6 +701,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     const Icon = getStageIcon(item.stage.type);
                     const stageColor = getStageTypeColor(item.stage.type);
                     const alert = focusPilot ? isStageAlert(focusPilot.id, item.stage.id) : false;
+                    const jumpStart = focusPilot ? isJumpStartForStage(focusPilot.id, item.stage.id, startTimes, realStartTimes) : false;
                     
                     return (
                       <div 
@@ -702,9 +720,20 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                                 {isSpecialStageType(item.stage.type) && item.stage.ssNumber ? getStageNumberLabel(item.stage) : item.stage.name}
                               </span>
                               {alert && (
-                                <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                  {t('status.alert')}
-                                </span>
+                                <StatusPill
+                                  variant="alert"
+                                  text={t('status.alert')}
+                                  tooltipTitle={t('status.alertLabel')}
+                                  tooltipText={t('status.alertTooltip')}
+                                />
+                              )}
+                              {jumpStart && (
+                                <StatusPill
+                                  variant="jumpStart"
+                                  text={t('status.jumpStart')}
+                                  tooltipTitle={t('times.jumpStart')}
+                                  tooltipText={t('times.jumpStartTooltip')}
+                                />
                               )}
                             </div>
                           <span className={`text-lg font-mono ${

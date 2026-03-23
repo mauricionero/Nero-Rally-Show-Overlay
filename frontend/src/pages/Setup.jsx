@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import { Play, VideoOff, Wifi } from 'lucide-react';
-import { getLocalOverlayUrl, getWebSocketOverlayUrl } from '../utils/overlayUrls.js';
+import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 
 // app version constant
 import { VERSION } from '../config/version.js';
@@ -62,13 +62,14 @@ export default function Setup() {
 
               <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
                 <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-                  {t('header.goLive')}
+                  {t('header.overlay')}
                 </div>
                 <TooltipProvider delayDuration={150}>
                   <div className="flex gap-2">
                     <Button
+                      size="sm"
                       onClick={() => handleGoLive(getLocalOverlayUrl())}
-                      className="min-w-[138px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
+                      className="min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
                       data-testid="go-to-overlay-button"
                     >
                       <Play className="w-4 h-4" />
@@ -78,13 +79,55 @@ export default function Setup() {
                       <TooltipTrigger asChild>
                         <div className="inline-flex">
                           <Button
+                            size="sm"
                             onClick={() => handleGoLive(getWebSocketOverlayUrl(wsChannelKey))}
                             disabled={!hasWebSocketOverlay}
                             className={hasWebSocketOverlay
-                              ? 'min-w-[138px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold disabled:opacity-100'
-                              : 'min-w-[138px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
+                              ? 'min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold disabled:opacity-100'
+                              : 'min-w-[108px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
                             }
                             data-testid="go-to-websocket-overlay-button"
+                          >
+                            <Wifi className="w-4 h-4" />
+                            {t('header.websocket')}
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[260px] bg-zinc-900 text-zinc-100">
+                        {hasWebSocketOverlay ? t('header.websocketReadyHint') : t('header.websocketSetupHint')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
+                <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
+                  {t('header.times')}
+                </div>
+                <TooltipProvider delayDuration={150}>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleGoLive(getLocalTimesUrl())}
+                      className="min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
+                      data-testid="go-to-times-button"
+                    >
+                      <Play className="w-4 h-4" />
+                      {t('header.local')}
+                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="inline-flex">
+                          <Button
+                            size="sm"
+                            onClick={() => handleGoLive(getWebSocketTimesUrl(wsChannelKey))}
+                            disabled={!hasWebSocketOverlay}
+                            className={hasWebSocketOverlay
+                              ? 'min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold disabled:opacity-100'
+                              : 'min-w-[108px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
+                            }
+                            data-testid="go-to-websocket-times-button"
                           >
                             <Wifi className="w-4 h-4" />
                             {t('header.websocket')}

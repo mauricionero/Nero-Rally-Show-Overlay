@@ -5,7 +5,8 @@ import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { StartInformationValue } from '../StartInformationValue.jsx';
-import { getPilotStatus, getReferenceNow, sortPilotsByStatus, parseTime, startInformationTime, getStageDateTime } from '../../utils/rallyHelpers';
+import StatusPill from '../StatusPill.jsx';
+import { getPilotStatus, getReferenceNow, sortPilotsByStatus, parseTime, startInformationTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -95,7 +96,7 @@ const formatTime = (ms) => {
 
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
-    pilots, categories, stages, times, startTimes, currentStageId, 
+    pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
     chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert
   } = useRally();
   const { t } = useTranslation();
@@ -272,6 +273,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     const isExpanded = expandedPilotId === pilot.id;
     const hasStream = pilot.streamUrl;
     const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
+    const jumpStart = currentStageId ? isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false;
     
     let displayTime = '';
     let displayTimeInfo = null;
@@ -358,12 +360,14 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           )}
           
           {/* Position */}
-          <div className="w-8 flex-shrink-0 ml-2">
-            <span className="text-[#FF4500] font-bold text-sm">{index + 1}</span>
+          <div className="w-7 flex-shrink-0">
+            <span
+              className={`font-bold text-sm ${statusColor === 'bg-zinc-700' ? 'text-zinc-500' : statusColor.replace('bg-', 'text-')}`}
+              style={{ fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              {index + 1}
+            </span>
           </div>
-          
-          {/* Status indicator */}
-          <div className="w-2 h-2 rounded-full mr-2 flex-shrink-0" style={{ backgroundColor: statusColor.replace('bg-', '') === 'zinc-700' ? '#3f3f46' : statusColor.replace('bg-[', '').replace(']', '') }} />
           
           {/* Pilot name */}
           <div className="flex-1 min-w-0">
@@ -372,9 +376,20 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 {rowDisplayName}
               </span>
               {alert && (
-                <span className="flex-shrink-0 bg-amber-500/30 text-amber-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                  {t('status.alert')}
-                </span>
+                <StatusPill
+                  variant="alert"
+                  text={t('status.alert')}
+                  tooltipTitle={t('status.alertLabel')}
+                  tooltipText={t('status.alertTooltip')}
+                />
+              )}
+              {jumpStart && (
+                <StatusPill
+                  variant="jumpStart"
+                  text={t('status.jumpStart')}
+                  tooltipTitle={t('times.jumpStart')}
+                  tooltipText={t('times.jumpStartTooltip')}
+                />
               )}
             </div>
           </div>

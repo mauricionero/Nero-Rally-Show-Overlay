@@ -139,10 +139,13 @@ theRace:
 # TIMES TAB
 # ===========================================
 times:
-  startTime: "Start Time"
+  startTime: "Ideal"
+  realStartTime: "Real"
   arrivalTime: "Arrival Time"
   totalTime: "Total Time"
   endTime: "End Time"
+  jumpStart: "Jump start"
+  jumpStartTooltip: "Real time before ideal time (penalty)."
   avg: "AVG"
   avgAlertWarning: "Above AVG + DEV"
   avgAlertDanger: "Above AVG + 2×DEV"
@@ -164,6 +167,12 @@ times:
     time: "HH:MM:SS.000"
     shortTime: "HH:MM"
     totalTime: "MM:SS.000"
+  syncLine: "Request times for this pilot from remote systems"
+  syncLinePending: "Requesting data from Times..."
+  syncLineUpdated: "Updated from Times."
+  syncLineNoChange: "Times replied. No changes needed."
+  syncLineNoData: "Times has no data for this line."
+  syncLineError: "Could not request Times data."
 
 # ===========================================
 # STREAMS TAB
@@ -359,7 +368,11 @@ status:
   finished: "Finished"
   notStarted: "Not Started"
   retired: "Retired"
-  alert: "⚠"
+  alert: "⚠️"
+  alertLabel: "Alert"
+  alertTooltip: "Manual alert for this stage."
+  info: "i"
+  jumpStart: "⚡"
   start: "Start"
   active: "Active"
   inactive: "Inactive"
