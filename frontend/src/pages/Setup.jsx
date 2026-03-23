@@ -27,6 +27,12 @@ export default function Setup() {
   const { wsChannelKey, wsEnabled, wsConnectionStatus, wsLastMessageAt, setClientRole } = useRally();
   const [hideStreams, setHideStreams] = useState(false);
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
+  const [messagesLastMinute, setMessagesLastMinute] = useState(0);
+  const [messagesThisSecond, setMessagesThisSecond] = useState(0);
+  const messageBucketsRef = React.useRef(new Array(60).fill(0));
+  const messageBucketIndexRef = React.useRef(0);
+  const messageBucketTotalRef = React.useRef(0);
+  const messageSecondAlertRef = React.useRef(false);
   const hasWebSocketOverlay = wsConnectionStatus === 'connected' && Boolean(wsChannelKey);
 
   useEffect(() => {
@@ -40,6 +46,46 @@ export default function Setup() {
     return () => clearInterval(interval);
   }, [wsEnabled]);
 
+  useEffect(() => {
+    const tick = () => {
+      const buckets = messageBucketsRef.current;
+      const len = buckets.length;
+      const currentIndex = messageBucketIndexRef.current;
+      const nextIndex = (currentIndex + 1) % len;
+      const removed = buckets[nextIndex];
+      if (removed) {
+        messageBucketTotalRef.current -= removed;
+      }
+      buckets[nextIndex] = 0;
+      messageBucketIndexRef.current = nextIndex;
+      setMessagesLastMinute(messageBucketTotalRef.current);
+      setMessagesThisSecond(buckets[nextIndex]);
+      messageSecondAlertRef.current = false;
+    };
+
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!wsLastMessageAt) return;
+    const buckets = messageBucketsRef.current;
+    const index = messageBucketIndexRef.current;
+    buckets[index] += 1;
+    messageBucketTotalRef.current += 1;
+    setMessagesLastMinute(messageBucketTotalRef.current);
+    setMessagesThisSecond(buckets[index]);
+    if (!messageSecondAlertRef.current && buckets[index] >= 100) {
+      messageSecondAlertRef.current = true;
+      toast.error(
+        <span className="text-white">
+          Too many messages in 1 second:{' '}
+          <strong className="text-red-400">{buckets[index]}</strong>
+        </span>
+      );
+    }
+  }, [wsLastMessageAt]);
+
   const wsMessageAgeMs = wsLastMessageAt ? Math.max(0, connectionNow - wsLastMessageAt) : null;
   const connectionBadge = (() => {
     if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
@@ -52,11 +98,17 @@ export default function Setup() {
   const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && wsMessageAgeMs !== null
     ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
     : 0;
+  const activityColor = (() => {
+    if (messagesLastMinute >= 500) return '239, 68, 68';
+    if (messagesLastMinute >= 250) return '249, 115, 22';
+    if (messagesLastMinute >= 100) return '250, 204, 21';
+    return '34, 197, 94';
+  })();
   const activityGlow = activityProgress > 0
-    ? `0 0 ${8 + (18 * activityProgress)}px rgba(34, 197, 94, ${0.18 + (0.5 * activityProgress)})`
+    ? `0 0 ${8 + (18 * activityProgress)}px rgba(${activityColor}, ${0.18 + (0.5 * activityProgress)})`
     : '0 0 0 rgba(34, 197, 94, 0)';
   const activityFill = activityProgress > 0
-    ? `rgba(34, 197, 94, ${0.2 + (0.8 * activityProgress)})`
+    ? `rgba(${activityColor}, ${0.2 + (0.8 * activityProgress)})`
     : 'rgba(63, 63, 70, 0.45)';
 
   const handleGoLive = (url) => {
@@ -77,64 +129,68 @@ export default function Setup() {
           </div>
           
           <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2">
-              <TooltipProvider delayDuration={150}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${connectionBadge.color}`}>
-                      <Wifi className="w-3 h-3" />
-                      <span>{connectionBadge.label}</span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                    <div className="text-xs">
-                      <div className="font-semibold">WebSocket Connection</div>
-                      <div>Status: {wsConnectionStatus}</div>
-                      <div>State badge only reflects socket connection state.</div>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider delayDuration={150}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div
-                      className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
-                      style={{
-                        backgroundColor: activityFill,
-                        boxShadow: activityGlow
-                      }}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                    <div className="text-xs">
-                      <div className="font-semibold">Message Activity</div>
-                      {wsMessageAgeMs !== null ? (
-                        <>
-                          <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
-                          <div>LED fades from full brightness to off over 30 seconds.</div>
-                        </>
-                      ) : (
-                        <div>No WebSocket messages received yet.</div>
-                      )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
             <div className="flex items-start gap-3">
-              <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-zinc-800 bg-[#18181B] px-3 py-2">
-                <Checkbox
-                  checked={hideStreams}
-                  onCheckedChange={setHideStreams}
-                  className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
-                  data-testid="setup-hide-streams-checkbox"
-                />
-                <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium uppercase">
-                  <VideoOff className="w-3 h-3" />
-                  {t('header.hideStreams')}
-                </span>
-              </label>
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex items-center gap-2">
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${connectionBadge.color}`}>
+                          <Wifi className="w-3 h-3" />
+                          <span>{connectionBadge.label}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                        <div className="text-xs">
+                          <div className="font-semibold">WebSocket Connection</div>
+                          <div>Status: {wsConnectionStatus}</div>
+                          <div>State badge only reflects socket connection state.</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
+                          style={{
+                            backgroundColor: activityFill,
+                            boxShadow: activityGlow
+                          }}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                      <div className="text-xs">
+                        <div className="font-semibold">Message Activity</div>
+                        {wsMessageAgeMs !== null ? (
+                          <>
+                            <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
+                            <div>Messages last minute: {messagesLastMinute}</div>
+                            <div>Messages this second: {messagesThisSecond}</div>
+                            <div>LED fades from full brightness to off over 30 seconds.</div>
+                          </>
+                        ) : (
+                            <div>No WebSocket messages received yet.</div>
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-zinc-800 bg-[#18181B] px-3 py-2">
+                  <Checkbox
+                    checked={hideStreams}
+                    onCheckedChange={setHideStreams}
+                    className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                    data-testid="setup-hide-streams-checkbox"
+                  />
+                  <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium uppercase">
+                    <VideoOff className="w-3 h-3" />
+                    {t('header.hideStreams')}
+                  </span>
+                </label>
+              </div>
 
               <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
                 <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">

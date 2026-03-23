@@ -11,6 +11,7 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
+import { toast } from 'sonner';
 import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
 
 // version constant
@@ -38,6 +39,12 @@ export default function Overlay() {
   const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
   const [hideStreams, setHideStreams] = useState(false);
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
+  const [messagesLastMinute, setMessagesLastMinute] = useState(0);
+  const [messagesThisSecond, setMessagesThisSecond] = useState(0);
+  const messageBucketsRef = React.useRef(new Array(60).fill(0));
+  const messageBucketIndexRef = React.useRef(0);
+  const messageBucketTotalRef = React.useRef(0);
+  const messageSecondAlertRef = React.useRef(false);
 
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
@@ -107,6 +114,46 @@ export default function Overlay() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const tick = () => {
+      const buckets = messageBucketsRef.current;
+      const len = buckets.length;
+      const currentIndex = messageBucketIndexRef.current;
+      const nextIndex = (currentIndex + 1) % len;
+      const removed = buckets[nextIndex];
+      if (removed) {
+        messageBucketTotalRef.current -= removed;
+      }
+      buckets[nextIndex] = 0;
+      messageBucketIndexRef.current = nextIndex;
+      setMessagesLastMinute(messageBucketTotalRef.current);
+      setMessagesThisSecond(buckets[nextIndex]);
+      messageSecondAlertRef.current = false;
+    };
+
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!wsLastMessageAt) return;
+    const buckets = messageBucketsRef.current;
+    const index = messageBucketIndexRef.current;
+    buckets[index] += 1;
+    messageBucketTotalRef.current += 1;
+    setMessagesLastMinute(messageBucketTotalRef.current);
+    setMessagesThisSecond(buckets[index]);
+    if (!messageSecondAlertRef.current && buckets[index] >= 100) {
+      messageSecondAlertRef.current = true;
+      toast.error(
+        <span className="text-white">
+          Too many messages in 1 second:{' '}
+          <strong className="text-red-400">{buckets[index]}</strong>
+        </span>
+      );
+    }
+  }, [wsLastMessageAt]);
+
   const wsMessageAgeMs = wsLastMessageAt ? Math.max(0, connectionNow - wsLastMessageAt) : null;
   const connectionBadge = (() => {
     if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
@@ -119,11 +166,17 @@ export default function Overlay() {
   const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && wsMessageAgeMs !== null
     ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
     : 0;
+  const activityColor = (() => {
+    if (messagesLastMinute >= 500) return '239, 68, 68';
+    if (messagesLastMinute >= 250) return '249, 115, 22';
+    if (messagesLastMinute >= 100) return '250, 204, 21';
+    return '34, 197, 94';
+  })();
   const activityGlow = activityProgress > 0
-    ? `0 0 ${8 + (18 * activityProgress)}px rgba(34, 197, 94, ${0.18 + (0.5 * activityProgress)})`
+    ? `0 0 ${8 + (18 * activityProgress)}px rgba(${activityColor}, ${0.18 + (0.5 * activityProgress)})`
     : '0 0 0 rgba(34, 197, 94, 0)';
   const activityFill = activityProgress > 0
-    ? `rgba(34, 197, 94, ${0.2 + (0.8 * activityProgress)})`
+    ? `rgba(${activityColor}, ${0.2 + (0.8 * activityProgress)})`
     : 'rgba(63, 63, 70, 0.45)';
 
   const handleWsConnect = async () => {
@@ -253,6 +306,8 @@ export default function Overlay() {
                       {wsMessageAgeMs !== null ? (
                         <>
                           <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
+                          <div>Messages last minute: {messagesLastMinute}</div>
+                          <div>Messages this second: {messagesThisSecond}</div>
                           <div>LED fades from full brightness to off over 30 seconds.</div>
                         </>
                       ) : (

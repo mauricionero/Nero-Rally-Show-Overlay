@@ -450,7 +450,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                       </div>
                     </td>
                     <td className="p-1 sm:p-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {alertLevel && (
                           <TooltipProvider delayDuration={150}>
                             <Tooltip>
@@ -475,8 +475,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             </Tooltip>
                           </TooltipProvider>
                         )}
-                        <span className="text-white font-bold text-sm uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          {pilot.name}
+                        <span className="text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
                         </span>
                         {showLineSyncRequest && (
                           <>
@@ -517,11 +517,6 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         {retired && (
                           <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
                             RET
-                          </span>
-                        )}
-                        {retired && (
-                          <span className={`text-[10px] font-bold uppercase ${hasRecordedTime ? 'text-amber-400' : 'text-red-400'}`}>
-                            {hasRecordedTime ? `${t('status.retired')} + ${t('times.totalTime')}` : t('status.retired')}
                           </span>
                         )}
                       </div>
@@ -702,7 +697,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                 )}
                 <CardContent className="p-2 pl-3">
                   {/* Pilot Header */}
-                  <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-2.5 min-w-0">
                     {alertLevel && (
                       <TooltipProvider delayDuration={150}>
                         <Tooltip>
@@ -733,8 +728,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         {pilot.carNumber}
                       </span>
                     )}
-                    <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      {pilot.name}
+                    <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
                     </span>
                     {showLineSyncRequest && (
                       <>
