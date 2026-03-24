@@ -113,3 +113,37 @@ code {
         border-bottom-color: inherit;
     }
 }
+
+@keyframes pilot-status-exit {
+    0% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(calc(var(--pilot-status-motion-distance, 18px) * -1));
+    }
+}
+
+@keyframes pilot-status-enter {
+    0% {
+        opacity: 0;
+        transform: translateX(calc(var(--pilot-status-motion-distance, 18px) * -1));
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@layer utilities {
+    .pilot-status-exit-motion {
+        animation: pilot-status-exit var(--pilot-status-motion-exit, 150ms) var(--pilot-status-motion-easing, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
+        will-change: transform, opacity;
+    }
+
+    .pilot-status-enter-motion {
+        animation: pilot-status-enter var(--pilot-status-motion-enter, 200ms) var(--pilot-status-motion-easing, cubic-bezier(0.22, 1, 0.36, 1));
+        will-change: transform, opacity;
+    }
+}

@@ -13,6 +13,11 @@ import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
+import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
+import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
+import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
+import { formatDurationMs, formatDurationSeconds, formatSecondsValue } from '../../utils/timeFormat.js';
+
 const SCENE_3_CONFIG_KEY = 'scene3Config';
 
 // Helper to calculate Lap Race positions and data
@@ -72,40 +77,16 @@ const calculateLapRaceLeaderboard = (pilots, stageId, lapTimes, stagePilots, num
   return pilotData;
 };
 
-// Format milliseconds to readable time string
-const formatTimeMs = (ms) => {
-  if (!ms) return '-';
-  const totalSecs = ms / 1000;
-  const mins = Math.floor(totalSecs / 60);
-  const secs = (totalSecs % 60).toFixed(3);
-  return `${mins}:${secs.padStart(6, '0')}`;
-};
-
-// Format cumulative rally time from seconds, switching to HH:MM:SS.fff above 1 hour
-const formatOverallTime = (totalSeconds) => {
-  if (!totalSeconds) return '-';
-
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = (totalSeconds % 60).toFixed(3).padStart(6, '0');
-
-  if (hours > 0) {
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${seconds}`;
-  }
-
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  return `${String(totalMinutes).padStart(2, '0')}:${seconds}`;
-};
-
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert } = useRally();
+  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals } = useRally();
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
   const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const currentTime = useSecondAlignedClock();
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   
   const selectedStage = stages.find(s => s.id === selectedStageId);
+  const alertStageId = selectedStageId || currentStageId || null;
   
   // Filter stages by type
   const ssStages = stages.filter(s => isSpecialStageType(s.type));
@@ -136,10 +117,21 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       .find((stage) => isSpecialStageType(stage.type)) || null;
   }, [selectedStage, currentStageId, sortedAllStages, sortedSSStages]);
 
-  useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(new Date()), 100);
-    return () => clearInterval(interval);
-  }, []);
+  const categoryById = useMemo(() => (
+    new Map(categories.map((category) => [category.id, category]))
+  ), [categories]);
+
+  const pilotUiMetaById = useMemo(() => (
+    new Map(pilots.map((pilot) => [
+      pilot.id,
+      {
+        category: categoryById.get(pilot.categoryId) || null,
+        pilotMeta: [pilot.car, pilot.team].filter(Boolean).join(' • '),
+        alert: alertStageId ? isStageAlert(pilot.id, alertStageId) : false,
+        jumpStart: alertStageId ? isJumpStartForStage(pilot.id, alertStageId, startTimes, realStartTimes) : false
+      }
+    ]))
+  ), [alertStageId, categoryById, isStageAlert, pilots, realStartTimes, startTimes]);
 
   useEffect(() => {
     if (followCurrentStage && currentStageId && stages.some((stage) => stage.id === currentStageId) && currentStageId !== selectedStageId) {
@@ -197,6 +189,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             retiredStages,
             stageDate: selectedStage?.date,
             now: sceneNow,
+            decimals: timeDecimals,
             startLabel: t('status.start'),
             retiredLabel: t('status.retired')
           });
@@ -236,7 +229,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
               const stageStatus = getPilotStatus(pilot.id, stage.id, startTimes, times, retiredStages, stage.date, sceneNow);
               const stageStartTime = startTimes[pilot.id]?.[stage.id];
               if (stageStatus === 'racing' && stageStartTime) {
-                const runningTime = getRunningTime(stageStartTime, stage.date, sceneNow);
+                const runningTime = getRunningTime(stageStartTime, stage.date, sceneNow, timeDecimals);
                 overallTime += parseTime(runningTime) || 0;
                 hasRunningInOverall = true;
               }
@@ -245,7 +238,9 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             if (stage.id === selectedStageId) break;
           }
           
-          const overallDisplay = (completedStages > 0 || hasRunningInOverall) ? formatOverallTime(overallTime) : '-';
+          const overallDisplay = (completedStages > 0 || hasRunningInOverall)
+            ? formatDurationSeconds(overallTime, timeDecimals, { showHoursIfNeeded: true, padMinutes: true })
+            : '-';
           const overallColor = hasRunningInOverall ? 'text-[#FACC15]' : 'text-white';
           
           return {
@@ -284,14 +279,16 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           const status = getPilotStatus(pilot.id, stage.id, startTimes, times, retiredStages, stage.date, sceneNow);
           const startTime = startTimes[pilot.id]?.[stage.id];
           if (status === 'racing' && startTime && !hasRunningStage) {
-            const runningTime = getRunningTime(startTime, stage.date, sceneNow);
+            const runningTime = getRunningTime(startTime, stage.date, sceneNow, timeDecimals);
             totalTime += parseTime(runningTime);
             hasRunningStage = true;
           }
         }
       });
 
-      const displayTime = (completedStages > 0 || hasRunningStage) ? formatOverallTime(totalTime) : '-';
+      const displayTime = (completedStages > 0 || hasRunningStage)
+        ? formatDurationSeconds(totalTime, timeDecimals, { showHoursIfNeeded: true, padMinutes: true })
+        : '-';
 
       return {
         ...pilot,
@@ -307,9 +304,26 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     }));
   }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, sceneNow, referenceSpecialStage, t]);
 
-  const leader = leaderboard.find(p => p.hasTime);
   const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
-  const alertStageId = selectedStageId || currentStageId || null;
+  const leaderboardStatusItems = useMemo(() => (
+    leaderboard.map((pilot) => ({
+      ...pilot,
+      key: pilot.id,
+      statusKey: isLapRaceSelected
+        ? (pilot.isFinished ? 'finished' : (pilot.isRacing ? 'racing' : 'not_started'))
+        : (pilot.isRetired ? 'retired' : (pilot.status || (pilot.hasTime ? 'finished' : 'not_started')))
+    }))
+  ), [isLapRaceSelected, leaderboard]);
+  const {
+    displayedItems: displayedLeaderboard,
+    getStatusMotionClassName,
+    pilotStatusMotionConfig,
+    isStatusTransitionActive
+  } = usePilotStatusMotion(leaderboardStatusItems);
+  const { setMotionRef } = usePilotPositionMotion(displayedLeaderboard, {
+    disabled: isStatusTransitionActive
+  });
+  const displayLeader = displayedLeaderboard.find((pilot) => pilot.hasTime);
 
   // Get stage icon based on type
   const getStageIcon = (type) => {
@@ -453,36 +467,45 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
               </tr>
             </thead>
             <tbody>
-              {leaderboard.map((pilot, index) => {
+              {displayedLeaderboard.map((pilot, index) => {
                 // Calculate gap
                 let gap = '-';
-                if (leader && pilot.id !== leader.id && pilot.hasTime) {
+                if (displayLeader && pilot.id !== displayLeader.id && pilot.hasTime) {
                   if (isLapRaceSelected) {
-                    if (pilot.isFinished && leader.isFinished) {
-                      const gapMs = pilot.totalTimeMs - leader.totalTimeMs;
-                      gap = '+' + formatTimeMs(gapMs);
+                    if (pilot.isFinished && displayLeader.isFinished) {
+                      const gapMs = pilot.totalTimeMs - displayLeader.totalTimeMs;
+                      gap = '+' + formatDurationMs(gapMs, timeDecimals);
                     } else if (pilot.isRacing || pilot.isFinished) {
-                      const lapDiff = (leader.completedLaps || 0) - (pilot.completedLaps || 0);
+                      const lapDiff = (displayLeader.completedLaps || 0) - (pilot.completedLaps || 0);
                       if (lapDiff > 0) {
                         gap = `+${lapDiff} ${t('scene3.laps').toLowerCase()}`;
                       }
                     }
                   } else {
-                    gap = '+' + (pilot.sortTime - leader.sortTime).toFixed(3) + 's';
+                    gap = '+' + formatSecondsValue(pilot.sortTime - displayLeader.sortTime, timeDecimals) + 's';
                   }
-                } else if (pilot.hasTime && pilot.id === leader?.id) {
+                } else if (pilot.hasTime && pilot.id === displayLeader?.id) {
                   gap = t('scene3.leader');
                 }
                 
-                const category = categories.find(c => c.id === pilot.categoryId);
-                const pilotMeta = [pilot.car, pilot.team].filter(Boolean).join(' • ');
-                const alert = alertStageId ? isStageAlert(pilot.id, alertStageId) : false;
-                const jumpStart = alertStageId ? isJumpStartForStage(pilot.id, alertStageId, startTimes, realStartTimes) : false;
+                const pilotUiMeta = pilotUiMetaById.get(pilot.id) || {};
+                const category = pilotUiMeta.category || null;
+                const pilotMeta = pilotUiMeta.pilotMeta || '';
+                const alert = pilotUiMeta.alert || false;
+                const jumpStart = pilotUiMeta.jumpStart || false;
 
                 return (
                   <tr
                     key={pilot.id}
-                    className="border-b border-white/10 hover:bg-white/5 transition-colors relative">
+                    ref={(node) => setMotionRef(pilot.id, node)}
+                    className={`border-b border-white/10 hover:bg-white/5 transition-colors relative ${getStatusMotionClassName(pilot.id)}`}
+                    style={{
+                      willChange: 'transform',
+                      '--pilot-status-motion-exit': `${pilotStatusMotionConfig.exitDuration}ms`,
+                      '--pilot-status-motion-enter': `${pilotStatusMotionConfig.enterDuration}ms`,
+                      '--pilot-status-motion-distance': `${pilotStatusMotionConfig.distance}px`,
+                      '--pilot-status-motion-easing': pilotStatusMotionConfig.easing
+                    }}>
                     <td className="p-1 w-1 relative">
                       {category && (
                         <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
@@ -570,7 +593,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                             pilot.isRacing ? 'text-[#FACC15]' : 
                             'text-zinc-500'
                           }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {pilot.hasTime ? formatTimeMs(pilot.totalTimeMs) : '-'}
+                            {pilot.hasTime ? formatDurationMs(pilot.totalTimeMs, timeDecimals) : '-'}
                           </span>
                         </td>
                       </>

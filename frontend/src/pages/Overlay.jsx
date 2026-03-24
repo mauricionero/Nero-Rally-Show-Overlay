@@ -46,6 +46,10 @@ export default function Overlay() {
   const messageBucketTotalRef = React.useRef(0);
   const messageSecondAlertRef = React.useRef(false);
 
+  useEffect(() => {
+    document.title = `${t('header.title')} - ${t('header.overlay')}`;
+  }, [t]);
+
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
     if (autoConnectAttempted) return;

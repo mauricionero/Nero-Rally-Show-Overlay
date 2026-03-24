@@ -7,19 +7,13 @@ import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { TimeInput } from '../TimeInput.jsx';
 import { CheckSquare, Square, Clock, X } from 'lucide-react';
+import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
 
 // Helper to get current time in HH:MM:SS.mmm format
-const getCurrentTimeString = () => {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  const ms = String(now.getMilliseconds()).padStart(3, '0');
-  return `${hours}:${minutes}:${seconds}.${ms}`;
-};
+const getCurrentTimeString = (timeDecimals) => formatClockFromDate(new Date(), timeDecimals);
 
 // Helper to calculate lap duration from previous lap
-const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
+const calculateLapDuration = (currentLapTime, previousLapTime, startTime, timeDecimals) => {
   if (!currentLapTime) return '';
 
   const parseTime = (timeStr) => {
@@ -41,10 +35,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
   const diffMs = currentMs - previousMs;
   if (diffMs < 0) return '';
 
-  const totalSecs = diffMs / 1000;
-  const mins = Math.floor(totalSecs / 60);
-  const secs = (totalSecs % 60).toFixed(3);
-  return `${mins}:${secs.padStart(6, '0')}`;
+  return formatDurationMs(diffMs, timeDecimals, { fallback: '' });
 };
 
 export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, comparePilotsForTimes, isReadOnly = false }) {
@@ -57,7 +48,8 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     togglePilotInStage,
     selectAllPilotsInStage,
     deselectAllPilotsInStage,
-    updateStage
+    updateStage,
+    timeDecimals
   } = useRally();
 
   const selectedPilotIds = getStagePilots(stage.id);
@@ -243,7 +235,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                         {lapsArray.map((lapIndex) => {
                           const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
                           const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, stage.id, lapIndex - 1) : null;
-                          const lapDuration = calculateLapDuration(lapTime, prevLapTime, stage.startTime);
+                          const lapDuration = calculateLapDuration(lapTime, prevLapTime, stage.startTime, timeDecimals);
 
                           return (
                             <td key={lapIndex} className="p-2">
@@ -252,12 +244,14 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                                   <TimeInput
                                     value={lapTime}
                                     onChange={(val) => setLapTime(pilot.id, stage.id, lapIndex, val)}
-                                    placeholder={t('times.placeholder.time')}
+                                    placeholder={getTimePlaceholder('clock', timeDecimals)}
+                                    format="clock"
+                                    decimals={timeDecimals}
                                     className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                                     readOnly={isReadOnly}
                                   />
                                   <button
-                                    onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString())}
+                                    onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString(timeDecimals))}
                                     className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
                                     title={t('times.now')}
                                     disabled={isReadOnly}

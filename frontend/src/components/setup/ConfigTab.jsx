@@ -7,10 +7,10 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Image, Globe, Trash2, Palette } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Copy, Check, Image, Globe, Trash2, Palette, Timer } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
 import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
-import { getWebSocketOverlayUrl } from '../../utils/overlayUrls.js';
+import { getWebSocketOverlayUrl, getWebSocketTimesUrl } from '../../utils/overlayUrls.js';
 import { isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 export default function ConfigTab() {
@@ -20,6 +20,8 @@ export default function ConfigTab() {
     categories,
     stages,
     cameras,
+    timeDecimals,
+    setTimeDecimals,
     chromaKey,
     setChromaKey,
     logoUrl,
@@ -138,7 +140,14 @@ export default function ConfigTab() {
     const key = wsChannelKey || newKey;
     const url = getWebSocketOverlayUrl(key);
     navigator.clipboard.writeText(url);
-    toast.success('Overlay URL with key copied!');
+    toast.success(t('config.copyOverlayUrlSuccess'));
+  };
+
+  const handleCopyTimesUrl = () => {
+    const key = wsChannelKey || newKey;
+    const url = getWebSocketTimesUrl(key);
+    navigator.clipboard.writeText(url);
+    toast.success(t('config.copyTimesUrlSuccess'));
   };
 
   return (
@@ -178,6 +187,36 @@ export default function ConfigTab() {
                 />
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Language Selection */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Timer className="w-5 h-5" />
+            {t('config.timeDisplay')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.timeDisplayDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 max-w-[220px]">
+            <Label className="text-white">{t('config.timeDecimals')}</Label>
+            <Input
+              type="number"
+              min="0"
+              max="3"
+              step="1"
+              value={timeDecimals}
+              onChange={(e) => {
+                const numericValue = Number(e.target.value);
+                setTimeDecimals(Math.min(3, Math.max(0, Number.isFinite(numericValue) ? Math.trunc(numericValue) : 0)));
+              }}
+              className="bg-[#09090B] border-zinc-700 text-white"
+              data-testid="input-time-decimals"
+            />
+            <p className="text-xs text-zinc-500">{t('config.timeDecimalsHelp')}</p>
           </div>
         </CardContent>
       </Card>
@@ -323,14 +362,24 @@ export default function ConfigTab() {
                   </Button>
                 </div>
               </div>
-              <Button
-                onClick={handleCopyOverlayUrl}
-                variant="outline"
-                className="w-full border-zinc-700 text-white"
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Overlay URL with Key
-              </Button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Button
+                  onClick={handleCopyOverlayUrl}
+                  variant="outline"
+                  className="border-zinc-700 text-white"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  {t('config.copyOverlayUrl')}
+                </Button>
+                <Button
+                  onClick={handleCopyTimesUrl}
+                  variant="outline"
+                  className="border-zinc-700 text-white"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  {t('config.copyTimesUrl')}
+                </Button>
+              </div>
               <div className="text-xs text-zinc-400">
                 Last times sync: {lastTimesSyncAt ? new Date(lastTimesSyncAt).toLocaleTimeString() : '--'}
               </div>
@@ -461,34 +510,6 @@ export default function ConfigTab() {
               >
                 {t('config.applyCustom')}
               </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Keyboard Shortcuts */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('config.keyboardShortcuts')}</CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.keyboardShortcutsDesc')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">1</kbd> {t('config.switchToScene')} 1</span>
-              <span className="text-zinc-500">{t('scenes.liveStage')}</span>
-            </div>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">2</kbd> {t('config.switchToScene')} 2</span>
-              <span className="text-zinc-500">{t('scenes.timingTower')}</span>
-            </div>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">3</kbd> {t('config.switchToScene')} 3</span>
-              <span className="text-zinc-500">{t('scenes.leaderboard')}</span>
-            </div>
-            <div className="flex justify-between p-2 bg-[#09090B] rounded text-white">
-              <span><kbd className="px-2 py-1 bg-zinc-800 rounded">4</kbd> {t('config.switchToScene')} 4</span>
-              <span className="text-zinc-500">{t('scenes.pilotFocus')}</span>
             </div>
           </div>
         </CardContent>

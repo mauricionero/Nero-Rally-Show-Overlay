@@ -36,6 +36,10 @@ export default function Setup() {
   const hasWebSocketOverlay = wsConnectionStatus === 'connected' && Boolean(wsChannelKey);
 
   useEffect(() => {
+    document.title = `${t('header.title')} - ${t('header.subtitle')}`;
+  }, [t]);
+
+  useEffect(() => {
     setClientRole('setup');
     return () => setClientRole('client');
   }, [setClientRole]);

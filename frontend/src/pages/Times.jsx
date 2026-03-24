@@ -57,6 +57,10 @@ export default function Times() {
   const messageBucketTotalRef = React.useRef(0);
   const messageSecondAlertRef = React.useRef(false);
 
+  useEffect(() => {
+    document.title = `${t('header.title')} - ${t('header.times')}`;
+  }, [t]);
+
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   const selectedStage = sortedStages.find((stage) => stage.id === selectedStageId) || null;
 

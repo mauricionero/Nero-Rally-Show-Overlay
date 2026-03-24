@@ -4,21 +4,25 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { StartInformationValue } from '../StartInformationValue.jsx';
+import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import StatusPill from '../StatusPill.jsx';
-import { getPilotStatus, getReferenceNow, sortPilotsByStatus, parseTime, startInformationTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
+import { parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageNumberLabel, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
+import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
+import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
+import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
+import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { formatDurationMs, formatSecondsValue } from '../../utils/timeFormat.js';
 
 const TIMING_TOWER_WIDTH_KEY = 'scene2TimingTowerWidth';
 const SCENE_2_CONFIG_KEY = 'scene2Config';
 const DEFAULT_TOWER_WIDTH = 300;
 const MIN_TOWER_WIDTH = 260;
 const MAX_TOWER_WIDTH = 460;
-
 const abbreviateCompactName = (name) => {
   if (!name) return '';
 
@@ -85,23 +89,13 @@ const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLa
   }));
 };
 
-// Format milliseconds to readable time
-const formatTime = (ms) => {
-  if (!ms) return '';
-  const totalSecs = ms / 1000;
-  const mins = Math.floor(totalSecs / 60);
-  const secs = (totalSecs % 60).toFixed(3);
-  return `${mins}:${secs.padStart(6, '0')}`;
-};
-
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, retiredStages, isStageAlert, timeDecimals
   } = useRally();
   const { t } = useTranslation();
   
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedFeedValue, setSelectedFeedValue] = useState(() => loadSceneConfig(SCENE_2_CONFIG_KEY, { selectedFeedValue: null }).selectedFeedValue);
   const [expandedPilotId, setExpandedPilotId] = useState(() => loadSceneConfig(SCENE_2_CONFIG_KEY, { expandedPilotId: null }).expandedPilotId);
   const [towerWidth, setTowerWidth] = useState(() => {
@@ -119,12 +113,6 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRace = isLapRaceStageType(currentStage?.type);
   const isSSStage = isSpecialStageType(currentStage?.type);
-  const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
-  useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(new Date()), 100);
-    return () => clearInterval(interval);
-  }, []);
-
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(TIMING_TOWER_WIDTH_KEY, String(towerWidth));
@@ -165,37 +153,73 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     };
   }, []);
 
-  // Calculate sorted pilots based on stage type
-  const sortedPilotsData = useMemo(() => {
-    if (!currentStageId || !currentStage) return [];
-    
-    if (isLapRace) {
-      return calculateLapRaceData(pilots, currentStageId, lapTimes, stagePilots, currentStage.numberOfLaps || 5);
+  const sortedLapRacePilotsData = useMemo(() => {
+    if (!currentStageId || !currentStage || !isLapRace) return [];
+    return calculateLapRaceData(pilots, currentStageId, lapTimes, stagePilots, currentStage.numberOfLaps || 5);
+  }, [currentStage, currentStageId, isLapRace, lapTimes, pilots, stagePilots]);
+
+  const displaySortedPilots = useMemo(() => (
+    sortPilotsByDisplayOrder(pilots, categories)
+  ), [pilots, categories]);
+
+  const displayOrderByPilotId = useMemo(() => (
+    new Map(displaySortedPilots.map((pilot, index) => [pilot.id, index]))
+  ), [displaySortedPilots]);
+
+  const specialStageBaseItems = useMemo(() => {
+    if (!currentStageId || !currentStage || isLapRace) {
+      return [];
     }
-    
-    // SS Stage - use existing logic
-    const sortedPilots = sortPilotsByStatus(pilots, categories, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
-    return sortedPilots.map((pilot, index) => {
-      const status = getPilotStatus(pilot.id, currentStageId, startTimes, times, retiredStages, currentStage?.date, sceneNow);
-      const startTime = startTimes[pilot.id]?.[currentStageId];
-      const stageStartDateTime = status === 'not_started' && startTime
-        ? getStageDateTime(currentStage?.date, startTime)
-        : null;
-      const remainingMs = stageStartDateTime ? stageStartDateTime.getTime() - sceneNow.getTime() : null;
-      const preStart = status === 'not_started'
-        && remainingMs !== null
-        && remainingMs > 0
-        && remainingMs <= 10000;
+
+    return pilots.map((pilot) => {
+      const startTime = startTimes[pilot.id]?.[currentStageId] || '';
+      const finishTime = times[pilot.id]?.[currentStageId] || '';
+      const retired = !!retiredStages?.[pilot.id]?.[currentStageId];
+      const startDateTime = getStageDateTime(currentStage.date, startTime);
+      const displayOrder = displayOrderByPilotId.get(pilot.id) ?? Number.MAX_SAFE_INTEGER;
+
       return {
+        id: pilot.id,
         pilot,
-        position: index + 1,
-        status,
-        preStart,
-        isFinished: status === 'finished',
-        isRacing: status === 'racing'
+        startTime,
+        finishTime,
+        retired,
+        fixedStatus: finishTime ? 'finished' : (retired ? 'retired' : 'not_started'),
+        preStartAtMs: startDateTime ? startDateTime.getTime() - 10000 : null,
+        startAtMs: startDateTime ? startDateTime.getTime() : null,
+        sortValues: {
+          racing: displayOrder,
+          pre_start: displayOrder,
+          finished: finishTime ? parseTime(finishTime) : Number.MAX_SAFE_INTEGER,
+          not_started: displayOrder,
+          retired: displayOrder
+        }
       };
     });
-  }, [pilots, currentStageId, currentStage, isLapRace, lapTimes, stagePilots, startTimes, times, retiredStages, sceneNow]);
+  }, [currentStage, currentStageId, displayOrderByPilotId, isLapRace, pilots, retiredStages, startTimes, times]);
+
+  const orderedSpecialStageItems = useScheduledPilotBuckets(specialStageBaseItems, {
+    racing: 0,
+    pre_start: 1,
+    finished: 2,
+    not_started: 3,
+    retired: 4
+  });
+
+  const sortedPilotsData = useMemo(() => {
+    if (isLapRace) {
+      return sortedLapRacePilotsData;
+    }
+
+    return orderedSpecialStageItems.map((item, index) => ({
+      ...item,
+      position: index + 1,
+      status: item.currentStatus === 'pre_start' ? 'not_started' : item.currentStatus,
+      preStart: item.currentStatus === 'pre_start',
+      isFinished: item.currentStatus === 'finished',
+      isRacing: item.currentStatus === 'racing'
+    }));
+  }, [isLapRace, orderedSpecialStageItems, sortedLapRacePilotsData]);
 
   useEffect(() => {
     if (!selectedFeedValue && sortedPilotsData.length > 0) {
@@ -230,6 +254,55 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     }
   }, [expandedPilotId, pilots]);
 
+  const categoryById = useMemo(() => (
+    new Map(categories.map((category) => [category.id, category]))
+  ), [categories]);
+
+  const pilotUiMetaById = useMemo(() => (
+    new Map(pilots.map((pilot) => [
+      pilot.id,
+      {
+        category: categoryById.get(pilot.categoryId) || null,
+        fullName: pilot.name,
+        compactName: abbreviateCompactName(pilot.name),
+        hasStream: Boolean(pilot.streamUrl),
+        alert: currentStageId ? isStageAlert(pilot.id, currentStageId) : false,
+        jumpStart: currentStageId ? isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false
+      }
+    ]))
+  ), [categories, categoryById, currentStageId, isStageAlert, pilots, realStartTimes, startTimes]);
+
+  const towerItems = useMemo(() => {
+    const onStage = sortedPilotsData.filter((data) => data.status === 'racing' || data.preStart);
+    const onStageOrdered = [...onStage].sort((a, b) => {
+      if (a.preStart === b.preStart) return 0;
+      return a.preStart ? 1 : -1;
+    });
+    const finished = sortedPilotsData.filter((data) => data.status === 'finished');
+    const notStarted = sortedPilotsData.filter((data) => data.status === 'not_started' && !data.preStart);
+    const retired = sortedPilotsData.filter((data) => data.status === 'retired');
+
+    return [...onStageOrdered, ...finished, ...notStarted, ...retired].map((data) => ({
+      ...data,
+      key: data.pilot.id,
+      statusKey: data.preStart ? 'pre_start' : data.status
+    }));
+  }, [sortedPilotsData]);
+  const {
+    displayedItems: displayedTowerItems,
+    getStatusMotionClassName,
+    pilotStatusMotionConfig,
+    isStatusTransitionActive
+  } = usePilotStatusMotion(towerItems);
+  const { setMotionRef } = usePilotPositionMotion(displayedTowerItems, {
+    disabled: isStatusTransitionActive
+  });
+  const onStageOrdered = displayedTowerItems.filter((data) => data.statusKey === 'racing' || data.statusKey === 'pre_start');
+  const finished = displayedTowerItems.filter((data) => data.statusKey === 'finished');
+  const notStarted = displayedTowerItems.filter((data) => data.statusKey === 'not_started');
+  const retired = displayedTowerItems.filter((data) => data.statusKey === 'retired');
+  const leader = finished[0];
+
   if (!currentStageId) {
     return (
       <div className="relative w-full h-full flex items-center justify-center" data-testid="scene-2-timing-tower">
@@ -237,16 +310,6 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       </div>
     );
   }
-
-  const onStage = sortedPilotsData.filter(d => d.status === 'racing' || d.preStart);
-  const onStageOrdered = [...onStage].sort((a, b) => {
-    if (a.preStart === b.preStart) return 0;
-    return a.preStart ? 1 : -1;
-  });
-  const finished = sortedPilotsData.filter(d => d.status === 'finished');
-  const notStarted = sortedPilotsData.filter(d => d.status === 'not_started' && !d.preStart);
-  const retired = sortedPilotsData.filter(d => d.status === 'retired');
-  const leader = finished[0];
 
   const handleArrowClick = (e, pilotId) => {
     e.stopPropagation();
@@ -268,62 +331,41 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   };
 
   const renderPilotRow = (data, index) => {
-    const { pilot, position, completedLaps, totalTimeMs, isFinished, isRacing } = data;
-    const category = categories.find(c => c.id === pilot.categoryId);
+    const { pilot, completedLaps, totalTimeMs, isFinished, isRacing, startTime, finishTime, retired } = data;
+    const pilotUiMeta = pilotUiMetaById.get(pilot.id) || {};
+    const category = pilotUiMeta.category || null;
     const isExpanded = expandedPilotId === pilot.id;
-    const hasStream = pilot.streamUrl;
-    const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
-    const jumpStart = currentStageId ? isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false;
+    const hasStream = pilotUiMeta.hasStream || false;
+    const alert = pilotUiMeta.alert || false;
+    const jumpStart = pilotUiMeta.jumpStart || false;
     
-    let displayTime = '';
-    let displayTimeInfo = null;
     let timeColor = 'text-zinc-500';
     let statusColor = 'bg-zinc-700';
     
     if (isLapRace) {
       if (isFinished) {
-        displayTime = formatTime(totalTimeMs);
         timeColor = 'text-[#22C55E]';
         statusColor = 'bg-[#22C55E]';
       } else if (isRacing) {
-        displayTime = `${t('times.lap')} ${completedLaps}/${currentStage?.numberOfLaps || 0}`;
         timeColor = 'text-[#FACC15]';
         statusColor = 'bg-[#FACC15]';
       }
     } else {
-      // SS Stage logic
-      const timeInfo = startInformationTime({
-        pilotId: pilot.id,
-        stageId: currentStageId,
-        startTimes,
-        times,
-        retiredStages,
-        stageDate: currentStage?.date,
-        now: sceneNow,
-        startLabel: t('status.start'),
-        retiredLabel: t('status.retired')
-      });
-      displayTimeInfo = timeInfo;
-      
-      if (data.status === 'retired') {
-        displayTime = timeInfo.text;
+      if (data.currentStatus === 'retired') {
         timeColor = 'text-red-400';
         statusColor = 'bg-[#EF4444]';
-      } else if (isFinished && timeInfo.finishTime) {
-        displayTime = timeInfo.text;
-        timeColor = timeInfo.retired ? 'text-amber-400' : 'text-[#22C55E]';
-        statusColor = timeInfo.retired ? 'bg-[#F59E0B]' : 'bg-[#22C55E]';
-      } else if (isRacing && timeInfo.timer) {
-        displayTime = timeInfo.text;
+      } else if (isFinished && finishTime) {
+        timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
+        statusColor = retired ? 'bg-[#F59E0B]' : 'bg-[#22C55E]';
+      } else if (isRacing) {
         timeColor = 'text-[#FF8C00]';
         statusColor = 'bg-[#FF8C00]';
-      } else if (timeInfo.text) {
-        displayTime = timeInfo.text;
-        timeColor = 'text-zinc-500';
       }
     }
 
-    const rowDisplayName = displayTime ? abbreviateCompactName(pilot.name) : pilot.name;
+    const rowDisplayName = (finishTime || retired || startTime || isLapRace)
+      ? pilotUiMeta.compactName
+      : pilotUiMeta.fullName;
 
     // Calculate gap from leader
     let gap = '';
@@ -333,26 +375,36 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         const pilotTime = totalTimeMs;
         if (leaderTime && pilotTime) {
           const gapMs = pilotTime - leaderTime;
-          gap = `+${formatTime(gapMs)}`;
+          gap = `+${formatDurationMs(gapMs, timeDecimals, { fallback: '' })}`;
         }
       } else {
-        const leaderTime = parseTime(times[leader.pilot.id]?.[currentStageId]);
-        const pilotTime = parseTime(times[pilot.id]?.[currentStageId]);
+        const leaderTime = parseTime(leader.finishTime);
+        const pilotTime = parseTime(finishTime);
         if (leaderTime && pilotTime) {
-          const gapMs = pilotTime - leaderTime;
-          const gapSecs = gapMs / 1000;
-          gap = `+${gapSecs.toFixed(3)}s`;
+          const gapSeconds = pilotTime - leaderTime;
+          gap = `+${formatSecondsValue(gapSeconds, timeDecimals, '')}s`;
         }
       }
     }
 
     return (
-      <div key={pilot.id}>
+      <div
+        key={pilot.id}
+        ref={(node) => setMotionRef(pilot.id, node)}
+        className={getStatusMotionClassName(pilot.id)}
+        style={{
+          '--pilot-status-motion-exit': `${pilotStatusMotionConfig.exitDuration}ms`,
+          '--pilot-status-motion-enter': `${pilotStatusMotionConfig.enterDuration}ms`,
+          '--pilot-status-motion-distance': `${pilotStatusMotionConfig.distance}px`,
+          '--pilot-status-motion-easing': pilotStatusMotionConfig.easing
+        }}
+      >
         <div 
           onClick={() => handleRowClick(pilot.id)}
           className={`relative flex items-center px-3 py-2 border-b border-zinc-800/50 transition-all duration-300 ${
             hasStream ? 'cursor-pointer hover:bg-white/5' : ''
           } ${isExpanded ? 'bg-white/10' : ''}`}
+          style={{ willChange: 'transform' }}
         >
           {/* Category stripe */}
           {category && (
@@ -396,12 +448,23 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           
           {/* Time/Gap */}
           <div className="text-right flex-shrink-0 ml-2">
-            <StartInformationValue
-              info={displayTimeInfo}
-              fallback={displayTime}
-              className={`font-mono text-sm ${timeColor}`}
-              style={{ fontFamily: 'JetBrains Mono, monospace' }}
-            />
+            {isLapRace ? (
+              <span className={`font-mono text-sm ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {isFinished ? formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' }) : (isRacing ? `${t('times.lap')} ${completedLaps}/${currentStage?.numberOfLaps || 0}` : '')}
+              </span>
+            ) : (
+              <LiveStartInformationValue
+                startTime={startTime}
+                finishTime={finishTime}
+                retired={retired}
+                stageDate={currentStage?.date}
+                startLabel={t('status.start')}
+                retiredLabel={t('status.retired')}
+                liveStatus={data.currentStatus}
+                className={`font-mono text-sm ${timeColor}`}
+                style={{ fontFamily: 'JetBrains Mono, monospace' }}
+              />
+            )}
             {gap && (
               <span className="text-zinc-500 text-xs ml-2 font-mono">{gap}</span>
             )}
@@ -526,7 +589,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         {finished.length > 0 && (
           <div className="mb-2">
             <div className="px-3 py-1 bg-[#22C55E]/20 border-l-2 border-[#22C55E]">
-              <span className="text-[#22C55E] text-xs font-bold uppercase">{t('scene2.finished')}</span>
+              <span className="text-[#22C55E] text-xs font-bold uppercase flex items-center gap-1">
+                <Flag className="w-3 h-3" />
+                {t('scene2.finished')}
+              </span>
             </div>
             {finished.map((data, index) => renderPilotRow(data, index))}
           </div>

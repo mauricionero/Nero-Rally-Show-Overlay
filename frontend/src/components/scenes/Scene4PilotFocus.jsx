@@ -16,6 +16,8 @@ import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getPilotScheduledEndTime } from '../../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
+import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
+import { formatDurationMs } from '../../utils/timeFormat.js';
 import {
   getStageNumberLabel,
   getStageTitle,
@@ -49,15 +51,6 @@ const getStageTypeColor = (type) => {
   }
 };
 
-// Format milliseconds to readable time
-const formatTimeMs = (ms) => {
-  if (!ms) return '-';
-  const totalSecs = ms / 1000;
-  const mins = Math.floor(totalSecs / 60);
-  const secs = (totalSecs % 60).toFixed(3);
-  return `${mins}:${secs.padStart(6, '0')}`;
-};
-
 // Calculate lap duration from timestamps
 const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
   const parseTimeToMs = (timeStr) => {
@@ -85,7 +78,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert
+    lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert, timeDecimals
   } = useRally();
   const { t } = useTranslation();
   
@@ -93,13 +86,8 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedStageId: currentStageId || stages[0]?.id || null }).selectedStageId);
   const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
   const [selectedMainFeedValue, setSelectedMainFeedValue] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedMainFeedValue: 'none' }).selectedMainFeedValue);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const currentTime = useSecondAlignedClock();
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
-
-  useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(new Date()), 100);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     if (!selectedPilotId && pilots.length > 0) {
@@ -187,7 +175,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         let status = 'not_started';
         
         if (isFinished) {
-          displayTime = formatTimeMs(totalTimeMs);
+          displayTime = formatDurationMs(totalTimeMs, timeDecimals);
           status = 'finished';
         } else if (isRacing) {
           displayTime = `Lap ${completedLaps}/${numberOfLaps}`;
@@ -215,6 +203,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           retiredStages,
           stageDate: stage.date,
           now: sceneNow,
+          decimals: timeDecimals,
           startLabel: t('status.start'),
           retiredLabel: t('status.retired')
         });
@@ -667,7 +656,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                         <div className="text-right">
                           {isCompleted ? (
                             <span className="text-[#22C55E] font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                              {lapDuration ? formatTimeMs(lapDuration) : '-'}
+                              {lapDuration ? formatDurationMs(lapDuration, timeDecimals) : '-'}
                             </span>
                           ) : (
                             <span className="text-zinc-600 text-sm">-</span>
@@ -680,7 +669,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     <div className="flex justify-between items-center p-2 rounded bg-[#FACC15]/20 border border-[#FACC15]/50 mt-3">
                       <span className="text-[#FACC15] font-bold text-sm">{t('scene4.total')}</span>
                       <span className="text-[#FACC15] font-mono font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {formatTimeMs(selectedStageData.totalTimeMs)}
+                        {formatDurationMs(selectedStageData.totalTimeMs, timeDecimals)}
                       </span>
                     </div>
                   )}

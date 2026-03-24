@@ -184,6 +184,7 @@ export default function BulkLoadTab() {
     categories,
     currentStageId,
     startTimes,
+    timeDecimals,
     addPilot,
     updatePilot,
     addStage,
@@ -480,8 +481,8 @@ export default function BulkLoadTab() {
       const knownStartTime = startTime
         || startTimes[pilot.id]?.[selectedTimesStageId]
         || (stage ? getPilotScheduledStartTime(stage, pilot) : '');
-      const resolvedArrivalTime = arrivalTime || (totalTime && knownStartTime ? totalTimeToArrival(totalTime, knownStartTime) : '');
-      const resolvedTotalTime = totalTime || (arrivalTime && knownStartTime ? arrivalTimeToTotal(arrivalTime, knownStartTime) : '');
+      const resolvedArrivalTime = arrivalTime || (totalTime && knownStartTime ? totalTimeToArrival(totalTime, knownStartTime, timeDecimals) : '');
+      const resolvedTotalTime = totalTime || (arrivalTime && knownStartTime ? arrivalTimeToTotal(arrivalTime, knownStartTime, timeDecimals) : '');
 
       entries.push({
         pilotId: pilot.id,

@@ -111,6 +111,14 @@ export const RallyProvider = ({ children }) => {
   const [stageAlerts, setStageAlerts] = useState(() => loadFromStorage('rally_stage_alerts', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
+  const [timeDecimals, setTimeDecimals] = useState(() => {
+    const storedValue = loadFromStorage('rally_time_decimals', 3);
+    const numericValue = Number(storedValue);
+    if (!Number.isFinite(numericValue)) {
+      return 3;
+    }
+    return Math.min(3, Math.max(0, Math.trunc(numericValue)));
+  });
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
   const [mapUrl, setMapUrl] = useState(() => loadFromStorage('rally_map_url', ''));
   const [logoUrl, setLogoUrl] = useState(() => loadFromStorage('rally_logo_url', ''));
@@ -206,6 +214,11 @@ export const RallyProvider = ({ children }) => {
     setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setDebugDate(loadFromStorage('rally_debug_date', ''));
+    const storedTimeDecimals = loadFromStorage('rally_time_decimals', 3);
+    const normalizedTimeDecimals = Number.isFinite(Number(storedTimeDecimals))
+      ? Math.min(3, Math.max(0, Math.trunc(Number(storedTimeDecimals))))
+      : 3;
+    setTimeDecimals(normalizedTimeDecimals);
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
     setMapUrl(loadFromStorage('rally_map_url', ''));
     setLogoUrl(loadFromStorage('rally_logo_url', ''));
@@ -605,6 +618,9 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.stageAlerts !== undefined && !shouldPreserveLocalTimingSection('stageAlerts')) setStageAlerts(normalizedData.stageAlerts);
     if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
     if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
+    if (normalizedData.timeDecimals !== undefined) {
+      setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(normalizedData.timeDecimals) || 0))));
+    }
     if (normalizedData.chromaKey !== undefined) setChromaKey(normalizedData.chromaKey);
     if (normalizedData.mapUrl !== undefined) setMapUrl(normalizedData.mapUrl);
     if (normalizedData.logoUrl !== undefined) setLogoUrl(normalizedData.logoUrl);
@@ -668,6 +684,7 @@ export const RallyProvider = ({ children }) => {
     stageAlerts,
     currentStageId,
     debugDate,
+    timeDecimals,
     chromaKey,
     mapUrl,
     logoUrl,
@@ -692,6 +709,7 @@ export const RallyProvider = ({ children }) => {
     stageAlerts,
     currentStageId,
     debugDate,
+    timeDecimals,
     chromaKey,
     mapUrl,
     logoUrl,
@@ -710,6 +728,7 @@ export const RallyProvider = ({ children }) => {
         eventName: snapshot.eventName,
         currentStageId: snapshot.currentStageId,
         debugDate: snapshot.debugDate,
+        timeDecimals: snapshot.timeDecimals,
         chromaKey: snapshot.chromaKey,
         mapUrl: snapshot.mapUrl,
         logoUrl: snapshot.logoUrl,
@@ -757,6 +776,7 @@ export const RallyProvider = ({ children }) => {
         eventName: snapshot.eventName,
         currentStageId: snapshot.currentStageId,
         debugDate: snapshot.debugDate,
+        timeDecimals: snapshot.timeDecimals,
         chromaKey: snapshot.chromaKey,
         mapUrl: snapshot.mapUrl,
         logoUrl: snapshot.logoUrl,
@@ -1658,6 +1678,12 @@ export const RallyProvider = ({ children }) => {
   }, [debugDate, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    localStorage.setItem('rally_time_decimals', JSON.stringify(timeDecimals));
+    updateDataVersion();
+    markSetupSectionDirty('meta');
+  }, [timeDecimals, markSetupSectionDirty, updateDataVersion]);
+
+  useEffect(() => {
     setStartTimes((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -2446,6 +2472,7 @@ export const RallyProvider = ({ children }) => {
       realStartTimes,
       retiredStages,
       stageAlerts,
+      timeDecimals,
       streamConfigs,
       globalAudio,
       cameras,
@@ -2472,6 +2499,9 @@ export const RallyProvider = ({ children }) => {
       if (data.realStartTimes) setRealStartTimes(data.realStartTimes);
       if (data.retiredStages) setRetiredStages(data.retiredStages);
       if (data.stageAlerts) setStageAlerts(data.stageAlerts);
+      if (data.timeDecimals !== undefined) {
+        setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(data.timeDecimals) || 0))));
+      }
       if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.cameras) setCameras(data.cameras);
@@ -2507,6 +2537,7 @@ export const RallyProvider = ({ children }) => {
     setRetiredStages({});
     setStageAlerts({});
     setDebugDate('');
+    setTimeDecimals(3);
     setStreamConfigs({});
     setCameras([]);
     setExternalMedia([]);
@@ -2535,6 +2566,7 @@ export const RallyProvider = ({ children }) => {
     retiredStages,
     stageAlerts,
     debugDate,
+    timeDecimals,
     streamConfigs,
     globalAudio,
     cameras,
@@ -2568,6 +2600,7 @@ export const RallyProvider = ({ children }) => {
     setEventName,
     setCurrentScene,
     setDebugDate,
+    setTimeDecimals,
     setChromaKey,
     setMapUrl,
     setLogoUrl,
