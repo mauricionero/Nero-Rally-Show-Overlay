@@ -136,6 +136,7 @@ code {
     }
 }
 
+
 @layer utilities {
     .pilot-status-exit-motion {
         animation: pilot-status-exit var(--pilot-status-motion-exit, 150ms) var(--pilot-status-motion-easing, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
@@ -145,5 +146,19 @@ code {
     .pilot-status-enter-motion {
         animation: pilot-status-enter var(--pilot-status-motion-enter, 200ms) var(--pilot-status-motion-easing, cubic-bezier(0.22, 1, 0.36, 1));
         will-change: transform, opacity;
+    }
+
+    .overlay-transition-modal {
+        position: absolute;
+        inset: 0;
+        background-image: var(--transition-image), linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(255, 69, 0, 0.85));
+        background-size: cover, 200% 200%;
+        background-position: center, 50% 50%;
+        background-repeat: no-repeat;
+        will-change: opacity;
+        transform: translateZ(0);
+        transition-property: opacity, transform;
+        transition-timing-function: linear;
+        opacity: 0;
     }
 }

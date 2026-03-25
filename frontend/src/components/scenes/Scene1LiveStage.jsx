@@ -3,7 +3,7 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
-import { StartInformationValue } from '../StartInformationValue.jsx';
+import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import StatusPill from '../StatusPill.jsx';
 import { Label } from '../ui/label';
@@ -16,7 +16,6 @@ import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage
 import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
-import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 
@@ -99,7 +98,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
-    cameras, externalMedia, debugDate, retiredStages, isStageAlert, timeDecimals
+    cameras, externalMedia, debugDate, retiredStages, stageAlerts
   } = useRally();
   const { t } = useTranslation();
   const initialSceneConfig = useMemo(
@@ -107,7 +106,6 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     []
   );
   
-  const currentTime = useSecondAlignedClock();
   const [selectedLayout, setSelectedLayout] = useState(initialSceneConfig.selectedLayout);
   const [draftSelectedLayout, setDraftSelectedLayout] = useState(initialSceneConfig.selectedLayout);
   const [isExpandedView, setIsExpandedView] = useState(initialSceneConfig.isExpandedView);
@@ -157,7 +155,6 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const draftLayout = LAYOUTS.find(l => l.id === draftSelectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
-  const sceneNow = useMemo(() => rallyHelpers.getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   const specialStageTickerBaseItems = useMemo(() => {
     if (!currentStageId || !currentStage || isLapRace || !isSSStage) {
       return [];
@@ -176,7 +173,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
         startTime,
         finishTime,
         retired,
-        fixedStatus: finishTime ? 'finished' : (retired ? 'retired' : 'not_started'),
+        fixedStatus: retired ? 'retired' : (finishTime ? 'finished' : 'not_started'),
         preStartAtMs: startDateTime ? startDateTime.getTime() - 10000 : null,
         startAtMs: startDateTime ? startDateTime.getTime() : null,
         sortValues: {
@@ -219,6 +216,28 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       retired: item.retired
     }));
   }, [currentStage, currentStageId, isLapRace, lapTimes, orderedSpecialStageTickerItems, pilots, stagePilots]);
+
+  const pilotStageMetaById = useMemo(() => (
+    new Map(sortedPilotsWithPositions.map((data) => [data.pilot.id, data]))
+  ), [sortedPilotsWithPositions]);
+
+  const alertByPilotId = useMemo(() => {
+    if (!currentStageId) return new Set();
+    return new Set(
+      Object.keys(stageAlerts || {}).filter((pilotId) => stageAlerts?.[pilotId]?.[currentStageId])
+    );
+  }, [currentStageId, stageAlerts]);
+
+  const jumpStartByPilotId = useMemo(() => {
+    if (!currentStageId) return new Set();
+    const next = new Set();
+    pilots.forEach((pilot) => {
+      if (rallyHelpers.isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes)) {
+        next.add(pilot.id);
+      }
+    });
+    return next;
+  }, [currentStageId, pilots, realStartTimes, startTimes]);
 
   // Calculate max scroll based on the actual ticker track width
   useEffect(() => {
@@ -382,7 +401,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
   // Get pilot position and lap info for Lap Race
   const getPilotLapInfo = (pilotId) => {
-    const data = sortedPilotsWithPositions.find(d => d.pilot.id === pilotId);
+    const data = pilotStageMetaById.get(pilotId);
     if (!data) return null;
     return {
       position: data.position,
@@ -644,15 +663,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
             // Pilot Stream Item
             const pilot = item;
-            const category = categories.find(c => c.id === pilot.categoryId);
+            const category = categoryById.get(pilot.categoryId);
             const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
-            const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
-            const jumpStart = currentStageId ? rallyHelpers.isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false;
+            const alert = currentStageId ? alertByPilotId.has(pilot.id) : false;
+            const jumpStart = currentStageId ? jumpStartByPilotId.has(pilot.id) : false;
+            const pilotStageMeta = pilotStageMetaById.get(pilot.id);
+            const liveStatus = isSSStage ? (pilotStageMeta?.currentStatus || 'not_started') : '';
+            const startTime = currentStageId ? (startTimes[pilot.id]?.[currentStageId] || '') : '';
+            const finishTime = currentStageId ? (times[pilot.id]?.[currentStageId] || '') : '';
+            const retired = currentStageId ? !!retiredStages?.[pilot.id]?.[currentStageId] : false;
             
             let displayTime = '';
-            let displayTimeInfo = null;
             let timeColor = 'text-zinc-400';
             let positionBadge = null;
+            let showLiveTime = false;
             
             if (isLapRace && lapInfo) {
               // Lap Race display
@@ -669,32 +693,15 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 timeColor = 'text-[#22C55E]';
               }
             } else if (isSSStage) {
-              // SS Stage display (original logic)
-              const timeInfo = rallyHelpers.startInformationTime({
-                pilotId: pilot.id,
-                stageId: currentStageId,
-                startTimes,
-                times,
-                retiredStages,
-                stageDate: currentStage?.date,
-                now: sceneNow,
-                decimals: timeDecimals,
-                startLabel: t('status.start'),
-                retiredLabel: t('status.retired')
-              });
-              displayTimeInfo = timeInfo;
-              
-              if (timeInfo.status === 'retired') {
-                displayTime = timeInfo.text;
+              showLiveTime = true;
+
+              if (liveStatus === 'retired') {
                 timeColor = 'text-red-400';
-              } else if (timeInfo.status === 'racing' && timeInfo.timer) {
-                displayTime = timeInfo.text;
+              } else if (liveStatus === 'racing') {
                 timeColor = 'text-[#FF8C00]';
-              } else if (timeInfo.status === 'finished' && timeInfo.finishTime) {
-                displayTime = timeInfo.text;
-                timeColor = timeInfo.retired ? 'text-amber-400' : 'text-[#22C55E]';
-              } else if (timeInfo.text) {
-                displayTime = timeInfo.text;
+              } else if (liveStatus === 'finished' && finishTime) {
+                timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
+              } else if (startTime) {
                 timeColor = 'text-zinc-500';
               }
             }
@@ -737,14 +744,28 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                         />
                       )}
                     </div>
-                    {displayTime && (
-                      <StartInformationValue
+                    {showLiveTime && (
+                      <LiveStartInformationValue
                         as="p"
-                        info={displayTimeInfo}
-                        fallback={displayTime}
+                        startTime={startTime}
+                        finishTime={finishTime}
+                        retired={retired}
+                        stageDate={currentStage?.date}
+                        startLabel={t('status.start')}
+                        retiredLabel={t('status.retired')}
+                        liveStatus={liveStatus}
+                        debugDate={debugDate}
                         className={`font-mono text-lg font-bold ${timeColor}`}
                         style={{ fontFamily: 'JetBrains Mono, monospace', textShadow: '0 0 10px rgba(0,0,0,1), 2px 2px 6px rgba(0,0,0,1), -1px -1px 3px rgba(0,0,0,1)' }}
                       />
+                    )}
+                    {!showLiveTime && displayTime && (
+                      <p
+                        className={`font-mono text-lg font-bold ${timeColor}`}
+                        style={{ fontFamily: 'JetBrains Mono, monospace', textShadow: '0 0 10px rgba(0,0,0,1), 2px 2px 6px rgba(0,0,0,1), -1px -1px 3px rgba(0,0,0,1)' }}
+                      >
+                        {displayTime}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -808,17 +829,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 className="flex gap-2 py-2 transition-transform duration-500 ease-out"
                 style={{ transform: `translateX(-${bottomScroll}px)` }}
               >
-                {displayedTickerItems.map(({ pilot, position, completedLaps, isFinished }) => {
+                {displayedTickerItems.map(({ pilot, position, completedLaps, isFinished, statusKey }) => {
                   const pilotMetaInfo = tickerPilotMetaById.get(pilot.id) || {};
                   const category = pilotMetaInfo.category || null;
                   const pilotMeta = pilotMetaInfo.pilotMeta || '';
-                  const alert = currentStageId ? isStageAlert(pilot.id, currentStageId) : false;
-                  const jumpStart = currentStageId ? rallyHelpers.isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false;
+                  const alert = currentStageId ? alertByPilotId.has(pilot.id) : false;
+                  const jumpStart = currentStageId ? jumpStartByPilotId.has(pilot.id) : false;
+                  const startTime = currentStageId ? (startTimes[pilot.id]?.[currentStageId] || '') : '';
+                  const finishTime = currentStageId ? (times[pilot.id]?.[currentStageId] || '') : '';
+                  const retired = currentStageId ? !!retiredStages?.[pilot.id]?.[currentStageId] : false;
                   
                   let borderColor = 'border-zinc-700';
                   let timeDisplay = '';
-                  let timeInfo = null;
                   let timeColor = 'text-zinc-500';
+                  let showLiveTime = false;
                   
                   if (isLapRace) {
                     if (isFinished) {
@@ -831,34 +855,17 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       timeColor = 'text-[#FACC15]';
                     }
                   } else if (isSSStage) {
-                    timeInfo = rallyHelpers.startInformationTime({
-                      pilotId: pilot.id,
-                      stageId: currentStageId,
-                      startTimes,
-                      times,
-                      retiredStages,
-                      stageDate: currentStage?.date,
-                      now: sceneNow,
-                      decimals: timeDecimals,
-                      startLabel: t('status.start'),
-                      retiredLabel: t('status.retired')
-                    });
-                    
-                    if (timeInfo.status === 'retired') {
+                    showLiveTime = true;
+
+                    if (statusKey === 'retired') {
                       borderColor = 'border-red-500';
-                      timeDisplay = timeInfo.text;
                       timeColor = 'text-red-400';
-                    } else if (timeInfo.status === 'finished' && timeInfo.finishTime) {
-                      borderColor = timeInfo.retired ? 'border-amber-400' : 'border-[#22C55E]';
-                      timeDisplay = timeInfo.text;
-                      timeColor = timeInfo.retired ? 'text-amber-400' : 'text-[#22C55E]';
-                    } else if (timeInfo.status === 'racing' && timeInfo.timer) {
+                    } else if (statusKey === 'finished' && finishTime) {
+                      borderColor = retired ? 'border-amber-400' : 'border-[#22C55E]';
+                      timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
+                    } else if (statusKey === 'racing') {
                       borderColor = 'border-[#FF8C00]';
-                      timeDisplay = timeInfo.text;
                       timeColor = 'text-[#FF8C00]';
-                    } else if (timeInfo.text) {
-                      timeDisplay = timeInfo.text;
-                      timeColor = 'text-zinc-500';
                     }
                   }
                   
@@ -910,14 +917,25 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                               {pilotMeta}
                             </p>
                           )}
-                          {timeDisplay && (
-                            <StartInformationValue
+                          {showLiveTime && (
+                            <LiveStartInformationValue
                               as="p"
-                              info={timeInfo}
-                              fallback={timeDisplay}
+                              startTime={startTime}
+                              finishTime={finishTime}
+                              retired={retired}
+                              stageDate={currentStage?.date}
+                              startLabel={t('status.start')}
+                              retiredLabel={t('status.retired')}
+                              liveStatus={statusKey}
+                              debugDate={debugDate}
                               className={`font-mono text-xs truncate ${timeColor}`}
                               style={{ fontFamily: 'JetBrains Mono, monospace' }}
                             />
+                          )}
+                          {!showLiveTime && timeDisplay && (
+                            <p className={`font-mono text-xs truncate ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                              {timeDisplay}
+                            </p>
                           )}
                         </div>
                       </div>

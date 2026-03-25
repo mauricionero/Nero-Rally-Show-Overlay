@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useRally } from '../../contexts/RallyContext.jsx';
+import { useRallyMeta, useRallyTiming } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -48,9 +48,9 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     togglePilotInStage,
     selectAllPilotsInStage,
     deselectAllPilotsInStage,
-    updateStage,
     timeDecimals
-  } = useRally();
+  } = useRallyTiming();
+  const { updateStage } = useRallyMeta();
 
   const selectedPilotIds = getStagePilots(stage.id);
   const selectedPilotIdSet = useMemo(() => new Set(selectedPilotIds), [selectedPilotIds]);

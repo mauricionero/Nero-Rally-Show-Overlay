@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
 
-export function useSecondAlignedClock() {
+export function useSecondAlignedClock(enabled = true) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
+    setNow(new Date());
+
     let timeoutId = null;
     let intervalId = null;
 
@@ -25,7 +31,7 @@ export function useSecondAlignedClock() {
         window.clearInterval(intervalId);
       }
     };
-  }, []);
+  }, [enabled]);
 
   return now;
 }

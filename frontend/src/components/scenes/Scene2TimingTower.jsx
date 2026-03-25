@@ -12,6 +12,7 @@ import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../uti
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageNumberLabel, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
@@ -92,12 +93,19 @@ const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLa
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, retiredStages, isStageAlert, timeDecimals
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, retiredStages, stageAlerts, timeDecimals, debugDate
   } = useRally();
   const { t } = useTranslation();
   
-  const [selectedFeedValue, setSelectedFeedValue] = useState(() => loadSceneConfig(SCENE_2_CONFIG_KEY, { selectedFeedValue: null }).selectedFeedValue);
-  const [expandedPilotId, setExpandedPilotId] = useState(() => loadSceneConfig(SCENE_2_CONFIG_KEY, { expandedPilotId: null }).expandedPilotId);
+  const [selectedFeedValue, setSelectedFeedValue] = useState(() => (
+    loadSceneConfig(SCENE_2_CONFIG_KEY, { selectedFeedValue: null }).selectedFeedValue
+  ));
+  const [expandedPilotId, setExpandedPilotId] = useState(() => (
+    loadSceneConfig(SCENE_2_CONFIG_KEY, { expandedPilotId: null }).expandedPilotId
+  ));
+  const [finishedDisplayMode, setFinishedDisplayMode] = useState(() => (
+    loadSceneConfig(SCENE_2_CONFIG_KEY, { finishedDisplayMode: 'time' }).finishedDisplayMode || 'time'
+  ));
   const [towerWidth, setTowerWidth] = useState(() => {
     if (typeof window === 'undefined') {
       return DEFAULT_TOWER_WIDTH;
@@ -122,9 +130,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   useEffect(() => {
     saveSceneConfig(SCENE_2_CONFIG_KEY, {
       selectedFeedValue,
-      expandedPilotId
+      expandedPilotId,
+      finishedDisplayMode
     });
-  }, [selectedFeedValue, expandedPilotId]);
+  }, [selectedFeedValue, expandedPilotId, finishedDisplayMode]);
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -184,7 +193,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         startTime,
         finishTime,
         retired,
-        fixedStatus: finishTime ? 'finished' : (retired ? 'retired' : 'not_started'),
+        fixedStatus: retired ? 'retired' : (finishTime ? 'finished' : 'not_started'),
         preStartAtMs: startDateTime ? startDateTime.getTime() - 10000 : null,
         startAtMs: startDateTime ? startDateTime.getTime() : null,
         sortValues: {
@@ -258,6 +267,24 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     new Map(categories.map((category) => [category.id, category]))
   ), [categories]);
 
+  const alertByPilotId = useMemo(() => {
+    if (!currentStageId) return new Set();
+    return new Set(
+      Object.keys(stageAlerts || {}).filter((pilotId) => stageAlerts?.[pilotId]?.[currentStageId])
+    );
+  }, [currentStageId, stageAlerts]);
+
+  const jumpStartByPilotId = useMemo(() => {
+    if (!currentStageId) return new Set();
+    const next = new Set();
+    pilots.forEach((pilot) => {
+      if (isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes)) {
+        next.add(pilot.id);
+      }
+    });
+    return next;
+  }, [currentStageId, pilots, realStartTimes, startTimes]);
+
   const pilotUiMetaById = useMemo(() => (
     new Map(pilots.map((pilot) => [
       pilot.id,
@@ -266,11 +293,11 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         fullName: pilot.name,
         compactName: abbreviateCompactName(pilot.name),
         hasStream: Boolean(pilot.streamUrl),
-        alert: currentStageId ? isStageAlert(pilot.id, currentStageId) : false,
-        jumpStart: currentStageId ? isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes) : false
+        alert: currentStageId ? alertByPilotId.has(pilot.id) : false,
+        jumpStart: currentStageId ? jumpStartByPilotId.has(pilot.id) : false
       }
     ]))
-  ), [categories, categoryById, currentStageId, isStageAlert, pilots, realStartTimes, startTimes]);
+  ), [alertByPilotId, categoryById, currentStageId, jumpStartByPilotId, pilots]);
 
   const towerItems = useMemo(() => {
     const onStage = sortedPilotsData.filter((data) => data.status === 'racing' || data.preStart);
@@ -297,10 +324,35 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const { setMotionRef } = usePilotPositionMotion(displayedTowerItems, {
     disabled: isStatusTransitionActive
   });
-  const onStageOrdered = displayedTowerItems.filter((data) => data.statusKey === 'racing' || data.statusKey === 'pre_start');
-  const finished = displayedTowerItems.filter((data) => data.statusKey === 'finished');
-  const notStarted = displayedTowerItems.filter((data) => data.statusKey === 'not_started');
-  const retired = displayedTowerItems.filter((data) => data.statusKey === 'retired');
+  const { onStageOrdered, finished, notStarted, retired } = useMemo(() => {
+    const onStage = [];
+    const finishedItems = [];
+    const notStartedItems = [];
+    const retiredItems = [];
+
+    displayedTowerItems.forEach((item) => {
+      if (item.statusKey === 'racing' || item.statusKey === 'pre_start') {
+        onStage.push(item);
+        return;
+      }
+      if (item.statusKey === 'finished') {
+        finishedItems.push(item);
+        return;
+      }
+      if (item.statusKey === 'retired') {
+        retiredItems.push(item);
+        return;
+      }
+      notStartedItems.push(item);
+    });
+
+    return {
+      onStageOrdered: onStage,
+      finished: finishedItems,
+      notStarted: notStartedItems,
+      retired: retiredItems
+    };
+  }, [displayedTowerItems]);
   const leader = finished[0];
 
   if (!currentStageId) {
@@ -339,27 +391,32 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     const alert = pilotUiMeta.alert || false;
     const jumpStart = pilotUiMeta.jumpStart || false;
     
+    const rowStatusKey = retired ? 'retired' : (data.statusKey || data.currentStatus || data.status || '');
     let timeColor = 'text-zinc-500';
-    let statusColor = 'bg-zinc-700';
+    const numberStatusKey = isLapRace
+      ? (isFinished ? 'finished' : isRacing ? 'racing' : 'not_started')
+      : (rowStatusKey || (isFinished ? 'finished' : isRacing ? 'racing' : 'not_started'));
+    const numberColorClass = (() => {
+      if (numberStatusKey === 'retired') return 'text-red-400';
+      if (numberStatusKey === 'finished') return 'text-[#22C55E]';
+      if (numberStatusKey === 'racing') return isLapRace ? 'text-[#FACC15]' : 'text-[#FF8C00]';
+      if (numberStatusKey === 'pre_start') return 'text-[#FF8C00]';
+      return 'text-zinc-500';
+    })();
     
     if (isLapRace) {
       if (isFinished) {
         timeColor = 'text-[#22C55E]';
-        statusColor = 'bg-[#22C55E]';
       } else if (isRacing) {
         timeColor = 'text-[#FACC15]';
-        statusColor = 'bg-[#FACC15]';
       }
     } else {
-      if (data.currentStatus === 'retired') {
+      if (rowStatusKey === 'retired') {
         timeColor = 'text-red-400';
-        statusColor = 'bg-[#EF4444]';
       } else if (isFinished && finishTime) {
         timeColor = retired ? 'text-amber-400' : 'text-[#22C55E]';
-        statusColor = retired ? 'bg-[#F59E0B]' : 'bg-[#22C55E]';
       } else if (isRacing) {
         timeColor = 'text-[#FF8C00]';
-        statusColor = 'bg-[#FF8C00]';
       }
     }
 
@@ -386,6 +443,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         }
       }
     }
+    const showGap = finishedDisplayMode === 'gap' && Boolean(gap) && leader && leader.pilot.id !== pilot.id;
+    const displayValueClass = showGap ? 'text-zinc-400' : timeColor;
 
     return (
       <div
@@ -414,7 +473,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           {/* Position */}
           <div className="w-7 flex-shrink-0">
             <span
-              className={`font-bold text-sm ${statusColor === 'bg-zinc-700' ? 'text-zinc-500' : statusColor.replace('bg-', 'text-')}`}
+              className={`font-bold text-sm ${numberColorClass}`}
               style={{ fontFamily: 'JetBrains Mono, monospace' }}
             >
               {index + 1}
@@ -446,11 +505,17 @@ export default function Scene2TimingTower({ hideStreams = false }) {
             </div>
           </div>
           
-          {/* Time/Gap */}
+          {/* Time / Gap */}
           <div className="text-right flex-shrink-0 ml-2">
             {isLapRace ? (
-              <span className={`font-mono text-sm ${timeColor}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                {isFinished ? formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' }) : (isRacing ? `${t('times.lap')} ${completedLaps}/${currentStage?.numberOfLaps || 0}` : '')}
+              <span className={`font-mono text-sm ${displayValueClass}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {isFinished
+                  ? (showGap ? gap : formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' }))
+                  : (isRacing ? `${t('times.lap')} ${completedLaps}/${currentStage?.numberOfLaps || 0}` : '')}
+              </span>
+            ) : showGap ? (
+              <span className={`font-mono text-sm ${displayValueClass}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {gap}
               </span>
             ) : (
               <LiveStartInformationValue
@@ -461,12 +526,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 startLabel={t('status.start')}
                 retiredLabel={t('status.retired')}
                 liveStatus={data.currentStatus}
-                className={`font-mono text-sm ${timeColor}`}
+                debugDate={debugDate}
+                className={`font-mono text-sm ${displayValueClass}`}
                 style={{ fontFamily: 'JetBrains Mono, monospace' }}
               />
-            )}
-            {gap && (
-              <span className="text-zinc-500 text-xs ml-2 font-mono">{gap}</span>
             )}
           </div>
           
@@ -531,6 +594,18 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               />
             </div>
           )}
+          <div>
+            <p className="text-white text-xs uppercase mb-2 block">{t('scene2.finishedDisplay')}</p>
+            <Select value={finishedDisplayMode} onValueChange={setFinishedDisplayMode}>
+              <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="time">{t('scene2.showTime')}</SelectItem>
+                <SelectItem value="gap">{t('scene2.showGap')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </LeftControls>
 

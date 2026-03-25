@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useRally } from '../../contexts/RallyContext.jsx';
+import { useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -95,7 +95,27 @@ const getPilotStartOrderForTimes = (pilot) => {
   return numericValue;
 };
 
+const getPilotOffsetMinutesForTimes = (pilot) => {
+  const numericValue = Number(pilot?.timeOffsetMinutes);
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return numericValue;
+};
+
 const comparePilotsForTimes = (a, b, categoryOrderById) => {
+  const offsetA = getPilotOffsetMinutesForTimes(a);
+  const offsetB = getPilotOffsetMinutesForTimes(b);
+
+  if (offsetA !== null && offsetB !== null && offsetA !== offsetB) {
+    return offsetA - offsetB;
+  }
+
+  if (offsetA !== null && offsetB === null) return -1;
+  if (offsetA === null && offsetB !== null) return 1;
+
   const startOrderA = getPilotStartOrderForTimes(a);
   const startOrderB = getPilotStartOrderForTimes(b);
 
@@ -178,59 +198,48 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     realStartTimes,
     retiredStages,
     stageAlerts,
-    lineSyncResults,
-    requestTimingLineSync,
-    wsConnectionStatus,
     timeDecimals
-  } = useRally();
+  } = useRallyTiming();
+  const { wsConnectionStatus, lineSyncResults, requestTimingLineSync } = useRallyWs();
 
   const stagePilotRows = useMemo(() => (
-    [...sortedPilots]
-      .map((pilot) => {
-        const category = categoryMap.get(pilot.categoryId);
-        const totalTime = times[pilot.id]?.[stage.id] || '';
-        const arrivalTimeValue = arrivalTimes[pilot.id]?.[stage.id] || '';
-        const manualStartTimeValue = startTimes[pilot.id]?.[stage.id] || '';
-        const idealStartTimeValue = manualStartTime
-          ? manualStartTimeValue
-          : getPilotScheduledStartTime(stage, pilot);
-        const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
-        const retired = !!retiredStages[pilot.id]?.[stage.id];
-        const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
-        const totalMs = parseTotalTimeToMs(totalTime);
-        const idealSeconds = parseClockTimeToSeconds(idealStartTimeValue);
-        const realSeconds = parseClockTimeToSeconds(realStartTimeValue);
-        const lineSync = lineSyncResults?.[`${pilot.id}:${stage.id}`] || null;
+    sortedPilots.map((pilot) => {
+      const category = categoryMap.get(pilot.categoryId);
+      const totalTime = times[pilot.id]?.[stage.id] || '';
+      const arrivalTimeValue = arrivalTimes[pilot.id]?.[stage.id] || '';
+      const manualStartTimeValue = startTimes[pilot.id]?.[stage.id] || '';
+      const idealStartTimeValue = manualStartTime
+        ? manualStartTimeValue
+        : getPilotScheduledStartTime(stage, pilot);
+      const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
+      const retired = !!retiredStages[pilot.id]?.[stage.id];
+      const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
+      const totalMs = parseTotalTimeToMs(totalTime);
+      const idealSeconds = parseClockTimeToSeconds(idealStartTimeValue);
+      const realSeconds = parseClockTimeToSeconds(realStartTimeValue);
+      const lineSync = lineSyncResults?.[`${pilot.id}:${stage.id}`] || null;
 
-        return {
-          pilot,
-          category,
-          totalTime,
-          arrivalTimeValue,
-          idealStartTimeValue,
-          realStartTimeValue,
-          retired,
-          alert,
-          totalMs,
-          hasRecordedTime: Boolean(totalTime),
-          hasTimingData: Boolean(totalTime || arrivalTimeValue),
-          isJumpStart: Number.isFinite(idealSeconds) && Number.isFinite(realSeconds)
-            ? realSeconds < idealSeconds
-            : false,
-          lineSync
-        };
-      })
-      .sort((a, b) => {
-        if (a.hasTimingData !== b.hasTimingData) {
-          return a.hasTimingData ? -1 : 1;
-        }
-
-        return comparePilotsForTimes(a.pilot, b.pilot, categoryOrderById);
-      })
+      return {
+        pilot,
+        category,
+        totalTime,
+        arrivalTimeValue,
+        idealStartTimeValue,
+        realStartTimeValue,
+        retired,
+        alert,
+        totalMs,
+        hasRecordedTime: Boolean(totalTime),
+        hasTimingData: Boolean(totalTime || arrivalTimeValue),
+        isJumpStart: Number.isFinite(idealSeconds) && Number.isFinite(realSeconds)
+          ? realSeconds < idealSeconds
+          : false,
+        lineSync
+      };
+    })
   ), [
     sortedPilots,
     categoryMap,
-    categoryOrderById,
     manualStartTime,
     stage,
     times,
@@ -1095,7 +1104,7 @@ export default function TimesTab({
   compactStagePadding = false
 }) {
   const { t } = useTranslation();
-  const { pilots, stages, categories, currentStageId } = useRally();
+  const { pilots, stages, categories, currentStageId } = useRallyMeta();
   const [showCompetitiveStagesOnly, setShowCompetitiveStagesOnly] = useState(true);
   const [showTimesAsCards, setShowTimesAsCards] = useState(false);
   const categoryOrderById = useMemo(() => (

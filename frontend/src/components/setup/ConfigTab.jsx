@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { useRally } from '../../contexts/RallyContext.jsx';
+import React, { useMemo, useRef, useState } from 'react';
+import { useRallyConfig } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -7,10 +7,9 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
 import { toast } from 'sonner';
-import { Upload, Download, Wifi, WifiOff, Copy, Check, Image, Globe, Trash2, Palette, Timer } from 'lucide-react';
+import { Upload, Download, Image, Globe, Trash2, Palette, Timer } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
 import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
-import { getWebSocketOverlayUrl, getWebSocketTimesUrl } from '../../utils/overlayUrls.js';
 import { isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 export default function ConfigTab() {
@@ -26,6 +25,8 @@ export default function ConfigTab() {
     setChromaKey,
     logoUrl,
     setLogoUrl,
+    transitionImageUrl,
+    setTransitionImageUrl,
     externalMedia,
     addExternalMedia,
     updateExternalMedia,
@@ -33,32 +34,30 @@ export default function ConfigTab() {
     exportData,
     importData,
     clearAllData,
-    // WebSocket
-    wsChannelKey,
-    wsConnectionStatus,
-    wsError,
-    lastTimesSyncAt,
-    connectWebSocket,
-    disconnectWebSocket,
-    generateNewChannelKey
-  } = useRally();
+  } = useRallyConfig();
 
   const fileInputRef = useRef(null);
-  const [copied, setCopied] = useState(false);
-  const [newKey, setNewKey] = useState('');
   const [customChroma, setCustomChroma] = useState('#000000');
 
   const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
-  const CHROMA_PRESETS = [
+  const CHROMA_PRESETS = useMemo(() => ([
     { name: t('config.black'), value: '#000000', label: 'K' },
     { name: t('config.greenScreen'), value: '#00B140', label: 'G' },
     { name: t('config.blueScreen'), value: '#0047BB', label: 'B' }
-  ];
-  const countedStages = stages.filter((stage) => isSpecialStageType(stage.type) || isLapRaceStageType(stage.type));
-  const streamSourceCount = pilots.filter((pilot) => pilot.streamUrl).length + cameras.filter((camera) => camera.streamUrl).length;
+  ]), [t]);
+  const countedStages = useMemo(() => (
+    stages.filter((stage) => isSpecialStageType(stage.type) || isLapRaceStageType(stage.type))
+  ), [stages]);
+  const streamSourceCount = useMemo(() => (
+    pilots.filter((pilot) => pilot.streamUrl).length
+    + cameras.filter((camera) => camera.streamUrl).length
+  ), [cameras, pilots]);
+  const mediaOptionByValue = useMemo(() => (
+    new Map(EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => [option.value, option]))
+  ), []);
 
   const renderMediaIconValue = (iconValue) => {
-    const option = EXTERNAL_MEDIA_ICON_OPTIONS.find((item) => item.value === iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
+    const option = mediaOptionByValue.get(iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
     const Icon = getExternalMediaIconComponent(option.value);
 
     return (
@@ -107,49 +106,6 @@ export default function ConfigTab() {
     reader.readAsText(file);
   };
 
-  const handleGenerateKey = () => {
-    const key = generateNewChannelKey();
-    setNewKey(key);
-    toast.success('New channel key generated');
-  };
-
-  const handleConnect = async () => {
-    if (!newKey.trim()) {
-      toast.error('Please generate or enter a channel key');
-      return;
-    }
-    const success = await connectWebSocket(newKey, { role: 'setup' });
-    if (success) {
-      toast.success('Connected to WebSocket channel');
-    } else {
-      toast.error('Failed to connect: ' + (wsError || 'Unknown error'));
-    }
-  };
-
-  const handleCopyKey = () => {
-    const keyToCopy = wsChannelKey || newKey;
-    if (keyToCopy) {
-      navigator.clipboard.writeText(keyToCopy);
-      setCopied(true);
-      toast.success('Channel key copied to clipboard');
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleCopyOverlayUrl = () => {
-    const key = wsChannelKey || newKey;
-    const url = getWebSocketOverlayUrl(key);
-    navigator.clipboard.writeText(url);
-    toast.success(t('config.copyOverlayUrlSuccess'));
-  };
-
-  const handleCopyTimesUrl = () => {
-    const key = wsChannelKey || newKey;
-    const url = getWebSocketTimesUrl(key);
-    navigator.clipboard.writeText(url);
-    toast.success(t('config.copyTimesUrlSuccess'));
-  };
-
   return (
     <div className="space-y-4">
       {/* Branding */}
@@ -187,51 +143,67 @@ export default function ConfigTab() {
                 />
               </div>
             )}
+            <div className="space-y-2">
+              <Label className="text-white">{t('config.transitionImage')}</Label>
+              <Input
+                value={transitionImageUrl || ''}
+                onChange={(e) => setTransitionImageUrl(e.target.value)}
+                placeholder={t('config.transitionImagePlaceholder')}
+                className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
+                data-testid="input-transition-image-url"
+              />
+              <p className="text-xs text-zinc-500">
+                Used as the background image for overlay scene transitions.
+              </p>
+            </div>
+            {transitionImageUrl && (
+              <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
+                <span className="text-xs text-zinc-400">Preview:</span>
+                <img
+                  src={transitionImageUrl}
+                  alt="Transition preview"
+                  className="h-10 max-w-[150px] object-contain"
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Language Selection */}
+      {/* Configurations */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
             <Timer className="w-5 h-5" />
-            {t('config.timeDisplay')}
+            {t('config.configurations')}
           </CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.timeDisplayDesc')}</CardDescription>
+          <CardDescription className="text-zinc-400">{t('config.configurationsDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2 max-w-[220px]">
-            <Label className="text-white">{t('config.timeDecimals')}</Label>
-            <Input
-              type="number"
-              min="0"
-              max="3"
-              step="1"
-              value={timeDecimals}
-              onChange={(e) => {
-                const numericValue = Number(e.target.value);
-                setTimeDecimals(Math.min(3, Math.max(0, Number.isFinite(numericValue) ? Math.trunc(numericValue) : 0)));
-              }}
-              className="bg-[#09090B] border-zinc-700 text-white"
-              data-testid="input-time-decimals"
-            />
-            <p className="text-xs text-zinc-500">{t('config.timeDecimalsHelp')}</p>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2 max-w-[220px]">
+              <Label className="text-white">{t('config.timeDisplay')}</Label>
+              <Input
+                type="number"
+                min="0"
+                max="3"
+                step="1"
+                value={timeDecimals}
+                onChange={(e) => {
+                  const numericValue = Number(e.target.value);
+                  setTimeDecimals(Math.min(3, Math.max(0, Number.isFinite(numericValue) ? Math.trunc(numericValue) : 0)));
+                }}
+                className="bg-[#09090B] border-zinc-700 text-white"
+                data-testid="input-time-decimals"
+              />
+              <p className="text-xs text-zinc-500">{t('config.timeDecimalsHelp')}</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-white">{t('config.language')}</Label>
+              <LanguageSelector showLabel={false} />
+            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Language Selection */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            <Globe className="w-5 h-5" />
-            {t('config.language')}
-          </CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.selectLanguage')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LanguageSelector showLabel={false} />
         </CardContent>
       </Card>
 
@@ -323,96 +295,6 @@ export default function ConfigTab() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* WebSocket Live Sync */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            {wsConnectionStatus === 'connected' ? <Wifi className="w-5 h-5 text-green-500" /> : <WifiOff className="w-5 h-5 text-zinc-500" />}
-            {t('config.liveSync')}
-          </CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.liveSyncDesc')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Connection Status */}
-          <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${
-              wsConnectionStatus === 'connected' ? 'bg-green-500' :
-              wsConnectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
-              wsConnectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
-            }`} />
-            <span className="text-white capitalize">
-              {wsConnectionStatus === 'connected' ? t('config.connected') :
-               wsConnectionStatus === 'connecting' ? t('config.connecting') :
-               wsConnectionStatus === 'error' ? t('config.error') : t('config.disconnected')}
-            </span>
-            {wsError && <span className="text-red-400 text-sm">({wsError})</span>}
-          </div>
-
-          {wsConnectionStatus === 'connected' ? (
-            <div className="space-y-3">
-              <div className="bg-[#09090B] p-3 rounded border border-zinc-700">
-                <Label className="text-xs text-zinc-400 block mb-1">{t('config.yourChannelKey')}</Label>
-                <div className="flex items-center gap-2">
-                  <code className="text-[#FACC15] font-mono flex-1 truncate">{wsChannelKey}</code>
-                  <Button variant="ghost" size="icon" onClick={handleCopyKey} className="h-8 w-8">
-                    {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-zinc-400" />}
-                  </Button>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Button
-                  onClick={handleCopyOverlayUrl}
-                  variant="outline"
-                  className="border-zinc-700 text-white"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  {t('config.copyOverlayUrl')}
-                </Button>
-                <Button
-                  onClick={handleCopyTimesUrl}
-                  variant="outline"
-                  className="border-zinc-700 text-white"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  {t('config.copyTimesUrl')}
-                </Button>
-              </div>
-              <div className="text-xs text-zinc-400">
-                Last times sync: {lastTimesSyncAt ? new Date(lastTimesSyncAt).toLocaleTimeString() : '--'}
-              </div>
-              <Button
-                onClick={disconnectWebSocket}
-                variant="destructive"
-                className="w-full"
-              >
-                {t('header.disconnect')}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  value={newKey}
-                  onChange={(e) => setNewKey(e.target.value)}
-                  placeholder={t('config.channelKeyPlaceholder')}
-                  className="bg-[#09090B] border-zinc-700 text-white font-mono"
-                />
-                <Button onClick={handleGenerateKey} variant="outline" className="border-zinc-700 text-white shrink-0">
-                  {t('config.generateKey')}
-                </Button>
-              </div>
-              <Button
-                onClick={handleConnect}
-                disabled={!newKey.trim() || wsConnectionStatus === 'connecting'}
-                className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
-              >
-                {wsConnectionStatus === 'connecting' ? t('config.connecting') : t('header.connect')}
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
 
