@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useRally } from '../contexts/RallyContext.jsx';
+import { useRallyMeta, useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { useSearchParams } from 'react-router-dom';
 import TimesTab from '../components/setup/TimesTab.jsx';
@@ -45,7 +45,8 @@ const getDisplayedStageSchedule = (stage) => {
 export default function Times() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const { stages, currentStageId, wsEnabled, wsConnectionStatus, wsLastMessageAt, connectWebSocket, setClientRole } = useRally();
+  const { stages } = useRallyMeta();
+  const { wsEnabled, wsConnectionStatus, wsLastMessageAt, connectWebSocket, setClientRole } = useRallyWs();
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [openStageIds, setOpenStageIds] = useState([]);
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
@@ -56,6 +57,10 @@ export default function Times() {
   const messageBucketIndexRef = React.useRef(0);
   const messageBucketTotalRef = React.useRef(0);
   const messageSecondAlertRef = React.useRef(false);
+
+  useEffect(() => {
+    document.title = `${t('header.title')} - ${t('header.times')}`;
+  }, [t]);
 
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   const selectedStage = sortedStages.find((stage) => stage.id === selectedStageId) || null;

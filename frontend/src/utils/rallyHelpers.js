@@ -1,4 +1,5 @@
 import { sortPilotsByDisplayOrder } from './displayOrder.js';
+import { clampTimeDecimals, formatDurationSeconds } from './timeFormat.js';
 
 // Helper functions for pilot status and timing
 
@@ -101,24 +102,23 @@ export const getPilotStatus = (pilotId, stageId, startTimes, times, retiredStage
   return 'not_started';
 };
 
-export const getRunningTime = (startTime, stageDate, now = new Date()) => {
-  if (!startTime) return '00:00.000';
+const getZeroDurationText = (decimals = 3) => (
+  `00:00${clampTimeDecimals(decimals) > 0 ? `.${'0'.repeat(clampTimeDecimals(decimals))}` : ''}`
+);
+
+export const getRunningTime = (startTime, stageDate, now = new Date(), decimals = 3) => {
+  if (!startTime) return getZeroDurationText(decimals);
   
   try {
     const startDate = getStageDateTime(stageDate, startTime);
-    if (!startDate) return '00:00.000';
+    if (!startDate) return getZeroDurationText(decimals);
     
-    if (now < startDate) return '00:00.000';
+    if (now < startDate) return getZeroDurationText(decimals);
     
     const diff = now - startDate;
-    const totalSeconds = Math.floor(diff / 1000);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    const ms = Math.floor((diff % 1000));
-    
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+    return formatDurationSeconds(diff / 1000, decimals, { fallback: getZeroDurationText(decimals), padMinutes: true });
   } catch (e) {
-    return '00:00.000';
+    return getZeroDurationText(decimals);
   }
 };
 
@@ -137,6 +137,7 @@ export const startInformationTime = ({
   retiredStages,
   stageDate,
   now = new Date(),
+  decimals = 3,
   includeLabel = true,
   startLabel = 'Start',
   retiredLabel = 'Retired'
@@ -144,10 +145,43 @@ export const startInformationTime = ({
   const startTime = startTimes[pilotId]?.[stageId] || '';
   const finishTime = times[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
-  const status = getPilotStatus(pilotId, stageId, startTimes, times, retiredStages, stageDate, now);
+  return getStartInformationFromValues({
+    startTime,
+    finishTime,
+    retired,
+    stageDate,
+    now,
+    decimals,
+    includeLabel,
+    startLabel,
+    retiredLabel
+  });
+};
+
+export const getStartInformationFromValues = ({
+  startTime = '',
+  finishTime = '',
+  retired = false,
+  stageDate,
+  now = new Date(),
+  decimals = 3,
+  includeLabel = true,
+  startLabel = 'Start',
+  retiredLabel = 'Retired'
+}) => {
   const stageStartDateTime = getStageDateTime(stageDate, startTime);
   const remainingToStartMs = stageStartDateTime ? (stageStartDateTime.getTime() - now.getTime()) : null;
   const elapsedSinceStartMs = stageStartDateTime ? (now.getTime() - stageStartDateTime.getTime()) : null;
+  let status = 'not_started';
+
+  if (finishTime) {
+    status = 'finished';
+  } else if (retired) {
+    status = 'retired';
+  } else if (startTime && hasStageDateTimePassed(startTime, stageDate, now)) {
+    status = 'racing';
+  }
+
   const shouldShowStartCountdown = status === 'not_started'
     && startTime
     && remainingToStartMs !== null
@@ -189,7 +223,7 @@ export const startInformationTime = ({
     if (shouldShowGreenSignal) {
       label = startLabel;
     }
-    timer = getRunningTime(startTime, stageDate, now);
+    timer = getRunningTime(startTime, stageDate, now, decimals);
     text = timer;
   } else if (status === 'finished' && finishTime) {
     timer = finishTime;

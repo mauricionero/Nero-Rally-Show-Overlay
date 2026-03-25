@@ -30,6 +30,12 @@ common:
 # CABEÇALHO / NAVEGAÇÃO
 # ===========================================
 header:
+  transition: "Transicao"
+  transitionDuration: "Duracao"
+  transitionNone: "Nenhuma"
+  transitionFade: "Fade"
+  transitionWipe: "Cortina"
+  transitionSlide: "Slide"
   title: "Painel Rally"
   subtitle: "Configuração"
   goLive: "Ao Vivo"
@@ -53,6 +59,7 @@ tabs:
   times: "Tempos"
   streams: "Streams"
   config: "Config"
+  liveSync: "Live Sync"
   debug: "Debug"
 
 # ===========================================
@@ -213,6 +220,14 @@ config:
   branding: "Marca"
   logoUrl: "URL do Logo do Canal"
   logoUrlPlaceholder: "https://exemplo.com/logo.png"
+  transitionImage: "URL da Imagem de Transicao"
+  transitionImagePlaceholder: "https://exemplo.com/transicao.png"
+  configurations: "Configuracoes"
+  configurationsDesc: "Ajustes gerais de idioma e exibicao de tempo"
+  timeDisplay: "Exibicao de Tempo"
+  timeDisplayDesc: "Controla quantas casas decimais sao mostradas no Times e no Overlay"
+  timeDecimals: "Casas Decimais"
+  timeDecimalsHelp: "Faixa aceita: 0 a 3. Zero desativa a exibicao abaixo de 1 segundo."
   
   language: "Idioma"
   selectLanguage: "Selecionar Idioma"
@@ -225,6 +240,10 @@ config:
   shareKeyInfo: "Compartilhe esta chave com a página de overlay para habilitar sincronização ao vivo"
   pasteKeyToConnect: "Cole a chave de canal da página Setup para conectar"
   channelKeyPlaceholder: "Cole a chave de canal aqui..."
+  copyOverlayUrl: "Copiar URL do Overlay"
+  copyTimesUrl: "Copiar URL do Times"
+  copyOverlayUrlSuccess: "URL do Overlay com a chave copiada!"
+  copyTimesUrlSuccess: "URL do Times com a chave copiada!"
   connectionStatus: "Status da Conexão"
   connected: "Conectado"
   disconnected: "Desconectado"
@@ -311,6 +330,9 @@ scene2:
   selectPilotWithStream: "Selecione um piloto com stream ativo"
   mainFeed: "Feed Principal"
   selectFeed: "Selecionar Feed"
+  finishedDisplay: "ExibiÃ§Ã£o Finalizados"
+  showTime: "Mostrar Tempo"
+  showGap: "Mostrar DiferenÃ§a"
   noPilotsOrCameras: "Nenhum feed disponível"
 
 # ===========================================

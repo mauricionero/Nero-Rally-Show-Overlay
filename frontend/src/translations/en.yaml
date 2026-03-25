@@ -41,6 +41,12 @@ header:
   websocket: "Websocket"
   websocketSetupHint: "Connect it in Config > Live sync (websocket): generate a key, connect, then this button will be enabled."
   websocketReadyHint: "Opens the overlay with the active websocket connection key."
+  transition: "Transition"
+  transitionDuration: "Duration"
+  transitionNone: "None"
+  transitionFade: "Fade"
+  transitionWipe: "Wipe"
+  transitionSlide: "Slide"
 
 # ===========================================
 # SETUP PAGE - TABS
@@ -53,6 +59,7 @@ tabs:
   times: "Times"
   streams: "Streams"
   config: "Config"
+  liveSync: "Live Sync"
   debug: "Debug"
 
 # ===========================================
@@ -213,6 +220,14 @@ config:
   branding: "Branding"
   logoUrl: "Channel Logo URL"
   logoUrlPlaceholder: "https://example.com/logo.png"
+  transitionImage: "Transition Image URL"
+  transitionImagePlaceholder: "https://example.com/transition.png"
+  configurations: "Configurations"
+  configurationsDesc: "General settings for language and time display"
+  timeDisplay: "Time Display"
+  timeDisplayDesc: "Control how many decimals are shown across Times and Overlay"
+  timeDecimals: "Decimals"
+  timeDecimalsHelp: "Accepted range: 0 to 3. Zero disables sub-second display."
   
   language: "Language"
   selectLanguage: "Select Language"
@@ -225,6 +240,10 @@ config:
   shareKeyInfo: "Share this key with the overlay page to enable live sync"
   pasteKeyToConnect: "Paste the channel key from Setup page to connect"
   channelKeyPlaceholder: "Paste channel key here..."
+  copyOverlayUrl: "Copy Overlay URL"
+  copyTimesUrl: "Copy Times URL"
+  copyOverlayUrlSuccess: "Overlay URL with key copied!"
+  copyTimesUrlSuccess: "Times URL with key copied!"
   connectionStatus: "Connection Status"
   connected: "Connected"
   disconnected: "Disconnected"
@@ -312,6 +331,9 @@ scene2:
   selectPilotWithStream: "Select a pilot with an active stream"
   mainFeed: "Main Feed"
   selectFeed: "Select Feed"
+  finishedDisplay: "Finished Display"
+  showTime: "Show Time"
+  showGap: "Show Gap"
   noPilotsOrCameras: "No feeds available"
 
 # ===========================================

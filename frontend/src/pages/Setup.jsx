@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useRally } from '../contexts/RallyContext.jsx';
+import { useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
@@ -21,11 +21,13 @@ import TimesTab from '../components/setup/TimesTab.jsx';
 import StreamsTab from '../components/setup/StreamsTab.jsx';
 import ConfigTab from '../components/setup/ConfigTab.jsx';
 import DebugTab from '../components/setup/DebugTab.jsx';
+import LiveSyncTab from '../components/setup/LiveSyncTab.jsx';
 
 export default function Setup() {
   const { t } = useTranslation();
-  const { wsChannelKey, wsEnabled, wsConnectionStatus, wsLastMessageAt, setClientRole } = useRally();
+  const { wsChannelKey, wsEnabled, wsConnectionStatus, wsLastMessageAt, setClientRole } = useRallyWs();
   const [hideStreams, setHideStreams] = useState(false);
+  const [activeTab, setActiveTab] = useState('pilots');
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
   const [messagesLastMinute, setMessagesLastMinute] = useState(0);
   const [messagesThisSecond, setMessagesThisSecond] = useState(0);
@@ -34,6 +36,10 @@ export default function Setup() {
   const messageBucketTotalRef = React.useRef(0);
   const messageSecondAlertRef = React.useRef(false);
   const hasWebSocketOverlay = wsConnectionStatus === 'connected' && Boolean(wsChannelKey);
+
+  useEffect(() => {
+    document.title = `${t('header.title')} - ${t('header.subtitle')}`;
+  }, [t]);
 
   useEffect(() => {
     setClientRole('setup');
@@ -47,6 +53,10 @@ export default function Setup() {
   }, [wsEnabled]);
 
   useEffect(() => {
+    if (!wsEnabled) {
+      return undefined;
+    }
+
     const tick = () => {
       const buckets = messageBucketsRef.current;
       const len = buckets.length;
@@ -65,7 +75,7 @@ export default function Setup() {
 
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [wsEnabled]);
 
   useEffect(() => {
     if (!wsLastMessageAt) return;
@@ -280,7 +290,7 @@ export default function Setup() {
           </div>
         </div>
 
-        <Tabs defaultValue="pilots" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-[#18181B] border border-zinc-800">
             <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">{t('tabs.pilots')}</TabsTrigger>
             <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">{t('tabs.categories')}</TabsTrigger>
@@ -289,40 +299,63 @@ export default function Setup() {
             <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">{t('tabs.streams')}</TabsTrigger>
             <TabsTrigger value="bulkload" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-bulkload">{t('tabs.bulkLoad')}</TabsTrigger>
             <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">{t('tabs.config')}</TabsTrigger>
+            <TabsTrigger value="liveSync" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-live-sync">{t('tabs.liveSync')}</TabsTrigger>
             <TabsTrigger value="debug" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-debug">{t('tabs.debug')}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pilots">
-            <PilotsTab hideStreams={hideStreams} />
-          </TabsContent>
+          {activeTab === 'pilots' && (
+            <TabsContent value="pilots">
+              <PilotsTab hideStreams={hideStreams} />
+            </TabsContent>
+          )}
 
-          <TabsContent value="categories">
-            <CategoriesTab />
-          </TabsContent>
+          {activeTab === 'categories' && (
+            <TabsContent value="categories">
+              <CategoriesTab />
+            </TabsContent>
+          )}
 
-          <TabsContent value="therace">
-            <TheRaceTab />
-          </TabsContent>
+          {activeTab === 'therace' && (
+            <TabsContent value="therace">
+              <TheRaceTab />
+            </TabsContent>
+          )}
 
-          <TabsContent value="times">
-            <TimesTab />
-          </TabsContent>
+          {activeTab === 'times' && (
+            <TabsContent value="times">
+              <TimesTab />
+            </TabsContent>
+          )}
 
-          <TabsContent value="streams">
-            <StreamsTab hideStreams={hideStreams} />
-          </TabsContent>
+          {activeTab === 'streams' && (
+            <TabsContent value="streams">
+              <StreamsTab hideStreams={hideStreams} />
+            </TabsContent>
+          )}
 
-          <TabsContent value="bulkload">
-            <BulkLoadTab />
-          </TabsContent>
+          {activeTab === 'bulkload' && (
+            <TabsContent value="bulkload">
+              <BulkLoadTab />
+            </TabsContent>
+          )}
 
-          <TabsContent value="config">
-            <ConfigTab />
-          </TabsContent>
+          {activeTab === 'config' && (
+            <TabsContent value="config">
+              <ConfigTab />
+            </TabsContent>
+          )}
 
-          <TabsContent value="debug">
-            <DebugTab />
-          </TabsContent>
+          {activeTab === 'liveSync' && (
+            <TabsContent value="liveSync">
+              <LiveSyncTab />
+            </TabsContent>
+          )}
+
+          {activeTab === 'debug' && (
+            <TabsContent value="debug">
+              <DebugTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

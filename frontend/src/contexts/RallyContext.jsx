@@ -6,11 +6,47 @@ import { compareStagesBySchedule } from '../utils/stageSchedule.js';
 import { isLapRaceStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
 
 const RallyContext = createContext();
+const RallyConfigContext = createContext();
+const RallyMetaContext = createContext();
+const RallyTimingContext = createContext();
+const RallyWsContext = createContext();
 
 export const useRally = () => {
   const context = useContext(RallyContext);
   if (!context) {
     throw new Error('useRally must be used within RallyProvider');
+  }
+  return context;
+};
+
+export const useRallyConfig = () => {
+  const context = useContext(RallyConfigContext);
+  if (!context) {
+    throw new Error('useRallyConfig must be used within RallyProvider');
+  }
+  return context;
+};
+
+export const useRallyMeta = () => {
+  const context = useContext(RallyMetaContext);
+  if (!context) {
+    throw new Error('useRallyMeta must be used within RallyProvider');
+  }
+  return context;
+};
+
+export const useRallyTiming = () => {
+  const context = useContext(RallyTimingContext);
+  if (!context) {
+    throw new Error('useRallyTiming must be used within RallyProvider');
+  }
+  return context;
+};
+
+export const useRallyWs = () => {
+  const context = useContext(RallyWsContext);
+  if (!context) {
+    throw new Error('useRallyWs must be used within RallyProvider');
   }
   return context;
 };
@@ -111,9 +147,18 @@ export const RallyProvider = ({ children }) => {
   const [stageAlerts, setStageAlerts] = useState(() => loadFromStorage('rally_stage_alerts', {}));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
+  const [timeDecimals, setTimeDecimals] = useState(() => {
+    const storedValue = loadFromStorage('rally_time_decimals', 3);
+    const numericValue = Number(storedValue);
+    if (!Number.isFinite(numericValue)) {
+      return 3;
+    }
+    return Math.min(3, Math.max(0, Math.trunc(numericValue)));
+  });
   const [chromaKey, setChromaKey] = useState(() => loadFromStorage('rally_chroma_key', '#000000'));
   const [mapUrl, setMapUrl] = useState(() => loadFromStorage('rally_map_url', ''));
   const [logoUrl, setLogoUrl] = useState(() => loadFromStorage('rally_logo_url', ''));
+  const [transitionImageUrl, setTransitionImageUrl] = useState(() => loadFromStorage('rally_transition_image', ''));
   const [externalMedia, setExternalMedia] = useState(() => loadFromStorage('rally_external_media', []));
   const [streamConfigs, setStreamConfigs] = useState(() => loadFromStorage('rally_stream_configs', {}));
   const [globalAudio, setGlobalAudio] = useState(() => loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
@@ -206,9 +251,15 @@ export const RallyProvider = ({ children }) => {
     setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setDebugDate(loadFromStorage('rally_debug_date', ''));
+    const storedTimeDecimals = loadFromStorage('rally_time_decimals', 3);
+    const normalizedTimeDecimals = Number.isFinite(Number(storedTimeDecimals))
+      ? Math.min(3, Math.max(0, Math.trunc(Number(storedTimeDecimals))))
+      : 3;
+    setTimeDecimals(normalizedTimeDecimals);
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
     setMapUrl(loadFromStorage('rally_map_url', ''));
     setLogoUrl(loadFromStorage('rally_logo_url', ''));
+    setTransitionImageUrl(loadFromStorage('rally_transition_image', ''));
     setExternalMedia(loadFromStorage('rally_external_media', []));
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
@@ -605,9 +656,13 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.stageAlerts !== undefined && !shouldPreserveLocalTimingSection('stageAlerts')) setStageAlerts(normalizedData.stageAlerts);
     if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
     if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
+    if (normalizedData.timeDecimals !== undefined) {
+      setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(normalizedData.timeDecimals) || 0))));
+    }
     if (normalizedData.chromaKey !== undefined) setChromaKey(normalizedData.chromaKey);
     if (normalizedData.mapUrl !== undefined) setMapUrl(normalizedData.mapUrl);
     if (normalizedData.logoUrl !== undefined) setLogoUrl(normalizedData.logoUrl);
+    if (normalizedData.transitionImageUrl !== undefined) setTransitionImageUrl(normalizedData.transitionImageUrl);
     if (normalizedData.externalMedia !== undefined) setExternalMedia(normalizedData.externalMedia);
     if (normalizedData.streamConfigs !== undefined) setStreamConfigs(normalizedData.streamConfigs);
     if (normalizedData.globalAudio !== undefined) setGlobalAudio(normalizedData.globalAudio);
@@ -668,9 +723,11 @@ export const RallyProvider = ({ children }) => {
     stageAlerts,
     currentStageId,
     debugDate,
+    timeDecimals,
     chromaKey,
     mapUrl,
     logoUrl,
+    transitionImageUrl,
     externalMedia,
     streamConfigs,
     globalAudio,
@@ -692,9 +749,11 @@ export const RallyProvider = ({ children }) => {
     stageAlerts,
     currentStageId,
     debugDate,
+    timeDecimals,
     chromaKey,
     mapUrl,
     logoUrl,
+    transitionImageUrl,
     externalMedia,
     streamConfigs,
     globalAudio,
@@ -710,9 +769,11 @@ export const RallyProvider = ({ children }) => {
         eventName: snapshot.eventName,
         currentStageId: snapshot.currentStageId,
         debugDate: snapshot.debugDate,
+        timeDecimals: snapshot.timeDecimals,
         chromaKey: snapshot.chromaKey,
         mapUrl: snapshot.mapUrl,
         logoUrl: snapshot.logoUrl,
+        transitionImageUrl: snapshot.transitionImageUrl,
         globalAudio: snapshot.globalAudio
       } },
       { section: 'pilots', payload: { pilots: pruneEmptyNestedValues(snapshot.pilots) } },
@@ -757,9 +818,11 @@ export const RallyProvider = ({ children }) => {
         eventName: snapshot.eventName,
         currentStageId: snapshot.currentStageId,
         debugDate: snapshot.debugDate,
+        timeDecimals: snapshot.timeDecimals,
         chromaKey: snapshot.chromaKey,
         mapUrl: snapshot.mapUrl,
         logoUrl: snapshot.logoUrl,
+        transitionImageUrl: snapshot.transitionImageUrl,
         globalAudio: snapshot.globalAudio
       },
       pilots: { pilots: pruneEmptyNestedValues(snapshot.pilots) },
@@ -1658,6 +1721,12 @@ export const RallyProvider = ({ children }) => {
   }, [debugDate, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    localStorage.setItem('rally_time_decimals', JSON.stringify(timeDecimals));
+    updateDataVersion();
+    markSetupSectionDirty('meta');
+  }, [timeDecimals, markSetupSectionDirty, updateDataVersion]);
+
+  useEffect(() => {
     setStartTimes((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -1791,6 +1860,12 @@ export const RallyProvider = ({ children }) => {
   }, [logoUrl, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    localStorage.setItem('rally_transition_image', JSON.stringify(transitionImageUrl));
+    updateDataVersion();
+    markSetupSectionDirty('meta');
+  }, [transitionImageUrl, markSetupSectionDirty, updateDataVersion]);
+
+  useEffect(() => {
     localStorage.setItem('rally_stream_configs', JSON.stringify(streamConfigs));
     updateDataVersion();
     markSetupSectionDirty('streamConfigs');
@@ -1831,7 +1906,7 @@ export const RallyProvider = ({ children }) => {
   }, [lastTimesSyncAt, publishSessionManifestUpdate, wsEnabled, wsRole]);
 
   // CRUD for external media items
-  const addExternalMedia = (item) => {
+  const addExternalMedia = useCallback((item) => {
     const newItem = {
       id: createEntityId('media'),
       name: item.name || '',
@@ -1840,15 +1915,15 @@ export const RallyProvider = ({ children }) => {
       ...item
     };
     setExternalMedia(prev => [...prev, newItem]);
-  };
+  }, [setExternalMedia]);
 
-  const updateExternalMedia = (id, updates) => {
+  const updateExternalMedia = useCallback((id, updates) => {
     setExternalMedia(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
-  };
+  }, [setExternalMedia]);
 
-  const deleteExternalMedia = (id) => {
+  const deleteExternalMedia = useCallback((id) => {
     setExternalMedia(prev => prev.filter(m => m.id !== id));
-  };
+  }, [setExternalMedia]);
 
   const addPilot = (pilot) => {
     const newPilot = {
@@ -2016,9 +2091,9 @@ export const RallyProvider = ({ children }) => {
     }
   };
 
-  const updateStage = (id, updates) => {
+  const updateStage = useCallback((id, updates) => {
     setStages(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
-  };
+  }, [setStages]);
 
   const deleteStage = (id) => {
     setStages(prev => prev.filter(s => s.id !== id));
@@ -2093,20 +2168,20 @@ export const RallyProvider = ({ children }) => {
   };
 
   // Stage pilots functions (for Lap Race pilot selection)
-  const getStagePilots = (stageId) => {
-    return stagePilots[stageId] || pilots.map(p => p.id);
-  };
+  const getStagePilots = useCallback((stageId) => (
+    stagePilots[stageId] || pilots.map(p => p.id)
+  ), [pilots, stagePilots]);
 
-  const setStagePilotsForStage = (stageId, pilotIds) => {
+  const setStagePilotsForStage = useCallback((stageId, pilotIds) => {
     setStagePilots(prev => ({
       ...prev,
       [stageId]: pilotIds
     }));
     markTimingSectionDirty('stagePilots');
     markTimingLineDirty('stagePilots', null, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setStagePilots]);
 
-  const togglePilotInStage = (stageId, pilotId) => {
+  const togglePilotInStage = useCallback((stageId, pilotId) => {
     setStagePilots(prev => {
       const currentPilots = prev[stageId] || pilots.map(p => p.id);
       if (currentPilots.includes(pilotId)) {
@@ -2117,28 +2192,28 @@ export const RallyProvider = ({ children }) => {
     });
     markTimingSectionDirty('stagePilots');
     markTimingLineDirty('stagePilots', null, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, pilots, setStagePilots]);
 
-  const selectAllPilotsInStage = (stageId) => {
+  const selectAllPilotsInStage = useCallback((stageId) => {
     setStagePilots(prev => ({
       ...prev,
       [stageId]: pilots.map(p => p.id)
     }));
     markTimingSectionDirty('stagePilots');
     markTimingLineDirty('stagePilots', null, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, pilots, setStagePilots]);
 
-  const deselectAllPilotsInStage = (stageId) => {
+  const deselectAllPilotsInStage = useCallback((stageId) => {
     setStagePilots(prev => ({
       ...prev,
       [stageId]: []
     }));
     markTimingSectionDirty('stagePilots');
     markTimingLineDirty('stagePilots', null, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setStagePilots]);
 
   // Lap times functions
-  const setLapTime = (pilotId, stageId, lapIndex, time) => {
+  const setLapTime = useCallback((pilotId, stageId, lapIndex, time) => {
     setLapTimes(prev => {
       const pilotLaps = prev[pilotId] || {};
       const stageLaps = [...(pilotLaps[stageId] || [])];
@@ -2153,18 +2228,18 @@ export const RallyProvider = ({ children }) => {
     });
     markTimingSectionDirty('lapTimes');
     markTimingLineDirty('lapTimes', pilotId, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setLapTimes]);
 
-  const getLapTime = (pilotId, stageId, lapIndex) => {
-    return lapTimes[pilotId]?.[stageId]?.[lapIndex] || '';
-  };
+  const getLapTime = useCallback((pilotId, stageId, lapIndex) => (
+    lapTimes[pilotId]?.[stageId]?.[lapIndex] || ''
+  ), [lapTimes]);
 
-  const getPilotLapTimes = (pilotId, stageId) => {
-    return lapTimes[pilotId]?.[stageId] || [];
-  };
+  const getPilotLapTimes = useCallback((pilotId, stageId) => (
+    lapTimes[pilotId]?.[stageId] || []
+  ), [lapTimes]);
 
   // Position functions
-  const setPosition = (pilotId, stageId, position) => {
+  const setPosition = useCallback((pilotId, stageId, position) => {
     setPositions(prev => ({
       ...prev,
       [pilotId]: {
@@ -2174,14 +2249,14 @@ export const RallyProvider = ({ children }) => {
     }));
     markTimingSectionDirty('positions');
     markTimingLineDirty('positions', pilotId, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setPositions]);
 
-  const getPosition = (pilotId, stageId) => {
-    return positions[pilotId]?.[stageId] || null;
-  };
+  const getPosition = useCallback((pilotId, stageId) => (
+    positions[pilotId]?.[stageId] || null
+  ), [positions]);
 
   // Calculate positions based on lap times (for lap race / rallyX)
-  const calculatePositions = (stageId, currentLap) => {
+  const calculatePositions = useCallback((stageId, currentLap) => {
     const pilotData = pilots.map(pilot => {
       const pilotLaps = lapTimes[pilot.id]?.[stageId] || [];
       const completedLaps = pilotLaps.filter(t => t).length;
@@ -2205,9 +2280,9 @@ export const RallyProvider = ({ children }) => {
     pilotData.forEach((data, index) => {
       setPosition(data.pilotId, stageId, index + 1);
     });
-  };
+  }, [lapTimes, pilots, setPosition]);
 
-  const setTime = (pilotId, stageId, time) => {
+  const setTime = useCallback((pilotId, stageId, time) => {
     setTimes(prev => ({
       ...prev,
       [pilotId]: {
@@ -2217,13 +2292,13 @@ export const RallyProvider = ({ children }) => {
     }));
     markTimingSectionDirty('times');
     markTimingLineDirty('times', pilotId, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setTimes]);
 
-  const getTime = (pilotId, stageId) => {
-    return times[pilotId]?.[stageId] || '';
-  };
+  const getTime = useCallback((pilotId, stageId) => (
+    times[pilotId]?.[stageId] || ''
+  ), [times]);
 
-  const setArrivalTime = (pilotId, stageId, arrivalTime) => {
+  const setArrivalTime = useCallback((pilotId, stageId, arrivalTime) => {
     setArrivalTimes(prev => ({
       ...prev,
       [pilotId]: {
@@ -2233,13 +2308,13 @@ export const RallyProvider = ({ children }) => {
     }));
     markTimingSectionDirty('arrivalTimes');
     markTimingLineDirty('arrivalTimes', pilotId, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setArrivalTimes]);
 
-  const getArrivalTime = (pilotId, stageId) => {
-    return arrivalTimes[pilotId]?.[stageId] || '';
-  };
+  const getArrivalTime = useCallback((pilotId, stageId) => (
+    arrivalTimes[pilotId]?.[stageId] || ''
+  ), [arrivalTimes]);
 
-  const setStartTime = (pilotId, stageId, startTime) => {
+  const setStartTime = useCallback((pilotId, stageId, startTime) => {
     setStartTimes(prev => ({
       ...prev,
       [pilotId]: {
@@ -2249,13 +2324,13 @@ export const RallyProvider = ({ children }) => {
     }));
     markTimingSectionDirty('startTimes');
     markTimingLineDirty('startTimes', pilotId, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setStartTimes]);
 
-  const getStartTime = (pilotId, stageId) => {
-    return startTimes[pilotId]?.[stageId] || '';
-  };
+  const getStartTime = useCallback((pilotId, stageId) => (
+    startTimes[pilotId]?.[stageId] || ''
+  ), [startTimes]);
 
-  const setRealStartTime = (pilotId, stageId, realStartTime) => {
+  const setRealStartTime = useCallback((pilotId, stageId, realStartTime) => {
     setRealStartTimes(prev => ({
       ...prev,
       [pilotId]: {
@@ -2265,11 +2340,11 @@ export const RallyProvider = ({ children }) => {
     }));
     markTimingSectionDirty('realStartTimes');
     markTimingLineDirty('realStartTimes', pilotId, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setRealStartTimes]);
 
-  const getRealStartTime = (pilotId, stageId) => {
-    return realStartTimes[pilotId]?.[stageId] || '';
-  };
+  const getRealStartTime = useCallback((pilotId, stageId) => (
+    realStartTimes[pilotId]?.[stageId] || ''
+  ), [realStartTimes]);
 
   const bulkImportTimingEntries = (entries) => {
     if (!Array.isArray(entries) || entries.length === 0) {
@@ -2320,11 +2395,11 @@ export const RallyProvider = ({ children }) => {
     });
   };
 
-  const isRetiredStage = (pilotId, stageId) => {
-    return !!retiredStages[pilotId]?.[stageId];
-  };
+  const isRetiredStage = useCallback((pilotId, stageId) => (
+    !!retiredStages[pilotId]?.[stageId]
+  ), [retiredStages]);
 
-  const setRetiredFromStage = (pilotId, stageId, retired) => {
+  const setRetiredFromStage = useCallback((pilotId, stageId, retired) => {
     const sortedSpecialStages = [...stages]
       .filter((stage) => isSpecialStageType(stage.type))
       .sort(compareStagesBySchedule);
@@ -2360,13 +2435,13 @@ export const RallyProvider = ({ children }) => {
     affectedStageIds.forEach((affectedStageId) => {
       markTimingLineDirty('retiredStages', pilotId, affectedStageId);
     });
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setRetiredStages, stages]);
 
-  const isStageAlert = (pilotId, stageId) => {
-    return !!stageAlerts?.[pilotId]?.[stageId];
-  };
+  const isStageAlert = useCallback((pilotId, stageId) => (
+    !!stageAlerts?.[pilotId]?.[stageId]
+  ), [stageAlerts]);
 
-  const setStageAlert = (pilotId, stageId, alert) => {
+  const setStageAlert = useCallback((pilotId, stageId, alert) => {
     setStageAlerts((prev) => {
       const next = { ...prev };
       const nextPilotStages = { ...(next[pilotId] || {}) };
@@ -2387,7 +2462,7 @@ export const RallyProvider = ({ children }) => {
     });
     markTimingSectionDirty('stageAlerts');
     markTimingLineDirty('stageAlerts', pilotId, stageId);
-  };
+  }, [markTimingLineDirty, markTimingSectionDirty, setStageAlerts]);
 
   // Stream configuration functions
   const getStreamConfig = (pilotId) => {
@@ -2431,36 +2506,38 @@ export const RallyProvider = ({ children }) => {
     }
   };
 
-  const exportData = () => {
+  const exportData = useCallback(() => {
     const data = {
-      eventName,
-      positions,
-      lapTimes,
-      stagePilots,
-      pilots,
-      categories,
-      stages,
-      times,
-      arrivalTimes,
-      startTimes,
-      realStartTimes,
-      retiredStages,
-      stageAlerts,
-      streamConfigs,
-      globalAudio,
-      cameras,
-      externalMedia,
-      currentStageId,
-      chromaKey,
-      mapUrl,
-      logoUrl,
-      dataVersion,
+      eventName: loadFromStorage('rally_event_name', ''),
+      positions: loadFromStorage('rally_positions', {}),
+      lapTimes: loadFromStorage('rally_lap_times', {}),
+      stagePilots: loadFromStorage('rally_stage_pilots', {}),
+      pilots: loadFromStorage('rally_pilots', []),
+      categories: loadFromStorage('rally_categories', []),
+      stages: loadFromStorage('rally_stages', []),
+      times: loadFromStorage('rally_times', {}),
+      arrivalTimes: loadFromStorage('rally_arrival_times', {}),
+      startTimes: loadFromStorage('rally_start_times', {}),
+      realStartTimes: loadFromStorage('rally_real_start_times', {}),
+      retiredStages: loadFromStorage('rally_retired_stages', {}),
+      stageAlerts: loadFromStorage('rally_stage_alerts', {}),
+      timeDecimals: loadFromStorage('rally_time_decimals', 3),
+      streamConfigs: loadFromStorage('rally_stream_configs', {}),
+      globalAudio: loadFromStorage('rally_global_audio', { volume: 100, muted: false }),
+      cameras: loadFromStorage('rally_cameras', []),
+      externalMedia: loadFromStorage('rally_external_media', []),
+      transitionImageUrl: loadFromStorage('rally_transition_image', ''),
+      currentStageId: loadFromStorage('rally_current_stage', null),
+      chromaKey: loadFromStorage('rally_chroma_key', '#000000'),
+      mapUrl: loadFromStorage('rally_map_url', ''),
+      logoUrl: loadFromStorage('rally_logo_url', ''),
+      dataVersion: loadFromStorage('rally_data_version', Date.now()),
       exportDate: new Date().toISOString()
     };
     return JSON.stringify(data, null, 2);
-  };
+  }, []);
 
-  const importData = (jsonString) => {
+  const importData = useCallback((jsonString) => {
     try {
       const data = JSON.parse(jsonString);
       if (data.pilots) setPilots(data.pilots);
@@ -2472,10 +2549,14 @@ export const RallyProvider = ({ children }) => {
       if (data.realStartTimes) setRealStartTimes(data.realStartTimes);
       if (data.retiredStages) setRetiredStages(data.retiredStages);
       if (data.stageAlerts) setStageAlerts(data.stageAlerts);
+      if (data.timeDecimals !== undefined) {
+        setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(data.timeDecimals) || 0))));
+      }
       if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
       if (data.globalAudio) setGlobalAudio(data.globalAudio);
       if (data.cameras) setCameras(data.cameras);
       if (data.externalMedia) setExternalMedia(data.externalMedia);
+      if (data.transitionImageUrl !== undefined) setTransitionImageUrl(data.transitionImageUrl);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
@@ -2490,9 +2571,9 @@ export const RallyProvider = ({ children }) => {
       console.error('Error importing data:', error);
       return false;
     }
-  };
+  }, [setCategories, setCameras, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
-  const clearAllData = () => {
+  const clearAllData = useCallback(() => {
     setEventName('');
     setPositions({});
     setLapTimes({});
@@ -2507,6 +2588,7 @@ export const RallyProvider = ({ children }) => {
     setRetiredStages({});
     setStageAlerts({});
     setDebugDate('');
+    setTimeDecimals(3);
     setStreamConfigs({});
     setCameras([]);
     setExternalMedia([]);
@@ -2515,8 +2597,9 @@ export const RallyProvider = ({ children }) => {
     setChromaKey('#000000');
     setMapUrl('');
     setLogoUrl('');
+    setTransitionImageUrl('');
     updateDataVersion();
-  };
+  }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -2535,6 +2618,7 @@ export const RallyProvider = ({ children }) => {
     retiredStages,
     stageAlerts,
     debugDate,
+    timeDecimals,
     streamConfigs,
     globalAudio,
     cameras,
@@ -2542,6 +2626,7 @@ export const RallyProvider = ({ children }) => {
     chromaKey,
     mapUrl,
     logoUrl,
+    transitionImageUrl,
     currentScene,
     dataVersion,
     // WebSocket state
@@ -2568,9 +2653,11 @@ export const RallyProvider = ({ children }) => {
     setEventName,
     setCurrentScene,
     setDebugDate,
+    setTimeDecimals,
     setChromaKey,
     setMapUrl,
     setLogoUrl,
+    setTransitionImageUrl,
     setCurrentStageId,
     setGlobalAudio,
     // CRUD operations
@@ -2638,5 +2725,189 @@ export const RallyProvider = ({ children }) => {
     requestTimingLineSync
   };
 
-  return <RallyContext.Provider value={value}>{children}</RallyContext.Provider>;
+  const configValue = useMemo(() => ({
+    pilots,
+    categories,
+    stages,
+    cameras,
+    timeDecimals,
+    chromaKey,
+    logoUrl,
+    transitionImageUrl,
+    externalMedia,
+    setTimeDecimals,
+    setChromaKey,
+    setLogoUrl,
+    setTransitionImageUrl,
+    addExternalMedia,
+    updateExternalMedia,
+    deleteExternalMedia,
+    exportData,
+    importData,
+    clearAllData
+  }), [
+    pilots,
+    categories,
+    stages,
+    cameras,
+    timeDecimals,
+    chromaKey,
+    logoUrl,
+    transitionImageUrl,
+    externalMedia,
+    setTimeDecimals,
+    setChromaKey,
+    setLogoUrl,
+    setTransitionImageUrl,
+    addExternalMedia,
+    updateExternalMedia,
+    deleteExternalMedia,
+    exportData,
+    importData,
+    clearAllData
+  ]);
+
+  const metaValue = useMemo(() => ({
+    pilots,
+    categories,
+    stages,
+    currentStageId,
+    updateStage
+  }), [categories, currentStageId, pilots, stages, updateStage]);
+
+  const timingValue = useMemo(() => ({
+    times,
+    arrivalTimes,
+    startTimes,
+    realStartTimes,
+    lapTimes,
+    positions,
+    stagePilots,
+    retiredStages,
+    stageAlerts,
+    timeDecimals,
+    setTime,
+    getTime,
+    setArrivalTime,
+    getArrivalTime,
+    setStartTime,
+    getStartTime,
+    setRealStartTime,
+    getRealStartTime,
+    setLapTime,
+    getLapTime,
+    getPilotLapTimes,
+    setPosition,
+    getPosition,
+    calculatePositions,
+    getStagePilots,
+    setStagePilotsForStage,
+    togglePilotInStage,
+    selectAllPilotsInStage,
+    deselectAllPilotsInStage,
+    setRetiredFromStage,
+    isRetiredStage,
+    setStageAlert,
+    isStageAlert
+  }), [
+    arrivalTimes,
+    calculatePositions,
+    deselectAllPilotsInStage,
+    getArrivalTime,
+    getLapTime,
+    getPilotLapTimes,
+    getPosition,
+    getRealStartTime,
+    getStagePilots,
+    getStartTime,
+    getTime,
+    isRetiredStage,
+    isStageAlert,
+    lapTimes,
+    positions,
+    realStartTimes,
+    retiredStages,
+    selectAllPilotsInStage,
+    setArrivalTime,
+    setLapTime,
+    setPosition,
+    setRealStartTime,
+    setRetiredFromStage,
+    setStageAlert,
+    setStagePilotsForStage,
+    setStartTime,
+    setTime,
+    stageAlerts,
+    stagePilots,
+    startTimes,
+    timeDecimals,
+    times,
+    togglePilotInStage
+  ]);
+
+  const wsValue = useMemo(() => ({
+    wsEnabled,
+    wsChannelKey,
+    wsConnectionStatus,
+    wsError,
+    wsLastMessageAt,
+    wsRole,
+    wsPublishSections,
+    clientRole,
+    sessionManifest,
+    latestSnapshotVersion,
+    dirtySetupSections,
+    lastSetupEditAt,
+    lastSetupSyncAt,
+    dirtyTimingSections,
+    lastTimesEditAt,
+    lastTimesSyncAt,
+    lastTimesAckAt,
+    lastTimesAckedEditAt,
+    lineSyncResults,
+    connectWebSocket,
+    disconnectWebSocket,
+    generateNewChannelKey,
+    setClientRole,
+    requestTimingLineSync
+  }), [
+    clientRole,
+    connectWebSocket,
+    disconnectWebSocket,
+    dirtySetupSections,
+    dirtyTimingSections,
+    generateNewChannelKey,
+    lastSetupEditAt,
+    lastSetupSyncAt,
+    lastTimesAckAt,
+    lastTimesAckedEditAt,
+    lastTimesEditAt,
+    lastTimesSyncAt,
+    latestSnapshotVersion,
+    lineSyncResults,
+    requestTimingLineSync,
+    sessionManifest,
+    setClientRole,
+    wsChannelKey,
+    wsConnectionStatus,
+    wsEnabled,
+    wsError,
+    wsLastMessageAt,
+    wsPublishSections,
+    wsRole
+  ]);
+
+  return (
+    <RallyContext.Provider value={value}>
+      <RallyConfigContext.Provider value={configValue}>
+        <RallyMetaContext.Provider value={metaValue}>
+          <RallyTimingContext.Provider value={timingValue}>
+            <RallyWsContext.Provider value={wsValue}>
+              {children}
+            </RallyWsContext.Provider>
+          </RallyTimingContext.Provider>
+        </RallyMetaContext.Provider>
+      </RallyConfigContext.Provider>
+    </RallyContext.Provider>
+  );
 };

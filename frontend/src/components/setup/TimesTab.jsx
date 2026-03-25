@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useRally } from '../../contexts/RallyContext.jsx';
+import { useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -13,7 +13,7 @@ import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversi
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
-import { formatMsAsShortTime } from '../../utils/timeFormat.js';
+import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { X, Clock, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
 import {
@@ -95,7 +95,27 @@ const getPilotStartOrderForTimes = (pilot) => {
   return numericValue;
 };
 
+const getPilotOffsetMinutesForTimes = (pilot) => {
+  const numericValue = Number(pilot?.timeOffsetMinutes);
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return numericValue;
+};
+
 const comparePilotsForTimes = (a, b, categoryOrderById) => {
+  const offsetA = getPilotOffsetMinutesForTimes(a);
+  const offsetB = getPilotOffsetMinutesForTimes(b);
+
+  if (offsetA !== null && offsetB !== null && offsetA !== offsetB) {
+    return offsetA - offsetB;
+  }
+
+  if (offsetA !== null && offsetB === null) return -1;
+  if (offsetA === null && offsetB !== null) return 1;
+
   const startOrderA = getPilotStartOrderForTimes(a);
   const startOrderB = getPilotStartOrderForTimes(b);
 
@@ -138,43 +158,7 @@ const getLineSyncStatusText = (t, status) => {
 };
 
 // Helper to get current time in HH:MM:SS.mmm format
-const getCurrentTimeString = () => {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  const ms = String(now.getMilliseconds()).padStart(3, '0');
-  return `${hours}:${minutes}:${seconds}.${ms}`;
-};
-
-// Helper to calculate lap duration from previous lap
-const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
-  if (!currentLapTime) return '';
-  
-  const parseTime = (timeStr) => {
-    if (!timeStr) return null;
-    const parts = timeStr.split(':');
-    if (parts.length < 2) return null;
-    const hours = parts.length === 3 ? parseInt(parts[0]) : 0;
-    const mins = parts.length === 3 ? parseInt(parts[1]) : parseInt(parts[0]);
-    const secsAndMs = parts.length === 3 ? parts[2] : parts[1];
-    const [secs, ms] = secsAndMs.split('.');
-    return (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
-  };
-
-  const currentMs = parseTime(currentLapTime);
-  const previousMs = previousLapTime ? parseTime(previousLapTime) : (startTime ? parseTime(startTime) : null);
-  
-  if (currentMs === null || previousMs === null) return '';
-  
-  const diffMs = currentMs - previousMs;
-  if (diffMs < 0) return '';
-  
-  const totalSecs = diffMs / 1000;
-  const mins = Math.floor(totalSecs / 60);
-  const secs = (totalSecs % 60).toFixed(3);
-  return `${mins}:${secs.padStart(6, '0')}`;
-};
+const getCurrentTimeString = (timeDecimals) => formatClockFromDate(new Date(), timeDecimals);
 
 const getStageTypeIcon = (type) => {
   switch (type) {
@@ -203,39 +187,84 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
   const showLineSyncRequest = typeof window !== 'undefined' && window.location?.pathname !== '/times';
   const {
     setTime,
-    getTime,
     setArrivalTime,
-    getArrivalTime,
     setStartTime,
-    getStartTime,
     setRealStartTime,
-    getRealStartTime,
     setRetiredFromStage,
-    isRetiredStage,
     setStageAlert,
-    isStageAlert,
-    lineSyncResults,
-    requestTimingLineSync,
-    wsConnectionStatus
-  } = useRally();
+    times,
+    arrivalTimes,
+    startTimes,
+    realStartTimes,
+    retiredStages,
+    stageAlerts,
+    timeDecimals
+  } = useRallyTiming();
+  const { wsConnectionStatus, lineSyncResults, requestTimingLineSync } = useRallyWs();
+
+  const stagePilotRows = useMemo(() => (
+    sortedPilots.map((pilot) => {
+      const category = categoryMap.get(pilot.categoryId);
+      const totalTime = times[pilot.id]?.[stage.id] || '';
+      const arrivalTimeValue = arrivalTimes[pilot.id]?.[stage.id] || '';
+      const manualStartTimeValue = startTimes[pilot.id]?.[stage.id] || '';
+      const idealStartTimeValue = manualStartTime
+        ? manualStartTimeValue
+        : getPilotScheduledStartTime(stage, pilot);
+      const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
+      const retired = !!retiredStages[pilot.id]?.[stage.id];
+      const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
+      const totalMs = parseTotalTimeToMs(totalTime);
+      const idealSeconds = parseClockTimeToSeconds(idealStartTimeValue);
+      const realSeconds = parseClockTimeToSeconds(realStartTimeValue);
+      const lineSync = lineSyncResults?.[`${pilot.id}:${stage.id}`] || null;
+
+      return {
+        pilot,
+        category,
+        totalTime,
+        arrivalTimeValue,
+        idealStartTimeValue,
+        realStartTimeValue,
+        retired,
+        alert,
+        totalMs,
+        hasRecordedTime: Boolean(totalTime),
+        hasTimingData: Boolean(totalTime || arrivalTimeValue),
+        isJumpStart: Number.isFinite(idealSeconds) && Number.isFinite(realSeconds)
+          ? realSeconds < idealSeconds
+          : false,
+        lineSync
+      };
+    })
+  ), [
+    sortedPilots,
+    categoryMap,
+    manualStartTime,
+    stage,
+    times,
+    arrivalTimes,
+    startTimes,
+    realStartTimes,
+    retiredStages,
+    stageAlerts,
+    lineSyncResults
+  ]);
 
   const categoryStats = useMemo(() => {
     const statsByCategory = new Map();
-
     const fallbackCategory = { id: 'uncategorized', name: t('categories.noCategory'), color: '#71717A' };
 
-    sortedPilots.forEach((pilot) => {
-      const category = categoryMap.get(pilot.categoryId) || fallbackCategory;
+    stagePilotRows.forEach((row) => {
+      const category = row.category || fallbackCategory;
 
       const existing = statsByCategory.get(category.id) || {
         category,
         values: []
       };
 
-      const totalTime = getTime(pilot.id, stage.id);
-      const totalMs = parseTotalTimeToMs(totalTime);
-      if (Number.isFinite(totalMs)) {
-        existing.values.push(totalMs);
+      if (Number.isFinite(row.totalMs)) {
+        existing.values.push(row.totalMs);
       }
       statsByCategory.set(category.id, existing);
     });
@@ -268,32 +297,48 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       .sort((a, b) => a.order - b.order);
 
     return stats;
-  }, [sortedPilots, categoryMap, categoryOrderById, getTime, stage.id]);
+  }, [stagePilotRows, categoryOrderById, t]);
 
   const categoryStatsById = useMemo(() => (
     new Map(categoryStats.map((stat) => [stat.category.id, stat]))
   ), [categoryStats]);
 
-  const stageSortedPilots = useMemo(() => (
-    [...sortedPilots].sort((a, b) => {
-      const pilotAHasTime = Boolean(getTime(a.id, stage.id) || getArrivalTime(a.id, stage.id));
-      const pilotBHasTime = Boolean(getTime(b.id, stage.id) || getArrivalTime(b.id, stage.id));
+  const displayRows = useMemo(() => (
+    stagePilotRows.map((row) => {
+      const categoryStatsForRow = row.category ? categoryStatsById.get(row.category.id) : null;
+      const avgMs = categoryStatsForRow?.avg;
+      const deviationMs = categoryStatsForRow?.deviation;
+      const warningThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
+        ? avgMs + deviationMs
+        : null;
+      const dangerThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
+        ? avgMs + 2 * deviationMs
+        : null;
+      const alertLevel = Number.isFinite(row.totalMs) && Number.isFinite(warningThreshold)
+        ? (row.totalMs > dangerThreshold ? 'danger' : row.totalMs > warningThreshold ? 'warning' : null)
+        : null;
 
-      if (pilotAHasTime !== pilotBHasTime) {
-        return pilotAHasTime ? -1 : 1;
-      }
-
-      return comparePilotsForTimes(a, b, categoryOrderById);
+      return {
+        ...row,
+        avgMs,
+        deviationMs,
+        warningThreshold,
+        dangerThreshold,
+        alertLevel,
+        alertColor: alertLevel === 'danger' ? 'text-red-400' : 'text-amber-300'
+      };
     })
-  ), [sortedPilots, getTime, getArrivalTime, stage.id, categoryOrderById]);
+  ), [stagePilotRows, categoryStatsById]);
 
   const handleArrivalTimeChange = (pilotId, value) => {
     if (isReadOnly) return;
     setArrivalTime(pilotId, stage.id, value);
     const pilot = pilotById.get(pilotId);
-    const startTime = manualStartTime ? getStartTime(pilotId, stage.id) : getPilotScheduledStartTime(stage, pilot);
+    const startTime = manualStartTime
+      ? (startTimes[pilotId]?.[stage.id] || '')
+      : getPilotScheduledStartTime(stage, pilot);
     if (isValidClockTime(startTime) && value) {
-      const totalTime = arrivalTimeToTotal(value, startTime);
+      const totalTime = arrivalTimeToTotal(value, startTime, timeDecimals);
       if (totalTime) {
         setTime(pilotId, stage.id, totalTime);
       }
@@ -304,9 +349,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     if (isReadOnly) return;
     setTime(pilotId, stage.id, value);
     const pilot = pilotById.get(pilotId);
-    const startTime = manualStartTime ? getStartTime(pilotId, stage.id) : getPilotScheduledStartTime(stage, pilot);
+    const startTime = manualStartTime
+      ? (startTimes[pilotId]?.[stage.id] || '')
+      : getPilotScheduledStartTime(stage, pilot);
     if (isValidClockTime(startTime) && value) {
-      const arrivalTime = totalTimeToArrival(value, startTime);
+      const arrivalTime = totalTimeToArrival(value, startTime, timeDecimals);
       if (arrivalTime) {
         setArrivalTime(pilotId, stage.id, arrivalTime);
       }
@@ -322,11 +369,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       return;
     }
 
-    const currentArrivalTime = getArrivalTime(pilotId, stage.id);
-    const currentTotalTime = getTime(pilotId, stage.id);
+    const currentArrivalTime = arrivalTimes[pilotId]?.[stage.id] || '';
+    const currentTotalTime = times[pilotId]?.[stage.id] || '';
 
     if (currentArrivalTime) {
-      const totalTime = arrivalTimeToTotal(currentArrivalTime, nextStartTime);
+      const totalTime = arrivalTimeToTotal(currentArrivalTime, nextStartTime, timeDecimals);
       if (totalTime) {
         setTime(pilotId, stage.id, totalTime);
       }
@@ -334,7 +381,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     }
 
     if (currentTotalTime) {
-      const arrivalTime = totalTimeToArrival(currentTotalTime, nextStartTime);
+      const arrivalTime = totalTimeToArrival(currentTotalTime, nextStartTime, timeDecimals);
       if (arrivalTime) {
         setArrivalTime(pilotId, stage.id, arrivalTime);
       }
@@ -400,38 +447,26 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
               </tr>
             </thead>
             <tbody>
-              {stageSortedPilots.map((pilot) => {
-                const category = categoryMap.get(pilot.categoryId);
-                const idealStartTimeValue = manualStartTime
-                  ? getStartTime(pilot.id, stage.id)
-                  : getPilotScheduledStartTime(stage, pilot);
-                const realStartTimeValue = getRealStartTime(pilot.id, stage.id);
-                const retired = isRetiredStage(pilot.id, stage.id);
-                const alert = isStageAlert(pilot.id, stage.id);
-                const hasRecordedTime = !!getTime(pilot.id, stage.id);
-                const totalTime = getTime(pilot.id, stage.id);
-                const totalMs = parseTotalTimeToMs(totalTime);
-                const categoryStats = category ? categoryStatsById.get(category.id) : null;
-                const avgMs = categoryStats?.avg;
-                const deviationMs = categoryStats?.deviation;
-                const warningThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
-                  ? avgMs + deviationMs
-                  : null;
-                const dangerThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
-                  ? avgMs + 2 * deviationMs
-                  : null;
-                const alertLevel = Number.isFinite(totalMs) && Number.isFinite(warningThreshold)
-                  ? (totalMs > dangerThreshold ? 'danger' : totalMs > warningThreshold ? 'warning' : null)
-                  : null;
-                const alertColor = alertLevel === 'danger' ? 'text-red-400' : 'text-amber-300';
-
-                const idealSeconds = parseClockTimeToSeconds(idealStartTimeValue);
-                const realSeconds = parseClockTimeToSeconds(realStartTimeValue);
-                const isJumpStart = Number.isFinite(idealSeconds) && Number.isFinite(realSeconds)
-                  ? realSeconds < idealSeconds
-                  : false;
-                const lineSyncKey = `${pilot.id}:${stage.id}`;
-                const lineSync = lineSyncResults?.[lineSyncKey];
+              {displayRows.map((row) => {
+                const {
+                  pilot,
+                  category,
+                  idealStartTimeValue,
+                  realStartTimeValue,
+                  retired,
+                  alert,
+                  hasRecordedTime,
+                  totalTime,
+                  avgMs,
+                  deviationMs,
+                  warningThreshold,
+                  dangerThreshold,
+                  alertLevel,
+                  alertColor,
+                  isJumpStart,
+                  lineSync,
+                  arrivalTimeValue
+                } = row;
                 const lineSyncText = lineSync ? getLineSyncStatusText(t, lineSync.status) : '';
 
                 return (
@@ -565,12 +600,14 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         <TimeInput
                           value={realStartTimeValue}
                           onChange={(val) => handleRealStartTimeChange(pilot.id, val)}
-                          placeholder={t('times.placeholder.time')}
+                          placeholder={getTimePlaceholder('clock', timeDecimals)}
+                          format="clock"
+                          decimals={timeDecimals}
                           className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-32"
                           readOnly={isReadOnly}
                         />
                         <button
-                          onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString())}
+                          onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString(timeDecimals))}
                           className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
                           title={t('times.now')}
                           disabled={isReadOnly}
@@ -590,15 +627,17 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     <td className="p-1 sm:p-2">
                       <div className="flex items-center gap-1">
                         <TimeInput
-                          value={getArrivalTime(pilot.id, stage.id)}
+                          value={arrivalTimeValue}
                           onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
-                          placeholder={t('times.placeholder.time')}
+                          placeholder={getTimePlaceholder('clock', timeDecimals)}
+                          format="clock"
+                          decimals={timeDecimals}
                           className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-28"
                           readOnly={isReadOnly}
                         />
                         <button
                           onClick={() => {
-                            const currentTime = getCurrentTimeString();
+                            const currentTime = getCurrentTimeString(timeDecimals);
                             handleArrivalTimeChange(pilot.id, currentTime);
                           }}
                           className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
@@ -622,9 +661,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     </td>
                     <td className="p-1 sm:p-2">
                       <TimeInput
-                        value={getTime(pilot.id, stage.id)}
+                        value={totalTime}
                         onChange={(val) => handleTotalTimeChange(pilot.id, val)}
-                        placeholder={t('times.placeholder.totalTime')}
+                        placeholder={getTimePlaceholder('total', timeDecimals)}
+                        format="total"
+                        decimals={timeDecimals}
                         className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-28"
                         readOnly={isReadOnly}
                       />
@@ -657,37 +698,26 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         </div>
       ) : (
         <div className="grid gap-2" style={pilotTimingGridStyle}>
-          {stageSortedPilots.map((pilot) => {
-            const category = categoryMap.get(pilot.categoryId);
-            const idealStartTimeValue = manualStartTime
-              ? getStartTime(pilot.id, stage.id)
-              : getPilotScheduledStartTime(stage, pilot);
-            const realStartTimeValue = getRealStartTime(pilot.id, stage.id);
-            const retired = isRetiredStage(pilot.id, stage.id);
-            const alert = isStageAlert(pilot.id, stage.id);
-            const hasRecordedTime = !!getTime(pilot.id, stage.id);
-            const totalTime = getTime(pilot.id, stage.id);
-            const totalMs = parseTotalTimeToMs(totalTime);
-            const categoryStats = category ? categoryStatsById.get(category.id) : null;
-            const avgMs = categoryStats?.avg;
-            const deviationMs = categoryStats?.deviation;
-            const warningThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
-              ? avgMs + deviationMs
-              : null;
-            const dangerThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
-              ? avgMs + 2 * deviationMs
-              : null;
-            const alertLevel = Number.isFinite(totalMs) && Number.isFinite(warningThreshold)
-              ? (totalMs > dangerThreshold ? 'danger' : totalMs > warningThreshold ? 'warning' : null)
-              : null;
-            const alertColor = alertLevel === 'danger' ? 'text-red-400' : 'text-amber-300';
-            const idealSeconds = parseClockTimeToSeconds(idealStartTimeValue);
-            const realSeconds = parseClockTimeToSeconds(realStartTimeValue);
-            const isJumpStart = Number.isFinite(idealSeconds) && Number.isFinite(realSeconds)
-              ? realSeconds < idealSeconds
-              : false;
-            const lineSyncKey = `${pilot.id}:${stage.id}`;
-            const lineSync = lineSyncResults?.[lineSyncKey];
+          {displayRows.map((row) => {
+            const {
+              pilot,
+              category,
+              idealStartTimeValue,
+              realStartTimeValue,
+              retired,
+              alert,
+              hasRecordedTime,
+              totalTime,
+              avgMs,
+              deviationMs,
+              warningThreshold,
+              dangerThreshold,
+              alertLevel,
+              alertColor,
+              isJumpStart,
+              lineSync,
+              arrivalTimeValue
+            } = row;
             const lineSyncText = lineSync ? getLineSyncStatusText(t, lineSync.status) : '';
 
             return (
@@ -823,12 +853,14 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           <TimeInput
                             value={realStartTimeValue}
                             onChange={(val) => handleRealStartTimeChange(pilot.id, val)}
-                            placeholder={t('times.placeholder.time')}
+                            placeholder={getTimePlaceholder('clock', timeDecimals)}
+                            format="clock"
+                            decimals={timeDecimals}
                             className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                             readOnly={isReadOnly}
                           />
                           <button
-                            onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString())}
+                            onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString(timeDecimals))}
                             className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
                             title={t('times.now')}
                             disabled={isReadOnly}
@@ -853,15 +885,17 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     <Label className="text-xs text-zinc-400">{t('times.arrivalTime')}</Label>
                     <div className="flex items-center gap-1">
                   <TimeInput
-                    value={getArrivalTime(pilot.id, stage.id)}
+                    value={arrivalTimeValue}
                     onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
-                    placeholder={t('times.placeholder.time')}
+                    placeholder={getTimePlaceholder('clock', timeDecimals)}
+                    format="clock"
+                    decimals={timeDecimals}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                     readOnly={isReadOnly}
                   />
                   <button
                         onClick={() => {
-                          const currentTime = getCurrentTimeString();
+                          const currentTime = getCurrentTimeString(timeDecimals);
                           handleArrivalTimeChange(pilot.id, currentTime);
                         }}
                     className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
@@ -889,9 +923,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     <Label className="text-xs text-zinc-400">{t('times.totalTime')}</Label>
                     <div className="flex items-center gap-1">
                   <TimeInput
-                    value={getTime(pilot.id, stage.id)}
+                    value={totalTime}
                     onChange={(val) => handleTotalTimeChange(pilot.id, val)}
-                    placeholder={t('times.placeholder.totalTime')}
+                    placeholder={getTimePlaceholder('total', timeDecimals)}
+                    format="total"
+                    decimals={timeDecimals}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                     readOnly={isReadOnly}
                   />
@@ -1068,7 +1104,7 @@ export default function TimesTab({
   compactStagePadding = false
 }) {
   const { t } = useTranslation();
-  const { pilots, stages, categories, currentStageId } = useRally();
+  const { pilots, stages, categories, currentStageId } = useRallyMeta();
   const [showCompetitiveStagesOnly, setShowCompetitiveStagesOnly] = useState(true);
   const [showTimesAsCards, setShowTimesAsCards] = useState(false);
   const categoryOrderById = useMemo(() => (

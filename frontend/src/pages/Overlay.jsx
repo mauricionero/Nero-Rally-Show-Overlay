@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { useSearchParams } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
@@ -21,9 +22,10 @@ export default function Overlay() {
   const [searchParams] = useSearchParams();
   const { t } = useTranslation();
   const { 
-    chromaKey, 
-    currentScene, 
-    setCurrentScene, 
+    chromaKey,
+    transitionImageUrl,
+    currentScene,
+    setCurrentScene,
     dataVersion,
     wsEnabled,
     wsConnectionStatus,
@@ -41,10 +43,51 @@ export default function Overlay() {
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
   const [messagesLastMinute, setMessagesLastMinute] = useState(0);
   const [messagesThisSecond, setMessagesThisSecond] = useState(0);
+  const [transitionType, setTransitionType] = useState(() => {
+    try {
+      return localStorage.getItem('rally_transition_type') || 'fade';
+    } catch (error) {
+      return 'fade';
+    }
+  });
+  const [transitionDurationMs, setTransitionDurationMs] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem('rally_transition_duration_ms'));
+      if (!Number.isFinite(stored) || stored <= 0) return 1500;
+      return Math.min(8000, Math.max(0, Math.trunc(stored)));
+    } catch (error) {
+      return 1500;
+    }
+  });
+  const [transitionPhase, setTransitionPhase] = useState('idle');
+  const [transitionOpacity, setTransitionOpacity] = useState(0);
+  const [transitionTransform, setTransitionTransform] = useState('scale(1)');
   const messageBucketsRef = React.useRef(new Array(60).fill(0));
   const messageBucketIndexRef = React.useRef(0);
   const messageBucketTotalRef = React.useRef(0);
   const messageSecondAlertRef = React.useRef(false);
+  const transitionTimersRef = React.useRef([]);
+  const transitionRafRef = React.useRef(null);
+
+  useEffect(() => {
+    document.title = `${t('header.title')} - ${t('header.overlay')}`;
+  }, [t]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rally_transition_type', transitionType);
+    } catch (error) {
+      console.error('Failed to store transition type:', error);
+    }
+  }, [transitionType]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rally_transition_duration_ms', JSON.stringify(transitionDurationMs));
+    } catch (error) {
+      console.error('Failed to store transition duration:', error);
+    }
+  }, [transitionDurationMs]);
 
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
@@ -71,17 +114,96 @@ export default function Overlay() {
     };
   }, []);
 
+  const clearTransitionTimers = useCallback(() => {
+    transitionTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    transitionTimersRef.current = [];
+    if (transitionRafRef.current !== null) {
+      window.cancelAnimationFrame(transitionRafRef.current);
+      transitionRafRef.current = null;
+    }
+  }, []);
+
+  const requestSceneChange = useCallback((sceneNum) => {
+    if (!sceneNum || sceneNum === currentScene) {
+      return;
+    }
+
+    const normalizedType = transitionType || 'none';
+    const normalizedDuration = Math.min(8000, Math.max(0, Number(transitionDurationMs) || 0));
+    const baseHoldMs = normalizedDuration <= 0 ? 1500 : normalizedDuration;
+    const phaseDurationMs = 300;
+    const totalDurationMs = baseHoldMs + (phaseDurationMs * 2);
+
+    if (normalizedType === 'none') {
+      clearTransitionTimers();
+      setTransitionPhase('idle');
+      setCurrentScene(sceneNum);
+      return;
+    }
+
+    const getInTransform = () => {
+      if (normalizedType === 'wipe') return 'translateX(-12%)';
+      if (normalizedType === 'slide') return 'translateY(10%)';
+      return 'scale(1.02)';
+    };
+    const getHoldTransform = () => {
+      if (normalizedType === 'wipe') return 'translateX(0)';
+      if (normalizedType === 'slide') return 'translateY(0)';
+      return 'scale(1)';
+    };
+    const getOutTransform = () => {
+      if (normalizedType === 'wipe') return 'translateX(12%)';
+      if (normalizedType === 'slide') return 'translateY(-10%)';
+      return 'scale(1.01)';
+    };
+
+    clearTransitionTimers();
+    setTransitionPhase('in');
+    setTransitionOpacity(0);
+    setTransitionTransform(getInTransform());
+    transitionRafRef.current = window.requestAnimationFrame(() => {
+      setTransitionOpacity(1);
+      setTransitionTransform(getHoldTransform());
+    });
+
+    const swapDelay = phaseDurationMs + 80;
+    const swapTimer = window.setTimeout(() => {
+      setCurrentScene(sceneNum);
+      setTransitionPhase('hold');
+    }, swapDelay);
+    const outTimer = window.setTimeout(() => {
+      setTransitionPhase('out');
+      setTransitionOpacity(0);
+      setTransitionTransform(getOutTransform());
+    }, phaseDurationMs + baseHoldMs);
+    const finishTimer = window.setTimeout(() => {
+      setTransitionPhase('idle');
+      setTransitionOpacity(0);
+    }, totalDurationMs);
+
+    transitionTimersRef.current = [swapTimer, outTimer, finishTimer];
+  }, [clearTransitionTimers, currentScene, setCurrentScene, transitionDurationMs, transitionType]);
+
+  useEffect(() => {
+    return () => {
+      clearTransitionTimers();
+      setTransitionPhase('idle');
+      setTransitionOpacity(0);
+      setTransitionTransform('scale(1)');
+    };
+  }, [clearTransitionTimers]);
+
   useEffect(() => {
     const handleKeyPress = (e) => {
       const key = parseInt(e.key);
       if (key >= 1 && key <= 4) {
-        setCurrentScene(key);
+        requestSceneChange(key);
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [setCurrentScene]);
+  }, [requestSceneChange]);
 
   // Keep a localStorage heartbeat active as a safety net for same-browser tabs,
   // even when WebSocket is connected.
@@ -209,6 +331,12 @@ export default function Overlay() {
     { num: 3, name: t('scenes.leaderboard') },
     { num: 4, name: t('scenes.pilotFocus') }
   ];
+  const transitionOptions = [
+    { value: 'none', label: t('header.transitionNone') },
+    { value: 'fade', label: t('header.transitionFade') },
+    { value: 'wipe', label: t('header.transitionWipe') },
+    { value: 'slide', label: t('header.transitionSlide') }
+  ];
 
   return (
     <div
@@ -222,7 +350,7 @@ export default function Overlay() {
             {scenes.map((scene) => (
               <button
                 key={scene.num}
-                onClick={() => setCurrentScene(scene.num)}
+                onClick={() => requestSceneChange(scene.num)}
                 className={`px-4 py-1 rounded text-sm font-bold transition-all ${
                   currentScene === scene.num
                     ? 'bg-[#FF4500] text-white'
@@ -255,6 +383,41 @@ export default function Overlay() {
                 {t('header.hideStreams')}
               </span>
             </label>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                {t('header.transition')}
+              </span>
+              <Select value={transitionType} onValueChange={setTransitionType}>
+                <SelectTrigger className="h-7 w-[120px] bg-[#09090B] border-zinc-700 text-xs text-white">
+                  <SelectValue placeholder={t('header.transition')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {transitionOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                type="number"
+                min="0"
+                max="8000"
+                step="50"
+                value={transitionDurationMs}
+                onChange={(e) => {
+                  const numericValue = Number(e.target.value);
+                  setTransitionDurationMs(
+                    Math.min(8000, Math.max(0, Number.isFinite(numericValue) ? Math.trunc(numericValue) : 0))
+                  );
+                }}
+                className="h-7 w-[90px] bg-[#09090B] border-zinc-700 text-white text-xs"
+                placeholder={t('header.transitionDuration')}
+                data-testid="transition-duration-input"
+              />
+              <span className="text-[10px] text-zinc-500">ms</span>
+            </div>
 
             {/* WebSocket Status/Button */}
             <div className="flex items-center gap-2">
@@ -388,7 +551,22 @@ export default function Overlay() {
       </div>
 
       <div className="pt-12 h-full transition-all" style={{ paddingLeft: `${leftZoneWidth}px` }}>
-        {renderScene()}
+        <div className="relative h-full w-full overflow-hidden">
+          {renderScene()}
+          {transitionPhase !== 'idle' && transitionType !== 'none' && (
+            <div className="absolute inset-0 z-30 pointer-events-none">
+              <div
+                className="overlay-transition-modal"
+                style={{
+                  transitionDuration: '300ms',
+                  opacity: transitionOpacity,
+                  transform: transitionTransform,
+                  ['--transition-image']: transitionImageUrl ? `url("${transitionImageUrl}")` : 'none'
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

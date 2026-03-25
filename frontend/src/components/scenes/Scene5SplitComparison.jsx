@@ -3,9 +3,10 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { parseTime } from '../../utils/rallyHelpers';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { getStageTitle } from '../../utils/stageTypes.js';
+import { formatSecondsValue } from '../../utils/timeFormat.js';
 
 export default function Scene5SplitComparison() {
-  const { pilots, stages, times } = useRally();
+  const { pilots, stages, times, timeDecimals } = useRally();
   const [selectedStageId, setSelectedStageId] = useState(stages[0]?.id || null);
   
   const selectedStage = stages.find(s => s.id === selectedStageId);
@@ -111,7 +112,7 @@ export default function Scene5SplitComparison() {
                       </div>
                       {gap > 0 && (
                         <div className="text-zinc-400 text-sm font-mono" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          +{gap.toFixed(3)}s
+                          +{formatSecondsValue(gap, timeDecimals)}s
                         </div>
                       )}
                     </div>
