@@ -3,6 +3,7 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
+import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { StartInformationValue } from '../StartInformationValue.jsx';
 import { Checkbox } from '../ui/checkbox';
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import StatusPill from '../StatusPill.jsx';
 import { getReferenceNow, hasStageDateTimePassed, startInformationTime, isJumpStartForStage } from '../../utils/rallyHelpers';
-import { Flag, RotateCcw, Car, Timer, Video } from 'lucide-react';
+import { Flag, RotateCcw, Car, Timer, Video, Map as MapIcon } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
@@ -18,6 +19,7 @@ import { getPilotScheduledEndTime } from '../../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatDurationMs } from '../../utils/timeFormat.js';
+import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import {
   getStageNumberLabel,
   getStageTitle,
@@ -77,8 +79,8 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
 
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
-    pilots, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, debugDate, retiredStages, isStageAlert, timeDecimals
+    pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
+    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals
   } = useRally();
   const { t } = useTranslation();
   
@@ -88,6 +90,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const [selectedMainFeedValue, setSelectedMainFeedValue] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedMainFeedValue: 'none' }).selectedMainFeedValue);
   const currentTime = useSecondAlignedClock();
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories), [pilots, categories]);
 
   useEffect(() => {
     if (!selectedPilotId && pilots.length > 0) {
@@ -249,7 +252,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   }, [sortedStages, focusPilot, lapTimes, startTimes, times, retiredStages, sceneNow, t]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
-  const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia }), [pilots, cameras, externalMedia]);
+  const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia, stages, mapPlacemarks }), [pilots, cameras, externalMedia, stages, mapPlacemarks]);
   const selectedMainFeed = selectedMainFeedValue === 'none' ? null : findFeedByValue(availableFeeds, selectedMainFeedValue);
   const SelectedMediaIcon = selectedMainFeed?.type === 'media'
     ? getExternalMediaIconComponent(selectedMainFeed.icon)
@@ -352,6 +355,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                 groupLabels={{
                   cameras: t('streams.additionalCameras'),
                   media: t('config.externalMedia'),
+                  maps: t('config.stageMaps'),
                   pilots: t('tabs.pilots')
                 }}
               />
@@ -458,6 +462,67 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   <span className="text-white font-bold uppercase text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                     {selectedMainFeed.name}
                   </span>
+                </div>
+
+                {selectedStageData && (
+                  <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
+                    <div className="flex items-center gap-2 mb-1">
+                      {React.createElement(getStageIcon(selectedStage?.type), {
+                        className: 'w-4 h-4',
+                        style: { color: getStageTypeColor(selectedStage?.type) }
+                      })}
+                      <p className="text-zinc-400 text-xs uppercase">
+                        {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
+                      </p>
+                    </div>
+                    <StartInformationValue
+                      as="p"
+                      info={selectedStageData.timeInfo}
+                      fallback={selectedStageData.time}
+                      className={`text-2xl font-mono font-bold ${
+                        selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
+                        selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
+                        selectedStageData.status === 'retired' ? 'text-red-400' :
+                        'text-zinc-500'
+                      }`}
+                      style={{ fontFamily: 'JetBrains Mono, monospace' }}
+                    />
+                  </div>
+                )}
+
+                {showFocusPilotPip && (
+                  <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
+                    <StreamPlayer
+                      pilotId={focusPilot.id}
+                      streamUrl={focusPilot.streamUrl}
+                      name={focusPilot.name}
+                      className="w-full h-full"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+                      <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {focusPilot.name}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : selectedMainFeed?.type === 'stage-map' ? (
+              <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
+                <PlacemarkMapFeed placemark={selectedMainFeed} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+
+                <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
+                  <MapIcon className="w-4 h-4 text-[#FF4500]" />
+                  <div className="min-w-0 relative pr-36">
+                    <span className="block text-white font-bold uppercase text-sm truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {selectedMainFeed.name}
+                    </span>
+                    {selectedMainFeed.placemarkName && (
+                      <span className="block text-zinc-300 text-[11px] uppercase tracking-wide truncate mt-1">
+                        {selectedMainFeed.placemarkName}
+                      </span>
+                    )}
+                    <MapWeatherBadges placemark={selectedMainFeed} className="absolute right-0 bottom-0" />
+                  </div>
                 </div>
 
                 {selectedStageData && (

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Video } from 'lucide-react';
+import { Video, Map } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from './ui/select';
 import { getExternalMediaIconComponent } from '../utils/mediaIcons.js';
 
@@ -20,6 +20,15 @@ const FeedOptionContent = ({ feed }) => {
     return (
       <div className="flex items-center gap-2">
         <Icon className="w-4 h-4 text-[#FF4500]" />
+        <span>{feed.name}</span>
+      </div>
+    );
+  }
+
+  if (feed.type === 'stage-map') {
+    return (
+      <div className="flex items-center gap-2">
+        <Map className="w-4 h-4 text-[#FF4500]" />
         <span>{feed.name}</span>
       </div>
     );
@@ -46,6 +55,7 @@ export function FeedSelect({
   const selectedFeed = feeds.find((feed) => feed.value === value);
   const cameraFeeds = feeds.filter((feed) => feed.type === 'camera');
   const mediaFeeds = feeds.filter((feed) => feed.type === 'media');
+  const stageMapFeeds = feeds.filter((feed) => feed.type === 'stage-map');
   const pilotFeeds = feeds.filter((feed) => feed.type === 'pilot');
 
   return (
@@ -75,6 +85,15 @@ export function FeedSelect({
           <div className="px-2 py-1 text-xs text-zinc-500 uppercase">{groupLabels.media}</div>
         )}
         {mediaFeeds.map((feed) => (
+          <SelectItem key={feed.value} value={feed.value}>
+            <FeedOptionContent feed={feed} />
+          </SelectItem>
+        ))}
+
+        {stageMapFeeds.length > 0 && groupLabels?.maps && (
+          <div className="px-2 py-1 text-xs text-zinc-500 uppercase">{groupLabels.maps}</div>
+        )}
+        {stageMapFeeds.map((feed) => (
           <SelectItem key={feed.value} value={feed.value}>
             <FeedOptionContent feed={feed} />
           </SelectItem>

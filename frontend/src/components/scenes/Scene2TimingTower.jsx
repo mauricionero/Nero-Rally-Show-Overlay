@@ -3,11 +3,12 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
+import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import StatusPill from '../StatusPill.jsx';
 import { parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
-import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
+import { ChevronRight, Radio, RotateCcw, Flag, Video, Map as MapIcon } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
@@ -18,6 +19,7 @@ import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { formatDurationMs, formatSecondsValue } from '../../utils/timeFormat.js';
+import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 
 const TIMING_TOWER_WIDTH_KEY = 'scene2TimingTowerWidth';
 const SCENE_2_CONFIG_KEY = 'scene2Config';
@@ -93,9 +95,10 @@ const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLa
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, retiredStages, stageAlerts, timeDecimals, debugDate
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate
   } = useRally();
   const { t } = useTranslation();
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories), [pilots, categories]);
   
   const [selectedFeedValue, setSelectedFeedValue] = useState(() => (
     loadSceneConfig(SCENE_2_CONFIG_KEY, { selectedFeedValue: null }).selectedFeedValue
@@ -243,8 +246,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   // MUST be before any early returns to follow React Hook rules
   const availableFeeds = useMemo(() => {
     const pilotPositions = Object.fromEntries(sortedPilotsData.map((data) => [data.pilot.id, data.position]));
-    return buildFeedOptions({ pilots, cameras, externalMedia, pilotPositions });
-  }, [pilots, cameras, externalMedia, sortedPilotsData]);
+    return buildFeedOptions({ pilots, cameras, externalMedia, stages, mapPlacemarks, pilotPositions });
+  }, [pilots, cameras, externalMedia, stages, mapPlacemarks, sortedPilotsData]);
 
   useEffect(() => {
     if (!selectedFeedValue && availableFeeds.length > 0) {
@@ -589,6 +592,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 groupLabels={{
                   cameras: t('streams.additionalCameras'),
                   media: t('config.externalMedia'),
+                  maps: t('config.stageMaps'),
                   pilots: t('tabs.pilots')
                 }}
               />
@@ -723,6 +727,26 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {selectedFeed.name}
                 </p>
+              </div>
+            </div>
+          </>
+        ) : selectedFeed?.type === 'stage-map' ? (
+          <>
+            <PlacemarkMapFeed placemark={selectedFeed} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
+              <div className="flex items-center gap-4">
+                <MapIcon className="w-8 h-8 text-[#FF4500]" />
+                <div className="relative min-w-0 flex-1 pr-44">
+                  <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {selectedFeed.name}
+                  </p>
+                  {selectedFeed.placemarkName && (
+                    <p className="text-zinc-300 text-sm uppercase tracking-wide min-w-0 truncate mt-1">
+                      {selectedFeed.placemarkName}
+                    </p>
+                  )}
+                  <MapWeatherBadges placemark={selectedFeed} className="absolute right-0 bottom-0" />
+                </div>
               </div>
             </div>
           </>

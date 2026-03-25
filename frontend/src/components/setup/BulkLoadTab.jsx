@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Upload, AlertTriangle, Users, Flag, Timer } from 'lucide-react';
+import { Upload, AlertTriangle, Users, Flag, Timer, Map, Copy, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   LAP_RACE_STAGE_TYPE,
@@ -21,13 +22,14 @@ import {
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { arrivalTimeToTotal, normalizeTimingInput, totalTimeToArrival } from '../../utils/timeConversion.js';
+import { parseKmlPlacemarks } from '../../utils/kmlImport.js';
 
-const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'picture', 'streamUrl'];
+const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'latLong', 'picture', 'streamUrl'];
 const STAGE_HEADERS = ['name', 'type', 'ssNumber', 'date', 'startTime', 'endTime', 'distance', 'numberOfLaps'];
 const TIME_HEADERS = ['number', 'pilot', 'totalTime', 'arrivalTime', 'startTime'];
 
-const PILOT_EXAMPLE = `name,team,car,carNumber,category,startOrder,timeOffsetMinutes,picture,streamUrl
-Ulysses Bertholdo / Mario Marini,Toyota Gazoo Racing,GR Yaris Rally1,42,WRC,1,0,https://example.com/pilot.png,https://vdo.ninja/example`;
+const PILOT_EXAMPLE = `name,team,car,carNumber,category,startOrder,timeOffsetMinutes,latLong,picture,streamUrl
+Ulysses Bertholdo / Mario Marini,Toyota Gazoo Racing,GR Yaris Rally1,42,WRC,1,0,"-23.550520, -46.633308",https://example.com/pilot.png,https://vdo.ninja/example`;
 
 const STAGE_EXAMPLE = `name,type,ssNumber,date,startTime,endTime,distance,numberOfLaps
 Super Prime,sss,7,2026-03-17,15:31,,3.2,
@@ -176,6 +178,26 @@ const createEmptyResult = () => ({
   summary: ''
 });
 
+const convertGoogleMyMapsToViewerUrl = (value) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const mid = url.searchParams.get('mid');
+
+    if (!mid) {
+      return '';
+    }
+
+    return `https://www.google.com/maps/d/viewer?mid=${encodeURIComponent(mid)}`;
+  } catch (error) {
+    return '';
+  }
+};
+
 export default function BulkLoadTab() {
   const { t } = useTranslation();
   const {
@@ -185,10 +207,13 @@ export default function BulkLoadTab() {
     currentStageId,
     startTimes,
     timeDecimals,
+    mapPlacemarks,
     addPilot,
     updatePilot,
     addStage,
-    bulkImportTimingEntries
+    bulkImportTimingEntries,
+    importMapPlacemarks,
+    clearMapPlacemarks
   } = useRally();
   const [pilotCsv, setPilotCsv] = useState('');
   const [stageCsv, setStageCsv] = useState('');
@@ -200,11 +225,14 @@ export default function BulkLoadTab() {
   const [pilotResult, setPilotResult] = useState(createEmptyResult());
   const [stageResult, setStageResult] = useState(createEmptyResult());
   const [timeResult, setTimeResult] = useState(createEmptyResult());
+  const [mapResult, setMapResult] = useState(createEmptyResult());
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('');
 
   const categoryMap = useMemo(() => (
     Object.fromEntries(categories.map((category) => [normalizeLookupKey(category.name), category.id]))
   ), [categories]);
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
+  const googleMapsViewerUrl = useMemo(() => convertGoogleMyMapsToViewerUrl(googleMapsUrl), [googleMapsUrl]);
 
   useEffect(() => {
     setSelectedTimesStageId((prev) => {
@@ -296,6 +324,7 @@ export default function BulkLoadTab() {
         categoryId: values.category ? categoryMap[normalizeLookupKey(values.category)] : null,
         startOrder: parseInt(values.startOrder, 10) || 999,
         timeOffsetMinutes: parseInt(values.timeOffsetMinutes, 10) || 0,
+        latLong: (values.latLong || '').trim(),
         picture: (values.picture || '').trim(),
         streamUrl: (values.streamUrl || '').trim()
       };
@@ -315,6 +344,7 @@ export default function BulkLoadTab() {
               categoryId: values.category ? nextPilotData.categoryId : (existingPilot.categoryId ?? null),
               startOrder: String(values.startOrder || '').trim() ? nextPilotData.startOrder : (existingPilot.startOrder ?? 999),
               timeOffsetMinutes: String(values.timeOffsetMinutes || '').trim() ? nextPilotData.timeOffsetMinutes : (existingPilot.timeOffsetMinutes ?? 0),
+              latLong: nextPilotData.latLong || existingPilot.latLong || '',
               picture: nextPilotData.picture || existingPilot.picture || '',
               streamUrl: nextPilotData.streamUrl || existingPilot.streamUrl || ''
             }
@@ -522,6 +552,79 @@ export default function BulkLoadTab() {
       toast.success(`${stage ? `${getStageTitle(stage)}: ` : ''}${summary}`);
     } else {
       toast.error(summary);
+    }
+  };
+
+  const handleImportKmlFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsed = parseKmlPlacemarks(text);
+
+      if (parsed.error) {
+        const message = t('bulkLoad.errors.invalidKml');
+        setMapResult({
+          importedCount: 0,
+          updatedCount: 0,
+          errors: [{ rowNumber: 1, name: file.name, message }],
+          summary: t('bulkLoad.noImportYet')
+        });
+        toast.error(message);
+        event.target.value = '';
+        return;
+      }
+
+      if (parsed.placemarks.length === 0) {
+        const message = t('bulkLoad.errors.noPlacemarks');
+        setMapResult({
+          importedCount: 0,
+          updatedCount: 0,
+          errors: [{ rowNumber: 1, name: file.name, message }],
+          summary: t('bulkLoad.noImportYet')
+        });
+        toast.error(message);
+        event.target.value = '';
+        return;
+      }
+
+      importMapPlacemarks(parsed.placemarks);
+      const summary = t('bulkLoad.importSummaryMaps', { imported: parsed.placemarks.length });
+      setMapResult({
+        importedCount: parsed.placemarks.length,
+        updatedCount: 0,
+        errors: [],
+        summary
+      });
+      toast.success(summary);
+    } catch (error) {
+      const message = t('bulkLoad.errors.invalidKml');
+      setMapResult({
+        importedCount: 0,
+        updatedCount: 0,
+        errors: [{ rowNumber: 1, name: file.name, message }],
+        summary: t('bulkLoad.noImportYet')
+      });
+      toast.error(message);
+    }
+
+    event.target.value = '';
+  };
+
+  const handleCopyGoogleMapsViewerUrl = async () => {
+    if (!googleMapsViewerUrl) {
+      toast.error(t('bulkLoad.invalidGoogleMapsUrl'));
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(googleMapsViewerUrl);
+      toast.success(t('bulkLoad.googleMapsViewerCopied'));
+    } catch (error) {
+      toast.error(t('bulkLoad.googleMapsViewerCopyFailed'));
     }
   };
 
@@ -749,6 +852,128 @@ export default function BulkLoadTab() {
           <div>
             <p className="text-xs uppercase text-zinc-500 mb-2">{t('bulkLoad.rejectedRows')}</p>
             {renderErrors(timeResult.errors)}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Map className="w-5 h-5" />
+            {t('bulkLoad.mapsTitle')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">
+            {t('bulkLoad.mapsDescription')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3 rounded-lg border border-zinc-800 bg-[#111111] p-4">
+            <div>
+              <p className="text-sm font-medium text-white">{t('bulkLoad.googleMapsTitle')}</p>
+              <p className="text-xs text-zinc-500 mt-1">{t('bulkLoad.googleMapsDescription')}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Input
+                value={googleMapsUrl}
+                onChange={(event) => setGoogleMapsUrl(event.target.value)}
+                className="bg-[#09090B] border-zinc-700 text-white"
+                placeholder={t('bulkLoad.googleMapsPlaceholder')}
+                data-testid="input-google-maps-url"
+              />
+              <Input
+                value={googleMapsViewerUrl}
+                readOnly
+                className="bg-[#09090B] border-zinc-800 text-zinc-300"
+                placeholder={t('bulkLoad.googleMapsViewerPlaceholder')}
+                data-testid="input-google-maps-viewer-url"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-zinc-700 text-white"
+                onClick={handleCopyGoogleMapsViewerUrl}
+                disabled={!googleMapsViewerUrl}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                {t('bulkLoad.copyViewerUrl')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-zinc-700 text-white"
+                onClick={() => window.open(googleMapsViewerUrl, '_blank', 'noopener,noreferrer')}
+                disabled={!googleMapsViewerUrl}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                {t('bulkLoad.openViewerUrl')}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer">
+              <input
+                type="file"
+                accept=".kml,.xml"
+                className="hidden"
+                onChange={handleImportKmlFile}
+                data-testid="input-kml-file"
+              />
+              <span className="inline-flex items-center rounded-md bg-[#FF4500] px-4 py-2 text-sm font-medium text-white hover:bg-[#FF4500]/90">
+                <Upload className="w-4 h-4 mr-2" />
+                {t('bulkLoad.importKml')}
+              </span>
+            </label>
+
+            <Button
+              variant="outline"
+              className="border-zinc-700 text-white"
+              onClick={() => {
+                clearMapPlacemarks();
+                setMapResult(createEmptyResult());
+              }}
+              disabled={mapPlacemarks.length === 0}
+            >
+              {t('bulkLoad.clearMaps')}
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant="outline" className="border-zinc-700 text-zinc-300">
+              {mapResult.summary || t('bulkLoad.mapsStored', { count: mapPlacemarks.length })}
+            </Badge>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase text-zinc-500 mb-2">{t('bulkLoad.storedPlacemarks')}</p>
+            {mapPlacemarks.length === 0 ? (
+              <p className="text-sm text-zinc-500">{t('bulkLoad.noMapsYet')}</p>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {mapPlacemarks.map((placemark) => (
+                  <div key={placemark.id} className="bg-[#09090B] border border-zinc-700 rounded p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{placemark.name}</p>
+                        <p className="text-zinc-500 text-xs mt-1 uppercase">
+                          {placemark.geometryType} • {placemark.coordinateGroups.reduce((total, group) => total + group.length, 0)} pts
+                        </p>
+                      </div>
+                      <Map className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs uppercase text-zinc-500 mb-2">{t('bulkLoad.rejectedRows')}</p>
+            {renderErrors(mapResult.errors)}
           </div>
         </CardContent>
       </Card>

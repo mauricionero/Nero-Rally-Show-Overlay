@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -83,11 +83,17 @@ export default function TheRaceTab() {
     eventName,
     setEventName,
     stages,
+    mapPlacemarks,
     currentStageId,
     addStage,
     updateStage,
     deleteStage
   } = useRally();
+
+  const mapPlacemarkOptions = useMemo(
+    () => [...mapPlacemarks].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [mapPlacemarks]
+  );
 
   const STAGE_TYPES = [
     { id: 'SS', name: t('theRace.stageTypes.ss'), description: 'Point-to-point timed stage', icon: Flag },
@@ -99,7 +105,7 @@ export default function TheRaceTab() {
 
   const defaultStageDate = getDefaultStageDate(stages);
 
-  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', endTime: '', numberOfLaps: 5 });
+  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: 5 });
   const [editingStage, setEditingStage] = useState(null);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
 
@@ -109,7 +115,7 @@ export default function TheRaceTab() {
       return;
     }
     addStage(newStage);
-    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', endTime: '', numberOfLaps: 5 });
+    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: 5 });
     toast.success('Stage added successfully');
   };
 
@@ -299,6 +305,24 @@ export default function TheRaceTab() {
                 inputMode="decimal"
               />
             </div>
+
+            <div>
+              <Label className="text-white">{t('theRace.mapPlacemark')}</Label>
+              <Select
+                value={newStage.mapPlacemarkId || 'none'}
+                onValueChange={(value) => setNewStage({ ...newStage, mapPlacemarkId: value === 'none' ? '' : value })}
+              >
+                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                  <SelectValue placeholder={t('theRace.placeholder.mapPlacemark')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                  {mapPlacemarkOptions.map((placemark) => (
+                    <SelectItem key={placemark.id} value={placemark.id}>{placemark.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             
             <div>
               <Label className="text-white">{t('theRace.scheduledStart')}</Label>
@@ -343,6 +367,7 @@ export default function TheRaceTab() {
         {sortedStages.map((stage) => {
           const Icon = getStageTypeIcon(stage.type);
           const isEditing = stageDialogOpen && editingStage?.id === stage.id;
+          const linkedPlacemark = mapPlacemarkOptions.find((placemark) => placemark.id === stage.mapPlacemarkId);
           
           return (
             <Card 
@@ -367,6 +392,7 @@ export default function TheRaceTab() {
                       {stage.date && <span>{stage.date}</span>}
                       {stage.distance && <span>{stage.distance} km</span>}
                       {getDisplayedStageSchedule(stage) && <span>{getDisplayedStageSchedule(stage)}</span>}
+                      {linkedPlacemark && <span>{t('theRace.mapPlacemark')}: {linkedPlacemark.name}</span>}
                       {isLapRaceStageType(stage.type) && (
                         <span className="text-[#FACC15]">{stage.numberOfLaps} {t('scene3.laps').toLowerCase()}</span>
                       )}
@@ -456,6 +482,23 @@ export default function TheRaceTab() {
                                 className="bg-[#09090B] border-zinc-700 text-white"
                                 inputMode="decimal"
                               />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('theRace.mapPlacemark')}</Label>
+                              <Select
+                                value={editingStage.mapPlacemarkId || 'none'}
+                                onValueChange={(value) => setEditingStage({ ...editingStage, mapPlacemarkId: value === 'none' ? '' : value })}
+                              >
+                                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                  <SelectValue placeholder={t('theRace.placeholder.mapPlacemark')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                                  {mapPlacemarkOptions.map((placemark) => (
+                                    <SelectItem key={placemark.id} value={placemark.id}>{placemark.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
                             <div>
                               <Label className="text-white">{t('theRace.scheduledStart')}</Label>
