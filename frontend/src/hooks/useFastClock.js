@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 
 let subscriberCount = 0;
 let timeoutId = null;
@@ -54,13 +54,19 @@ const subscribe = (listener) => {
 };
 
 const getSnapshot = () => snapshot;
-const getServerSnapshot = () => Date.now();
+const getServerSnapshot = () => snapshot;
 const subscribeStatic = () => () => {};
 
 export function useFastClock(enabled = true) {
+  const frozenSnapshotRef = useRef(snapshot);
+
+  if (enabled) {
+    frozenSnapshotRef.current = snapshot;
+  }
+
   return useSyncExternalStore(
     enabled ? subscribe : subscribeStatic,
-    enabled ? getSnapshot : getServerSnapshot,
-    getServerSnapshot
+    enabled ? getSnapshot : () => frozenSnapshotRef.current,
+    () => frozenSnapshotRef.current
   );
 }
