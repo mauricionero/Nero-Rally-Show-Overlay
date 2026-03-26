@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
+import PerformanceLed from '../components/PerformanceLed.jsx';
 
 // version constant
 import { VERSION } from '../config/version.js';
@@ -506,6 +507,7 @@ export default function Overlay() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              <PerformanceLed />
             </div>
           </div>
         </div>

@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import { toast } from 'sonner';
 import { Play, VideoOff, Wifi } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
+import PerformanceLed from '../components/PerformanceLed.jsx';
 
 // app version constant
 import { VERSION } from '../config/version.js';
@@ -187,6 +188,7 @@ export default function Setup() {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
+                  <PerformanceLed />
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-zinc-800 bg-[#18181B] px-3 py-2">
                   <Checkbox

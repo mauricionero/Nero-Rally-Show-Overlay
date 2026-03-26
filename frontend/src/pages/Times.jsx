@@ -6,6 +6,7 @@ import TimesTab from '../components/setup/TimesTab.jsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import { Flag, RotateCcw, Car, Timer, Lock, Unlock } from 'lucide-react';
+import PerformanceLed from '../components/PerformanceLed.jsx';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../utils/stageSchedule.js';
 import {
   getStageNumberLabel,
@@ -270,6 +271,7 @@ export default function Times() {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
+                  <PerformanceLed className="w-2.5 h-2.5" />
                 </div>
               </div>
             </div>
