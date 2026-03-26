@@ -30,7 +30,7 @@ export default function PerformanceLed({ className }) {
             <div>Avg frame: {metrics.avgFrameMs.toFixed(1)}ms (score {metrics.frameScore}/10)</div>
             <div>Worst frame: {Math.round(metrics.maxFrameMs)}ms (score {metrics.stallScore}/10)</div>
             <div>Long tasks: {metrics.longTaskCount} (worst {Math.round(metrics.longTaskWorst)}ms, score {metrics.longScore}/10)</div>
-            <div className="text-[10px] text-zinc-400">Updates one metric per second, rotating.</div>
+            <div className="text-[10px] text-zinc-400">All scores refresh every 2 seconds.</div>
           </div>
         </TooltipContent>
       </Tooltip>

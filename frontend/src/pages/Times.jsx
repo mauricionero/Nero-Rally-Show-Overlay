@@ -172,6 +172,53 @@ export default function Times() {
 
   return (
     <div className="min-h-screen bg-[#09090B] text-white">
+      <div className="fixed top-0.5 right-0.5 z-50 flex items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
+                style={{ backgroundColor: connectionLed.color, boxShadow: connectionLed.glow }}
+                aria-label={`WebSocket ${wsConnectionStatus}`}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+              <div className="text-xs">
+                <div className="font-semibold">WebSocket Connection</div>
+                <div>Status: {wsConnectionStatus}</div>
+                <div>{connectionLed.label}</div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
+                style={{ backgroundColor: activityLed.color, boxShadow: activityLed.glow }}
+                aria-label="WebSocket activity"
+              />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+              <div className="text-xs">
+                <div className="font-semibold">Message Activity</div>
+                {connectionAgeMs !== null ? (
+                  <>
+                    <div>Last message: {Math.round(connectionAgeMs / 1000)}s ago</div>
+                    <div>Messages last minute: {messagesLastMinute}</div>
+                    <div>Messages this second: {messagesThisSecond}</div>
+                    <div>LED fades from full brightness to off over 30 seconds.</div>
+                  </>
+                ) : (
+                  <div>No WebSocket messages received yet.</div>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <PerformanceLed className="w-2.5 h-2.5" />
+      </div>
       <div className="sticky top-0 z-30 bg-black/95 border-b border-[#FF4500] backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-3">
@@ -226,53 +273,6 @@ export default function Times() {
                     <span>{t('times.noStageSelected')}</span>
                   </>
                 )}
-                <div className="ml-2 flex items-center gap-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span
-                          className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
-                          style={{ backgroundColor: connectionLed.color, boxShadow: connectionLed.glow }}
-                          aria-label={`WebSocket ${wsConnectionStatus}`}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                        <div className="text-xs">
-                          <div className="font-semibold">WebSocket Connection</div>
-                          <div>Status: {wsConnectionStatus}</div>
-                          <div>{connectionLed.label}</div>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span
-                          className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
-                          style={{ backgroundColor: activityLed.color, boxShadow: activityLed.glow }}
-                          aria-label="WebSocket activity"
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                        <div className="text-xs">
-                          <div className="font-semibold">Message Activity</div>
-                          {connectionAgeMs !== null ? (
-                            <>
-                              <div>Last message: {Math.round(connectionAgeMs / 1000)}s ago</div>
-                              <div>Messages last minute: {messagesLastMinute}</div>
-                              <div>Messages this second: {messagesThisSecond}</div>
-                              <div>LED fades from full brightness to off over 30 seconds.</div>
-                            </>
-                          ) : (
-                            <div>No WebSocket messages received yet.</div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <PerformanceLed className="w-2.5 h-2.5" />
-                </div>
               </div>
             </div>
           </div>

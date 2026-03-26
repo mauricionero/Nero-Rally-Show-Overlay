@@ -1,4 +1,4 @@
-import { useRef, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 
 let subscriberCount = 0;
 let timeoutId = null;
@@ -8,7 +8,7 @@ const listeners = new Set();
 
 const emit = () => {
   snapshot = Date.now();
-  listeners.forEach((listener) => listener());
+  listeners.forEach((listener) => listener(snapshot));
 };
 
 const stopClock = () => {
@@ -16,6 +16,7 @@ const stopClock = () => {
     window.clearTimeout(timeoutId);
     timeoutId = null;
   }
+
   if (intervalId) {
     window.clearInterval(intervalId);
     intervalId = null;
@@ -40,6 +41,7 @@ const startClock = () => {
 const subscribe = (listener) => {
   listeners.add(listener);
   subscriberCount += 1;
+
   if (subscriberCount === 1) {
     startClock();
   }
@@ -47,26 +49,27 @@ const subscribe = (listener) => {
   return () => {
     listeners.delete(listener);
     subscriberCount = Math.max(0, subscriberCount - 1);
+
     if (subscriberCount === 0) {
       stopClock();
     }
   };
 };
 
-const getSnapshot = () => snapshot;
-const getServerSnapshot = () => snapshot;
-const subscribeStatic = () => () => {};
-
 export function useFastClock(enabled = true) {
-  const frozenSnapshotRef = useRef(snapshot);
+  const [now, setNow] = useState(() => Date.now());
 
-  if (enabled) {
-    frozenSnapshotRef.current = snapshot;
-  }
+  useEffect(() => {
+    if (!enabled) {
+      setNow(snapshot);
+      return undefined;
+    }
 
-  return useSyncExternalStore(
-    enabled ? subscribe : subscribeStatic,
-    enabled ? getSnapshot : () => frozenSnapshotRef.current,
-    () => frozenSnapshotRef.current
-  );
+    setNow(snapshot);
+    return subscribe((nextSnapshot) => {
+      setNow(nextSnapshot);
+    });
+  }, [enabled]);
+
+  return now;
 }

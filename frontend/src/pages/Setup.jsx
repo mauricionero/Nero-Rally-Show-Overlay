@@ -129,6 +129,56 @@ export default function Setup() {
 
   return (
     <div className="min-h-screen bg-[#09090B] text-white p-6">
+      <div className="fixed top-0.5 right-0.5 z-50">
+        <div className="flex items-center gap-2 rounded-md border border-zinc-800/80 bg-[#111113]/88 backdrop-blur px-1.5 py-1 shadow-lg shadow-black/35">
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${connectionBadge.color}`}>
+                  <Wifi className="w-2.5 h-2.5" />
+                  <span>{connectionBadge.label}</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                <div className="text-xs">
+                  <div className="font-semibold">WebSocket Connection</div>
+                  <div>Status: {wsConnectionStatus}</div>
+                  <div>State badge only reflects socket connection state.</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
+                  style={{
+                    backgroundColor: activityFill,
+                    boxShadow: activityGlow
+                  }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                <div className="text-xs">
+                  <div className="font-semibold">Message Activity</div>
+                  {wsMessageAgeMs !== null ? (
+                    <>
+                      <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
+                      <div>Messages last minute: {messagesLastMinute}</div>
+                      <div>Messages this second: {messagesThisSecond}</div>
+                      <div>LED fades from full brightness to off over 30 seconds.</div>
+                    </>
+                  ) : (
+                    <div>No WebSocket messages received yet.</div>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <PerformanceLed />
+        </div>
+      </div>
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
@@ -142,54 +192,6 @@ export default function Setup() {
           <div className="flex flex-col items-end gap-2">
             <div className="flex items-start gap-3">
               <div className="flex flex-col items-end gap-2">
-                <div className="flex items-center gap-2">
-                  <TooltipProvider delayDuration={150}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${connectionBadge.color}`}>
-                          <Wifi className="w-3 h-3" />
-                          <span>{connectionBadge.label}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                        <div className="text-xs">
-                          <div className="font-semibold">WebSocket Connection</div>
-                          <div>Status: {wsConnectionStatus}</div>
-                          <div>State badge only reflects socket connection state.</div>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider delayDuration={150}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div
-                          className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
-                          style={{
-                            backgroundColor: activityFill,
-                            boxShadow: activityGlow
-                          }}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                      <div className="text-xs">
-                        <div className="font-semibold">Message Activity</div>
-                        {wsMessageAgeMs !== null ? (
-                          <>
-                            <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
-                            <div>Messages last minute: {messagesLastMinute}</div>
-                            <div>Messages this second: {messagesThisSecond}</div>
-                            <div>LED fades from full brightness to off over 30 seconds.</div>
-                          </>
-                        ) : (
-                            <div>No WebSocket messages received yet.</div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <PerformanceLed />
-                </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-zinc-800 bg-[#18181B] px-3 py-2">
                   <Checkbox
                     checked={hideStreams}
@@ -203,7 +205,6 @@ export default function Setup() {
                   </span>
                 </label>
               </div>
-
               <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
                 <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
                   {t('header.overlay')}
