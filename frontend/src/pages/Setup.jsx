@@ -192,27 +192,24 @@ export default function Setup() {
           
           <div className="flex flex-col items-end gap-2">
             <div className="flex items-start gap-3">
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap items-start justify-end gap-2">
                 <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
-                  <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-                    {t('config.language')}
-                  </div>
-                  <div className="flex justify-center">
+                  <label className="flex items-center gap-2 cursor-pointer select-none px-1 py-1.5">
+                    <Checkbox
+                      checked={hideStreams}
+                      onCheckedChange={setHideStreams}
+                      className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                      data-testid="setup-hide-streams-checkbox"
+                    />
+                    <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium uppercase">
+                      <VideoOff className="w-3 h-3" />
+                      {t('header.hideStreams')}
+                    </span>
+                  </label>
+                  <div className="pt-1">
                     <LanguageSelectorCompact className="h-9 border-zinc-700 bg-[#09090B] px-3" />
                   </div>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-zinc-800 bg-[#18181B] px-3 py-2">
-                  <Checkbox
-                    checked={hideStreams}
-                    onCheckedChange={setHideStreams}
-                    className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
-                    data-testid="setup-hide-streams-checkbox"
-                  />
-                  <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium uppercase">
-                    <VideoOff className="w-3 h-3" />
-                    {t('header.hideStreams')}
-                  </span>
-                </label>
               </div>
               <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
                 <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
