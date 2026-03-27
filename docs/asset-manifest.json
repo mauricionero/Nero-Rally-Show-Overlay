@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/Nero-Rally-Show-Overlay/static/css/main.cb36ff2d.css",
-    "main.js": "/Nero-Rally-Show-Overlay/static/js/main.995d567d.js",
+    "main.css": "/Nero-Rally-Show-Overlay/static/css/main.f2d5bbf3.css",
+    "main.js": "/Nero-Rally-Show-Overlay/static/js/main.fdfddbf2.js",
     "index.html": "/Nero-Rally-Show-Overlay/index.html",
-    "main.cb36ff2d.css.map": "/Nero-Rally-Show-Overlay/static/css/main.cb36ff2d.css.map",
-    "main.995d567d.js.map": "/Nero-Rally-Show-Overlay/static/js/main.995d567d.js.map"
+    "main.f2d5bbf3.css.map": "/Nero-Rally-Show-Overlay/static/css/main.f2d5bbf3.css.map",
+    "main.fdfddbf2.js.map": "/Nero-Rally-Show-Overlay/static/js/main.fdfddbf2.js.map"
   },
   "entrypoints": [
-    "static/css/main.cb36ff2d.css",
-    "static/js/main.995d567d.js"
+    "static/css/main.f2d5bbf3.css",
+    "static/js/main.fdfddbf2.js"
   ]
 }
