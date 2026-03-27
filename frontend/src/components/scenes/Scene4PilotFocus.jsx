@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
+import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
@@ -82,6 +83,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
     lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals
   } = useRally();
+  const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
   
   const [selectedPilotId, setSelectedPilotId] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedPilotId: pilots[0]?.id || null }).selectedPilotId);
@@ -433,9 +435,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               </div>
             )}
 
-            {logoUrl && (
+            {resolvedLogoUrl && (
               <img
-                src={logoUrl}
+                src={resolvedLogoUrl}
                 alt="Channel Logo"
                 className="w-32 max-h-16 object-contain flex-shrink-0"
               />

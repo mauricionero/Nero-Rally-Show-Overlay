@@ -21,6 +21,7 @@ import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.j
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -103,6 +104,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     chromaKey, logoUrl, lapTimes, stagePilots,
     cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts
   } = useRally();
+  const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
   const initialSceneConfig = useMemo(
     () => loadSceneConfig(SCENE_1_CONFIG_KEY, { selectedLayout: '2x2', isExpandedView: false, selectedSlotIds: [] }),
@@ -903,9 +905,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   </div>
                 </div>
               </div>
-              {logoUrl && (
+              {resolvedLogoUrl && (
                 <img 
-                  src={logoUrl} 
+                  src={resolvedLogoUrl} 
                   alt="Channel Logo" 
                   className="h-16 max-w-[200px] object-contain"
                 />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
+import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { LeftControls } from '../LeftControls.jsx';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -9,13 +10,22 @@ import StatusPill from '../StatusPill.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { LiveOverallTimeValue } from '../LiveOverallTimeValue.jsx';
-import { parseTime, isPilotRetiredForStage, isJumpStartForStage } from '../../utils/rallyHelpers';
+import {
+  getReferenceNow,
+  getStageDateTime,
+  isJumpStartForStage,
+  isPilotRetiredForStage,
+  parseTime,
+  startInformationTime
+} from '../../utils/rallyHelpers';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
+import { useFastClock } from '../../hooks/useFastClock.js';
+import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatDurationMs, formatDurationSeconds, formatSecondsValue } from '../../utils/timeFormat.js';
 
 const SCENE_3_CONFIG_KEY = 'scene3Config';
@@ -79,11 +89,22 @@ const calculateLapRaceLeaderboard = (pilots, stageId, lapTimes, stagePilots, num
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals } = useRally();
+  const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
   const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
   
   const selectedStage = stages.find(s => s.id === selectedStageId);
+  const selectedSpecialStageSelected = Boolean(selectedStageId && selectedStage && isSpecialStageType(selectedStage.type));
+  const fastClockEnabled = selectedSpecialStageSelected && timeDecimals > 0;
+  const currentFastTime = useFastClock(fastClockEnabled);
+  const currentSecondAlignedTime = useSecondAlignedClock(selectedSpecialStageSelected && !fastClockEnabled);
+  const sceneNow = useMemo(() => (
+    getReferenceNow(
+      debugDate,
+      fastClockEnabled ? new Date(currentFastTime) : currentSecondAlignedTime
+    )
+  ), [debugDate, fastClockEnabled, currentFastTime, currentSecondAlignedTime]);
   const alertStageId = selectedStageId || currentStageId || null;
   
   // Filter stages by type
@@ -210,14 +231,27 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           const startTime = startTimes[pilot.id]?.[selectedStageId] || '';
           const finishTime = times[pilot.id]?.[selectedStageId] || '';
           const retired = !!retiredStages?.[pilot.id]?.[selectedStageId];
+          const timeInfo = startInformationTime({
+            pilotId: pilot.id,
+            stageId: selectedStageId,
+            startTimes,
+            times,
+            retiredStages,
+            stageDate: selectedStage.date,
+            now: sceneNow,
+            decimals: timeDecimals,
+            startLabel: t('status.start'),
+            retiredLabel: t('status.retired')
+          });
+          const stageStartDateTime = getStageDateTime(selectedStage.date, startTime);
           const status = finishTime
             ? 'finished'
             : retired
               ? 'retired'
-              : startTime
+              : timeInfo.status === 'racing'
                 ? 'racing'
                 : 'not_started';
-          const displayTime = finishTime || startTime || '-';
+          const displayTime = timeInfo.text || '-';
           const timeColor = status === 'retired'
             ? 'text-red-400'
             : status === 'finished'
@@ -227,11 +261,13 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 : 'text-zinc-400';
           const sortTime = finishTime
             ? parseTime(finishTime)
-            : (startTime ? (displayOrderByPilotId.get(pilot.id) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER);
-          const completedStages = sortedSSStagesUpToSelected.reduce((count, stage) => (
+            : (status === 'racing' && stageStartDateTime
+              ? Math.max(0, sceneNow.getTime() - stageStartDateTime.getTime())
+              : (displayOrderByPilotId.get(pilot.id) ?? Number.MAX_SAFE_INTEGER));
+          const completedStages = ssStagesUpToSelected.reduce((count, stage) => (
             times[pilot.id]?.[stage.id] ? count + 1 : count
           ), 0);
-          const overallTime = sortedSSStagesUpToSelected.reduce((total, stage) => {
+          const overallTime = ssStagesUpToSelected.reduce((total, stage) => {
             const stageFinishTime = times[pilot.id]?.[stage.id];
             return stageFinishTime ? total + parseTime(stageFinishTime) : total;
           }, 0);
@@ -242,6 +278,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           return {
             ...pilot,
             displayTime,
+            timeInfo,
             timeColor,
             sortTime,
             overallTime,
@@ -288,7 +325,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         isRetired
       };
     }));
-  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, referenceSpecialStage, timeDecimals, displayOrderByPilotId]);
+  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, referenceSpecialStage, timeDecimals, displayOrderByPilotId, sceneNow, t]);
 
   const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
   const leaderboardStatusItems = useMemo(() => (
@@ -326,10 +363,10 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   return (
     <div className="relative w-full h-full flex items-center justify-center p-8 overflow-hidden" data-testid="scene-3-leaderboard">
       {/* Logo - Top Right */}
-      {logoUrl && (
+      {resolvedLogoUrl && (
         <div className="absolute top-4 right-8 z-10">
           <img 
-            src={logoUrl} 
+            src={resolvedLogoUrl} 
             alt="Channel Logo" 
             className="h-28 max-w-[280px] object-contain"
           />
@@ -586,12 +623,19 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                     ) : selectedStageId ? (
                       <>
                         <td className="p-4 text-right">
-                          <StartInformationValue
-                            info={pilot.timeInfo}
-                            fallback={pilot.displayTime}
-                            className={`text-2xl font-mono ${pilot.timeColor}`}
-                            style={{ fontFamily: 'JetBrains Mono, monospace' }}
-                          />
+                      <LiveStartInformationValue
+                        startTime={startTimes[pilot.id]?.[selectedStageId] || ''}
+                        finishTime={times[pilot.id]?.[selectedStageId] || ''}
+                        retired={!!retiredStages?.[pilot.id]?.[selectedStageId]}
+                        stageDate={selectedStage?.date}
+                        startLabel={t('status.start')}
+                        retiredLabel={t('status.retired')}
+                        fallback={pilot.displayTime}
+                        liveStatus={pilot.timeInfo?.status}
+                        debugDate={debugDate}
+                        className={`text-2xl font-mono ${pilot.timeColor}`}
+                        style={{ fontFamily: 'JetBrains Mono, monospace' }}
+                      />
                         </td>
                         <td className="p-4 text-right">
                           <span className={`text-xl font-mono ${pilot.overallColor || 'text-white'}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>

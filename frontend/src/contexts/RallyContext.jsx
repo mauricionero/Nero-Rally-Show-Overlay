@@ -226,6 +226,7 @@ export const RallyProvider = ({ children }) => {
   const persistenceReadyRef = useRef(false);
   const hydratingDomainsRef = useRef(new Set());
   const logicalTimestampRef = useRef(loadFromStorage('rally_logical_timestamp', 0));
+  const setupTimingSectionTouchedAtRef = useRef({});
   const timesRef = useRef(times);
   const arrivalTimesRef = useRef(arrivalTimes);
   const startTimesRef = useRef(startTimes);
@@ -288,6 +289,20 @@ export const RallyProvider = ({ children }) => {
     setDataVersion(Date.now());
   }, [wsRole]);
 
+  const wasSetupTimingSectionTouchedRecently = useCallback((sectionKey, now = Date.now()) => {
+    if (clientRole !== 'setup') {
+      return false;
+    }
+
+    const touchedAt = Number(setupTimingSectionTouchedAtRef.current?.[sectionKey] || 0);
+    return touchedAt > 0 && (now - touchedAt) < 1500;
+  }, [clientRole]);
+
+  const shouldPreserveLocalTimingSection = useCallback((sectionKey, now = Date.now()) => (
+    pendingLocalTimingSectionsRef.current.has(sectionKey)
+    || wasSetupTimingSectionTouchedRecently(sectionKey, now)
+  ), [wasSetupTimingSectionTouchedRecently]);
+
   const reloadStorageDomains = useCallback((domains = []) => {
     const nextDomains = Array.from(new Set(
       (Array.isArray(domains) ? domains : [domains]).filter(Boolean)
@@ -297,9 +312,8 @@ export const RallyProvider = ({ children }) => {
       return;
     }
 
-    nextDomains.forEach((domain) => hydratingDomainsRef.current.add(domain));
-
     if (nextDomains.includes('meta')) {
+      hydratingDomainsRef.current.add('meta');
       setEventName(loadFromStorage('rally_event_name', ''));
       setCurrentStageId(loadFromStorage('rally_current_stage', null));
       setDebugDate(loadFromStorage('rally_debug_date', ''));
@@ -316,25 +330,38 @@ export const RallyProvider = ({ children }) => {
     }
 
     if (nextDomains.includes('pilots')) {
+      hydratingDomainsRef.current.add('pilots');
       setPilots(loadFromStorage('rally_pilots', []));
     }
 
     if (nextDomains.includes('categories')) {
+      hydratingDomainsRef.current.add('categories');
       setCategories(loadFromStorage('rally_categories', []));
     }
 
     if (nextDomains.includes('stages')) {
+      hydratingDomainsRef.current.add('stages');
       setStages(loadFromStorage('rally_stages', []));
     }
 
     if (nextDomains.includes('timingCore')) {
-      setTimes(loadFromStorage('rally_times', {}));
-      setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
-      setStartTimes(loadFromStorage('rally_start_times', {}));
-      setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
+      const reloadAt = Date.now();
+      const shouldReloadTimes = !shouldPreserveLocalTimingSection('times', reloadAt);
+      const shouldReloadArrivalTimes = !shouldPreserveLocalTimingSection('arrivalTimes', reloadAt);
+      const shouldReloadStartTimes = !shouldPreserveLocalTimingSection('startTimes', reloadAt);
+      const shouldReloadRealStartTimes = !shouldPreserveLocalTimingSection('realStartTimes', reloadAt);
+
+      if (shouldReloadTimes || shouldReloadArrivalTimes || shouldReloadStartTimes || shouldReloadRealStartTimes) {
+        hydratingDomainsRef.current.add('timingCore');
+        if (shouldReloadTimes) setTimes(loadFromStorage('rally_times', {}));
+        if (shouldReloadArrivalTimes) setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
+        if (shouldReloadStartTimes) setStartTimes(loadFromStorage('rally_start_times', {}));
+        if (shouldReloadRealStartTimes) setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
+      }
     }
 
     if (nextDomains.includes('timingExtra')) {
+      hydratingDomainsRef.current.add('timingExtra');
       setPositions(loadFromStorage('rally_positions', {}));
       setLapTimes(loadFromStorage('rally_lap_times', {}));
       setStagePilots(loadFromStorage('rally_stage_pilots', {}));
@@ -343,15 +370,18 @@ export const RallyProvider = ({ children }) => {
     }
 
     if (nextDomains.includes('maps')) {
+      hydratingDomainsRef.current.add('maps');
       setMapPlacemarks(loadFromStorage('rally_map_placemarks', []));
     }
 
     if (nextDomains.includes('streams')) {
+      hydratingDomainsRef.current.add('streams');
       setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
       setCameras(loadFromStorage('rally_cameras', []));
     }
 
     if (nextDomains.includes('media')) {
+      hydratingDomainsRef.current.add('media');
       setExternalMedia(loadFromStorage('rally_external_media', []));
     }
 
@@ -360,7 +390,7 @@ export const RallyProvider = ({ children }) => {
     window.setTimeout(() => {
       nextDomains.forEach((domain) => hydratingDomainsRef.current.delete(domain));
     }, 0);
-  }, []);
+  }, [shouldPreserveLocalTimingSection]);
 
   // Apply data from WebSocket message
   useEffect(() => {
@@ -733,8 +763,6 @@ export const RallyProvider = ({ children }) => {
       });
     }
 
-    const shouldPreserveLocalTimingSection = (sectionKey) => pendingLocalTimingSectionsRef.current.has(sectionKey);
-    
     if (normalizedData.eventName !== undefined) setEventName(normalizedData.eventName);
     if (normalizedData.positions !== undefined && !shouldPreserveLocalTimingSection('positions')) setPositions(normalizedData.positions);
     if (normalizedData.lapTimes !== undefined && !shouldPreserveLocalTimingSection('lapTimes')) setLapTimes(normalizedData.lapTimes);
@@ -767,7 +795,7 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 100);
-  }, [buildTimingLineKey, getNextLogicalTimestamp, setTimingLineValue]);
+  }, [buildTimingLineKey, getNextLogicalTimestamp, setTimingLineValue, shouldPreserveLocalTimingSection]);
 
   // Listen for external data updates
   useEffect(() => {
@@ -1102,6 +1130,10 @@ export const RallyProvider = ({ children }) => {
   const markTimingSectionDirty = useCallback((section) => {
     if (clientRole === 'setup') {
       setupPendingSections.current.add(section);
+      setupTimingSectionTouchedAtRef.current = {
+        ...(setupTimingSectionTouchedAtRef.current || {}),
+        [section]: Date.now()
+      };
       return;
     }
 
@@ -1839,26 +1871,11 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     if (hydratingDomainsRef.current.has('timingCore')) return;
     localStorage.setItem('rally_times', JSON.stringify(times));
-    updateDataVersion('timingCore');
-  }, [times]);
-
-  useEffect(() => {
-    if (hydratingDomainsRef.current.has('timingCore')) return;
     localStorage.setItem('rally_arrival_times', JSON.stringify(arrivalTimes));
-    updateDataVersion('timingCore');
-  }, [arrivalTimes]);
-
-  useEffect(() => {
-    if (hydratingDomainsRef.current.has('timingCore')) return;
     localStorage.setItem('rally_start_times', JSON.stringify(startTimes));
-    updateDataVersion('timingCore');
-  }, [startTimes]);
-
-  useEffect(() => {
-    if (hydratingDomainsRef.current.has('timingCore')) return;
     localStorage.setItem('rally_real_start_times', JSON.stringify(realStartTimes));
     updateDataVersion('timingCore');
-  }, [realStartTimes]);
+  }, [arrivalTimes, realStartTimes, startTimes, times, updateDataVersion]);
 
   useEffect(() => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;

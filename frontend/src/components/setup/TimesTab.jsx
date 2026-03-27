@@ -308,24 +308,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       const categoryStatsForRow = row.category ? categoryStatsById.get(row.category.id) : null;
       const avgMs = categoryStatsForRow?.avg;
       const deviationMs = categoryStatsForRow?.deviation;
-      const warningThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
-        ? avgMs + deviationMs
-        : null;
-      const dangerThreshold = Number.isFinite(avgMs) && Number.isFinite(deviationMs)
-        ? avgMs + 2 * deviationMs
-        : null;
-      const alertLevel = Number.isFinite(row.totalMs) && Number.isFinite(warningThreshold)
-        ? (row.totalMs > dangerThreshold ? 'danger' : row.totalMs > warningThreshold ? 'warning' : null)
-        : null;
 
       return {
         ...row,
         avgMs,
         deviationMs,
-        warningThreshold,
-        dangerThreshold,
-        alertLevel,
-        alertColor: alertLevel === 'danger' ? 'text-red-400' : 'text-amber-300'
       };
     })
   ), [stagePilotRows, categoryStatsById]);
@@ -339,6 +326,25 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       : getPilotScheduledStartTime(stage, pilot);
     if (isValidClockTime(startTime) && value) {
       const totalTime = arrivalTimeToTotal(value, startTime, timeDecimals);
+      if (totalTime) {
+        setTime(pilotId, stage.id, totalTime);
+      }
+    }
+  };
+
+  const handleSetArrivalTimeNow = (pilotId) => {
+    if (isReadOnly) return;
+
+    const currentTime = getCurrentTimeString(timeDecimals);
+    setArrivalTime(pilotId, stage.id, currentTime);
+
+    const pilot = pilotById.get(pilotId);
+    const startTime = manualStartTime
+      ? (startTimes[pilotId]?.[stage.id] || '')
+      : getPilotScheduledStartTime(stage, pilot);
+
+    if (isValidClockTime(startTime)) {
+      const totalTime = arrivalTimeToTotal(currentTime, startTime, timeDecimals);
       if (totalTime) {
         setTime(pilotId, stage.id, totalTime);
       }
@@ -459,10 +465,6 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   totalTime,
                   avgMs,
                   deviationMs,
-                  warningThreshold,
-                  dangerThreshold,
-                  alertLevel,
-                  alertColor,
                   isJumpStart,
                   lineSync,
                   arrivalTimeValue
@@ -486,30 +488,6 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     </td>
                     <td className="p-1 sm:p-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        {alertLevel && (
-                          <TooltipProvider delayDuration={150}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className={`${alertColor} text-xs font-bold cursor-default`}>
-                                  {t('status.alert')}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-[220px] bg-zinc-900 text-zinc-100 border border-zinc-700 text-xs">
-                                <div className="space-y-1">
-                                  <div className="font-semibold text-white">
-                                    {alertLevel === 'danger' ? t('times.avgAlertDanger') : t('times.avgAlertWarning')}
-                                  </div>
-                                  <div className="text-zinc-300">
-                                    {t('times.avg')}: {formatMsAsShortTime(avgMs)} ± {formatMsAsShortTime(deviationMs)}
-                                  </div>
-                                  <div className="text-zinc-400">
-                                    {t('times.avgThreshold')}: {formatMsAsShortTime(alertLevel === 'danger' ? dangerThreshold : warningThreshold)}
-                                  </div>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
                         <span className="text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                           {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
                         </span>
@@ -570,6 +548,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             />
                             <button
                               onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                              type="button"
                               className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
                               title={t('times.now')}
                               disabled={isReadOnly}
@@ -578,6 +557,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             </button>
                             <button
                               onClick={() => handleStartTimeChange(pilot.id, '')}
+                              type="button"
                               className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                               title={t('common.clear')}
                               disabled={isReadOnly}
@@ -608,6 +588,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         />
                         <button
                           onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString(timeDecimals))}
+                          type="button"
                           className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
                           title={t('times.now')}
                           disabled={isReadOnly}
@@ -616,6 +597,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         </button>
                         <button
                           onClick={() => handleRealStartTimeChange(pilot.id, '')}
+                          type="button"
                           className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                           title={t('common.clear')}
                           disabled={isReadOnly}
@@ -636,10 +618,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           readOnly={isReadOnly}
                         />
                         <button
-                          onClick={() => {
-                            const currentTime = getCurrentTimeString(timeDecimals);
-                            handleArrivalTimeChange(pilot.id, currentTime);
-                          }}
+                          onClick={() => handleSetArrivalTimeNow(pilot.id)}
+                          type="button"
                           className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
                           title={t('times.now')}
                           disabled={isReadOnly}
@@ -651,6 +631,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             setArrivalTime(pilot.id, stage.id, '');
                             setTime(pilot.id, stage.id, '');
                           }}
+                          type="button"
                           className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                           title={t('common.clear')}
                           disabled={isReadOnly}
@@ -710,10 +691,6 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
               totalTime,
               avgMs,
               deviationMs,
-              warningThreshold,
-              dangerThreshold,
-              alertLevel,
-              alertColor,
               isJumpStart,
               lineSync,
               arrivalTimeValue
@@ -728,30 +705,6 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                 <CardContent className="p-2 pl-3">
                   {/* Pilot Header */}
                   <div className="flex flex-wrap items-center gap-1.5 mb-2.5 min-w-0">
-                    {alertLevel && (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className={`${alertColor} text-xs font-bold cursor-default`}>
-                              {t('status.alert')}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[220px] bg-zinc-900 text-zinc-100 border border-zinc-700 text-xs">
-                            <div className="space-y-1">
-                              <div className="font-semibold text-white">
-                                {alertLevel === 'danger' ? t('times.avgAlertDanger') : t('times.avgAlertWarning')}
-                              </div>
-                              <div className="text-zinc-300">
-                                {t('times.avg')}: {formatMsAsShortTime(avgMs)} ± {formatMsAsShortTime(deviationMs)}
-                              </div>
-                              <div className="text-zinc-400">
-                                {t('times.avgThreshold')}: {formatMsAsShortTime(alertLevel === 'danger' ? dangerThreshold : warningThreshold)}
-                              </div>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
                     <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
                     {pilot.carNumber && (
                       <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
@@ -822,6 +775,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                               />
                               <button
                                 onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                                type="button"
                                 className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
                                 title={t('times.now')}
                                 disabled={isReadOnly}
@@ -830,6 +784,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                               </button>
                               <button
                                 onClick={() => handleStartTimeChange(pilot.id, '')}
+                                type="button"
                                 className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                                 title={t('common.clear')}
                                 disabled={isReadOnly}
@@ -861,6 +816,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           />
                           <button
                             onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString(timeDecimals))}
+                            type="button"
                             className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
                             title={t('times.now')}
                             disabled={isReadOnly}
@@ -869,6 +825,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           </button>
                           <button
                             onClick={() => handleRealStartTimeChange(pilot.id, '')}
+                            type="button"
                             className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                             title={t('common.clear')}
                             disabled={isReadOnly}
@@ -894,10 +851,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     readOnly={isReadOnly}
                   />
                   <button
-                        onClick={() => {
-                          const currentTime = getCurrentTimeString(timeDecimals);
-                          handleArrivalTimeChange(pilot.id, currentTime);
-                        }}
+                    onClick={() => handleSetArrivalTimeNow(pilot.id)}
+                    type="button"
                     className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
                     title={t('times.now')}
                     disabled={isReadOnly}
@@ -909,6 +864,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           setArrivalTime(pilot.id, stage.id, '');
                           setTime(pilot.id, stage.id, '');
                         }}
+                    type="button"
                     className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                     title={t('common.clear')}
                     disabled={isReadOnly}

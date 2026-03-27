@@ -1,4 +1,4 @@
-import { Map, Globe, Video, Timer, Gauge, Flag, Trophy, Radio, Route } from 'lucide-react';
+import { Map, Globe, Video, Timer, Gauge, Flag, Trophy, Radio, Route, Image as ImageIcon } from 'lucide-react';
 
 export const EXTERNAL_MEDIA_ICON_OPTIONS = [
   { value: 'Map', label: 'Map' },
@@ -9,7 +9,8 @@ export const EXTERNAL_MEDIA_ICON_OPTIONS = [
   { value: 'Flag', label: 'Flag' },
   { value: 'Trophy', label: 'Results' },
   { value: 'Radio', label: 'Radio' },
-  { value: 'Route', label: 'Route' }
+  { value: 'Route', label: 'Route' },
+  { value: 'Image', label: 'image' }
 ];
 
 export const getExternalMediaIconComponent = (iconName) => {
@@ -30,6 +31,8 @@ export const getExternalMediaIconComponent = (iconName) => {
       return Radio;
     case 'Route':
       return Route;
+    case 'Image':
+      return ImageIcon;
     case 'Map':
     default:
       return Map;

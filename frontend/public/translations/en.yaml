@@ -30,7 +30,7 @@ common:
 # HEADER / NAVIGATION
 # ===========================================
 header:
-  title: "Rally Dashboard"
+  title: "NRS Control Zone"
   subtitle: "Setup & Configuration"
   goLive: "Go Live"
   overlay: "Overlay"

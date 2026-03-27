@@ -62,6 +62,7 @@ export default function Overlay() {
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
   const [messagesLastMinute, setMessagesLastMinute] = useState(0);
   const [messagesThisSecond, setMessagesThisSecond] = useState(0);
+  const defaultTransitionImageUrl = '/transition-default.png';
   const [transitionType, setTransitionType] = useState(() => {
     try {
       return localStorage.getItem('rally_transition_type') || 'fade';
@@ -120,19 +121,6 @@ export default function Overlay() {
       connectWebSocket(wsKey, { readOnly: true, role: 'overlay' });
     }
   }, [searchParams, wsConnectionStatus, connectWebSocket, autoConnectAttempted]);
-
-  // Hide Emergent badge on Overlay page (for clean screen capture)
-  useEffect(() => {
-    const badge = document.getElementById('emergent-badge');
-    if (badge) {
-      badge.style.display = 'none';
-    }
-    return () => {
-      if (badge) {
-        badge.style.display = 'inline-flex';
-      }
-    };
-  }, []);
 
   const clearTransitionTimers = useCallback(() => {
     transitionTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -358,6 +346,9 @@ export default function Overlay() {
     { num: 3, name: t('scenes.leaderboard') },
     { num: 4, name: t('scenes.pilotFocus') }
   ];
+  const resolvedTransitionImageUrl = transitionImageUrl?.trim()
+    ? transitionImageUrl.trim()
+    : defaultTransitionImageUrl;
   const transitionOptions = [
     { value: 'none', label: t('header.transitionNone') },
     { value: 'fade', label: t('header.transitionFade') },
@@ -589,7 +580,7 @@ export default function Overlay() {
                   transitionDuration: '300ms',
                   opacity: transitionOpacity,
                   transform: transitionTransform,
-                  ['--transition-image']: transitionImageUrl ? `url("${transitionImageUrl}")` : 'none'
+                  ['--transition-image']: resolvedTransitionImageUrl ? `url("${resolvedTransitionImageUrl}")` : 'none'
                 }}
               />
             </div>
