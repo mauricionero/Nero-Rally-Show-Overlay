@@ -173,7 +173,7 @@ export default function Times() {
 
   return (
     <div className="min-h-screen bg-[#09090B] text-white">
-      <div className="fixed top-0.5 right-0.5 z-50 flex items-center gap-2">
+      <div className="fixed top-1 left-2 right-2 sm:left-auto sm:right-4 z-50 flex items-center justify-end gap-2">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -248,7 +248,7 @@ export default function Times() {
               </div>
             </div>
             <div className="flex flex-col items-start gap-2 md:items-end md:gap-1">
-              <div className="flex w-full items-center gap-2 md:w-auto">
+              <div className="flex w-full min-w-0 items-center gap-2 md:w-auto">
                 <select
                   value={selectedStageId || ''}
                   onChange={(e) => {
@@ -256,7 +256,7 @@ export default function Times() {
                     setSelectedStageId(nextId);
                     setOpenStageIds(nextId ? [nextId] : []);
                   }}
-                  className="bg-[#18181B] border border-zinc-700 text-white text-sm rounded px-2 py-1 flex-1 md:w-[240px]"
+                  className="bg-[#18181B] border border-zinc-700 text-white text-sm rounded px-2 py-1 w-0 flex-1 min-w-0 md:w-[240px]"
                 >
                   <option value="">{t('times.selectStageToEdit')}</option>
                   {sortedStages.map((stage) => (
@@ -265,7 +265,7 @@ export default function Times() {
                     </option>
                   ))}
                 </select>
-                <LanguageSelectorCompact className="h-8 border-zinc-700 bg-[#18181B] px-2" />
+                <LanguageSelectorCompact className="h-8 !w-10 !min-w-10 !px-0 border-zinc-700 bg-[#18181B] shrink-0 justify-center" />
               </div>
             </div>
           </div>
