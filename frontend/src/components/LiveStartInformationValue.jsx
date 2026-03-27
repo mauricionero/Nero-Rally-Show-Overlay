@@ -5,7 +5,33 @@ import { getReferenceNow, getStageDateTime, getStartInformationFromValues } from
 import { useFastClock } from '../hooks/useFastClock.js';
 import { useSecondAlignedClock } from '../hooks/useSecondAlignedClock.js';
 
-export function LiveStartInformationValue({
+const shallowEqual = (left = {}, right = {}) => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => left[key] === right[key]);
+};
+
+const areLiveStartInformationPropsEqual = (prevProps, nextProps) => (
+  prevProps.startTime === nextProps.startTime &&
+  prevProps.finishTime === nextProps.finishTime &&
+  prevProps.retired === nextProps.retired &&
+  prevProps.stageDate === nextProps.stageDate &&
+  prevProps.startLabel === nextProps.startLabel &&
+  prevProps.retiredLabel === nextProps.retiredLabel &&
+  prevProps.className === nextProps.className &&
+  prevProps.fallback === nextProps.fallback &&
+  prevProps.liveStatus === nextProps.liveStatus &&
+  prevProps.debugDate === nextProps.debugDate &&
+  prevProps.as === nextProps.as &&
+  shallowEqual(prevProps.style, nextProps.style)
+);
+
+function LiveStartInformationValueBase({
   startTime = '',
   finishTime = '',
   retired = false,
@@ -28,6 +54,25 @@ export function LiveStartInformationValue({
     const stageDateTime = getStageDateTime(stageDate, startTime);
     return stageDateTime ? stageDateTime.getTime() : null;
   }, [stageDate, startTime]);
+  const resolvedLiveStatus = useMemo(() => {
+    if (liveStatus) {
+      return liveStatus;
+    }
+
+    if (finishTime) {
+      return 'finished';
+    }
+
+    if (retired) {
+      return 'retired';
+    }
+
+    if (startAtMs) {
+      return 'pre_start';
+    }
+
+    return 'not_started';
+  }, [finishTime, liveStatus, retired, startAtMs]);
 
   const [countdownArmed, setCountdownArmed] = useState(false);
 
@@ -57,14 +102,14 @@ export function LiveStartInformationValue({
       return false;
     }
 
-    if (liveStatus === 'racing' || liveStatus === 'pre_start') {
+    if (resolvedLiveStatus === 'racing' || resolvedLiveStatus === 'pre_start') {
       return true;
     }
 
     return countdownArmed;
-  }, [countdownArmed, finishTime, liveStatus, retired, startAtMs]);
+  }, [countdownArmed, finishTime, resolvedLiveStatus, retired, startAtMs]);
 
-  const shouldUseFastClock = shouldAnimate && timeDecimals > 0 && liveStatus === 'racing';
+  const shouldUseFastClock = shouldAnimate && timeDecimals > 0 && resolvedLiveStatus === 'racing';
   const secondAlignedNow = useSecondAlignedClock(shouldAnimate && !shouldUseFastClock);
 
   const staticInfo = useMemo(() => (
@@ -118,3 +163,5 @@ export function LiveStartInformationValue({
     />
   );
 }
+
+export const LiveStartInformationValue = React.memo(LiveStartInformationValueBase, areLiveStartInformationPropsEqual);

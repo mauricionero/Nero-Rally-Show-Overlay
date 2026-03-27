@@ -51,6 +51,10 @@ const buildComparator = (bucketOrder) => (a, b) => {
   return compareValues(a.id, b.id);
 };
 
+const buildOrderedSignature = (items = []) => items
+  .map((item) => `${item.id}:${item.currentStatus}:${getSortValue(item, item.currentStatus)}`)
+  .join('|');
+
 const findNextBoundaryMs = (item, nowMs) => {
   if (item.fixedStatus === 'finished' || item.fixedStatus === 'retired') {
     return null;
@@ -74,6 +78,7 @@ export function useScheduledPilotBuckets(items, bucketOrderConfig) {
   ), [bucketOrderSignature]);
   const comparator = useMemo(() => buildComparator(bucketOrder), [bucketOrderSignature]);
   const [orderedItems, setOrderedItems] = useState([]);
+  const orderedSignatureRef = useRef('');
   const itemsRef = useRef(new Map());
   const timeoutRef = useRef(null);
 
@@ -91,6 +96,13 @@ export function useScheduledPilotBuckets(items, bucketOrderConfig) {
 
     itemsRef.current = nextItems;
     const nextOrderedItems = [...nextItems.values()].sort(comparator);
+    const nextSignature = buildOrderedSignature(nextOrderedItems);
+
+    if (orderedSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    orderedSignatureRef.current = nextSignature;
     setOrderedItems(nextOrderedItems);
   }, [items, comparator]);
 
@@ -141,9 +153,15 @@ export function useScheduledPilotBuckets(items, bucketOrderConfig) {
 
       if (hasStatusChanges) {
         itemsRef.current = nextItems;
-        setOrderedItems([...nextItems.values()].sort(comparator));
-      } else {
-        setOrderedItems((prev) => prev);
+        const nextOrderedItems = [...nextItems.values()].sort(comparator);
+        const nextSignature = buildOrderedSignature(nextOrderedItems);
+
+        if (orderedSignatureRef.current === nextSignature) {
+          return;
+        }
+
+        orderedSignatureRef.current = nextSignature;
+        setOrderedItems(nextOrderedItems);
       }
     }, Math.max(0, nextBoundaryMs - nowMs));
 

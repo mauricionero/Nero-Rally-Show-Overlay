@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useRally } from '../../contexts/RallyContext.jsx';
+import { useRallyConfig } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -33,13 +33,14 @@ export default function PilotsTab({ hideStreams = false }) {
     updatePilot,
     deletePilot,
     togglePilotActive
-  } = useRally();
+  } = useRallyConfig();
 
   const [newPilot, setNewPilot] = useState({
     name: '',
     team: '',
     car: '',
     carNumber: '',
+    latLong: '',
     picture: '',
     streamUrl: '',
     categoryId: null,
@@ -66,6 +67,7 @@ export default function PilotsTab({ hideStreams = false }) {
       team: '',
       car: '',
       carNumber: '',
+      latLong: '',
       picture: '',
       streamUrl: '',
       categoryId: null,
@@ -102,6 +104,8 @@ export default function PilotsTab({ hideStreams = false }) {
     { id: 'team', label: t('pilots.team'), getValue: (pilot) => pilot.team || '' },
     { id: 'car', label: t('pilots.car'), getValue: (pilot) => pilot.car || '' },
     { id: 'carNumber', label: t('pilots.carNumber'), getValue: (pilot) => pilot.carNumber || '' },
+    { id: 'latLong', label: t('pilots.latLong'), getValue: (pilot) => pilot.latLong || '' },
+    { id: 'lastLatLongUpdatedAt', label: t('pilots.lastLatLongUpdatedAt'), getValue: (pilot) => pilot.lastLatLongUpdatedAt || '' },
     { id: 'category', label: t('pilots.category'), getValue: (pilot) => categoryById.get(pilot.categoryId)?.name || '' },
     { id: 'startOrder', label: t('pilots.startOrder'), getValue: (pilot) => pilot.startOrder ?? '' },
     { id: 'timeOffsetMinutes', label: t('pilots.timeOffsetMinutes'), getValue: (pilot) => pilot.timeOffsetMinutes ?? '' },
@@ -241,6 +245,17 @@ export default function PilotsTab({ hideStreams = false }) {
                 />
               </div>
               <div>
+                <Label htmlFor="pilot-lat-long" className="text-white">{t('pilots.latLong')}</Label>
+                <Input
+                  id="pilot-lat-long"
+                  value={newPilot.latLong}
+                  onChange={(e) => setNewPilot({ ...newPilot, latLong: e.target.value })}
+                  placeholder={t('pilots.placeholder.latLong')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-pilot-lat-long"
+                />
+              </div>
+              <div>
                 <Label htmlFor="pilot-picture" className="text-white">{t('pilots.pictureUrl')}</Label>
                 <Input
                   id="pilot-picture"
@@ -316,6 +331,18 @@ export default function PilotsTab({ hideStreams = false }) {
                       {pilot.car && (
                         <p className="text-xs text-zinc-400 truncate">
                           <span className="text-zinc-500">{t('pilots.car')}:</span> {pilot.car}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {pilot.latLong && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-zinc-400 truncate">
+                        <span className="text-zinc-500">{t('pilots.latLong')}:</span> {pilot.latLong}
+                      </p>
+                      {pilot.lastLatLongUpdatedAt && (
+                        <p className="text-xs text-zinc-500 truncate">
+                          <span>{t('pilots.lastLatLongUpdatedAt')}:</span> {new Date(pilot.lastLatLongUpdatedAt).toLocaleString()}
                         </p>
                       )}
                     </div>
@@ -419,6 +446,20 @@ export default function PilotsTab({ hideStreams = false }) {
                                 ))}
                               </SelectContent>
                             </Select>
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('pilots.latLong')}</Label>
+                            <Input
+                              value={editingPilot.latLong || ''}
+                              onChange={(e) => setEditingPilot({ ...editingPilot, latLong: e.target.value })}
+                              placeholder={t('pilots.placeholder.latLong')}
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                            {editingPilot.lastLatLongUpdatedAt && (
+                              <p className="mt-2 text-xs text-zinc-500">
+                                {t('pilots.lastLatLongUpdatedAt')}: {new Date(editingPilot.lastLatLongUpdatedAt).toLocaleString()}
+                              </p>
+                            )}
                           </div>
                           <div>
                             <Label className="text-white">{t('pilots.pictureUrl')}</Label>

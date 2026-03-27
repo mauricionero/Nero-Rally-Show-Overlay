@@ -4,6 +4,7 @@ import WsMessageReceiver from '../utils/wsMessageReceiver.js';
 import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../utils/stageSchedule.js';
 import { isLapRaceStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
+import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
 
 const RallyContext = createContext();
 const RallyConfigContext = createContext();
@@ -60,6 +61,20 @@ const loadFromStorage = (key, defaultValue) => {
     return defaultValue;
   }
 };
+
+const STORAGE_DOMAIN_VERSION_KEYS = {
+  meta: 'rally_meta_version',
+  pilots: 'rally_pilots_version',
+  categories: 'rally_categories_version',
+  stages: 'rally_stages_version',
+  timingCore: 'rally_timing_core_version',
+  timingExtra: 'rally_timing_extra_version',
+  maps: 'rally_maps_version',
+  streams: 'rally_streams_version',
+  media: 'rally_media_version'
+};
+
+const ALL_STORAGE_DOMAINS = Object.keys(STORAGE_DOMAIN_VERSION_KEYS);
 
 const createEntityId = (prefix = '') => {
   const rawId = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -145,6 +160,7 @@ export const RallyProvider = ({ children }) => {
   const [realStartTimes, setRealStartTimes] = useState(() => loadFromStorage('rally_real_start_times', {}));
   const [retiredStages, setRetiredStages] = useState(() => loadFromStorage('rally_retired_stages', {}));
   const [stageAlerts, setStageAlerts] = useState(() => loadFromStorage('rally_stage_alerts', {}));
+  const [mapPlacemarks, setMapPlacemarks] = useState(() => loadFromStorage('rally_map_placemarks', []));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
   const [timeDecimals, setTimeDecimals] = useState(() => {
@@ -164,10 +180,7 @@ export const RallyProvider = ({ children }) => {
   const [globalAudio, setGlobalAudio] = useState(() => loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
   const [cameras, setCameras] = useState(() => loadFromStorage('rally_cameras', []));
   const [currentScene, setCurrentScene] = useState(1);
-  const [dataVersion, setDataVersion] = useState(() => {
-    const stored = loadFromStorage('rally_data_version', Date.now());
-    return typeof stored === 'number' ? stored : Date.now();
-  });
+  const [dataVersion, setDataVersion] = useState(() => Date.now());
 
   // WebSocket state
   const [wsEnabled, setWsEnabled] = useState(() => loadFromStorage('rally_ws_enabled', false));
@@ -202,6 +215,7 @@ export const RallyProvider = ({ children }) => {
   const wsMessageReceiver = useRef(null);
   const isPublishing = useRef(false);
   const storageReloadTimeout = useRef(null);
+  const pendingStorageDomainsRef = useRef(new Set());
   const wsRoleRef = useRef(wsRole);
   const pendingLocalTimingSectionsRef = useRef(new Set());
   const timingLineVersionsRef = useRef(timingLineVersions);
@@ -209,7 +223,10 @@ export const RallyProvider = ({ children }) => {
   const publishDirtySetupSectionsRef = useRef(null);
   const publishDirtyTimingDeltasRef = useRef(null);
   const publishSetupSnapshotRef = useRef(null);
+  const persistenceReadyRef = useRef(false);
+  const hydratingDomainsRef = useRef(new Set());
   const logicalTimestampRef = useRef(loadFromStorage('rally_logical_timestamp', 0));
+  const setupTimingSectionTouchedAtRef = useRef({});
   const timesRef = useRef(times);
   const arrivalTimesRef = useRef(arrivalTimes);
   const startTimesRef = useRef(startTimes);
@@ -228,6 +245,10 @@ export const RallyProvider = ({ children }) => {
     logicalTimestampRef.current = next;
     localStorage.setItem('rally_logical_timestamp', JSON.stringify(next));
     return next;
+  }, []);
+
+  useEffect(() => {
+    persistenceReadyRef.current = true;
   }, []);
 
   const buildTimingLineKey = useCallback((section, pilotId = null, stageId = null) => (
@@ -249,6 +270,7 @@ export const RallyProvider = ({ children }) => {
     setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
     setRetiredStages(loadFromStorage('rally_retired_stages', {}));
     setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
+    setMapPlacemarks(loadFromStorage('rally_map_placemarks', []));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setDebugDate(loadFromStorage('rally_debug_date', ''));
     const storedTimeDecimals = loadFromStorage('rally_time_decimals', 3);
@@ -264,9 +286,111 @@ export const RallyProvider = ({ children }) => {
     setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
     setCameras(loadFromStorage('rally_cameras', []));
-    const newVersion = loadFromStorage('rally_data_version', Date.now());
-    setDataVersion(typeof newVersion === 'number' ? newVersion : Date.now());
+    setDataVersion(Date.now());
   }, [wsRole]);
+
+  const wasSetupTimingSectionTouchedRecently = useCallback((sectionKey, now = Date.now()) => {
+    if (clientRole !== 'setup') {
+      return false;
+    }
+
+    const touchedAt = Number(setupTimingSectionTouchedAtRef.current?.[sectionKey] || 0);
+    return touchedAt > 0 && (now - touchedAt) < 1500;
+  }, [clientRole]);
+
+  const shouldPreserveLocalTimingSection = useCallback((sectionKey, now = Date.now()) => (
+    pendingLocalTimingSectionsRef.current.has(sectionKey)
+    || wasSetupTimingSectionTouchedRecently(sectionKey, now)
+  ), [wasSetupTimingSectionTouchedRecently]);
+
+  const reloadStorageDomains = useCallback((domains = []) => {
+    const nextDomains = Array.from(new Set(
+      (Array.isArray(domains) ? domains : [domains]).filter(Boolean)
+    ));
+
+    if (nextDomains.length === 0) {
+      return;
+    }
+
+    if (nextDomains.includes('meta')) {
+      hydratingDomainsRef.current.add('meta');
+      setEventName(loadFromStorage('rally_event_name', ''));
+      setCurrentStageId(loadFromStorage('rally_current_stage', null));
+      setDebugDate(loadFromStorage('rally_debug_date', ''));
+      const storedTimeDecimals = loadFromStorage('rally_time_decimals', 3);
+      const normalizedTimeDecimals = Number.isFinite(Number(storedTimeDecimals))
+        ? Math.min(3, Math.max(0, Math.trunc(Number(storedTimeDecimals))))
+        : 3;
+      setTimeDecimals(normalizedTimeDecimals);
+      setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
+      setMapUrl(loadFromStorage('rally_map_url', ''));
+      setLogoUrl(loadFromStorage('rally_logo_url', ''));
+      setTransitionImageUrl(loadFromStorage('rally_transition_image', ''));
+      setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
+    }
+
+    if (nextDomains.includes('pilots')) {
+      hydratingDomainsRef.current.add('pilots');
+      setPilots(loadFromStorage('rally_pilots', []));
+    }
+
+    if (nextDomains.includes('categories')) {
+      hydratingDomainsRef.current.add('categories');
+      setCategories(loadFromStorage('rally_categories', []));
+    }
+
+    if (nextDomains.includes('stages')) {
+      hydratingDomainsRef.current.add('stages');
+      setStages(loadFromStorage('rally_stages', []));
+    }
+
+    if (nextDomains.includes('timingCore')) {
+      const reloadAt = Date.now();
+      const shouldReloadTimes = !shouldPreserveLocalTimingSection('times', reloadAt);
+      const shouldReloadArrivalTimes = !shouldPreserveLocalTimingSection('arrivalTimes', reloadAt);
+      const shouldReloadStartTimes = !shouldPreserveLocalTimingSection('startTimes', reloadAt);
+      const shouldReloadRealStartTimes = !shouldPreserveLocalTimingSection('realStartTimes', reloadAt);
+
+      if (shouldReloadTimes || shouldReloadArrivalTimes || shouldReloadStartTimes || shouldReloadRealStartTimes) {
+        hydratingDomainsRef.current.add('timingCore');
+        if (shouldReloadTimes) setTimes(loadFromStorage('rally_times', {}));
+        if (shouldReloadArrivalTimes) setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
+        if (shouldReloadStartTimes) setStartTimes(loadFromStorage('rally_start_times', {}));
+        if (shouldReloadRealStartTimes) setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
+      }
+    }
+
+    if (nextDomains.includes('timingExtra')) {
+      hydratingDomainsRef.current.add('timingExtra');
+      setPositions(loadFromStorage('rally_positions', {}));
+      setLapTimes(loadFromStorage('rally_lap_times', {}));
+      setStagePilots(loadFromStorage('rally_stage_pilots', {}));
+      setRetiredStages(loadFromStorage('rally_retired_stages', {}));
+      setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
+    }
+
+    if (nextDomains.includes('maps')) {
+      hydratingDomainsRef.current.add('maps');
+      setMapPlacemarks(loadFromStorage('rally_map_placemarks', []));
+    }
+
+    if (nextDomains.includes('streams')) {
+      hydratingDomainsRef.current.add('streams');
+      setStreamConfigs(loadFromStorage('rally_stream_configs', {}));
+      setCameras(loadFromStorage('rally_cameras', []));
+    }
+
+    if (nextDomains.includes('media')) {
+      hydratingDomainsRef.current.add('media');
+      setExternalMedia(loadFromStorage('rally_external_media', []));
+    }
+
+    setDataVersion(Date.now());
+
+    window.setTimeout(() => {
+      nextDomains.forEach((domain) => hydratingDomainsRef.current.delete(domain));
+    }, 0);
+  }, [shouldPreserveLocalTimingSection]);
 
   // Apply data from WebSocket message
   useEffect(() => {
@@ -639,8 +763,6 @@ export const RallyProvider = ({ children }) => {
       });
     }
 
-    const shouldPreserveLocalTimingSection = (sectionKey) => pendingLocalTimingSectionsRef.current.has(sectionKey);
-    
     if (normalizedData.eventName !== undefined) setEventName(normalizedData.eventName);
     if (normalizedData.positions !== undefined && !shouldPreserveLocalTimingSection('positions')) setPositions(normalizedData.positions);
     if (normalizedData.lapTimes !== undefined && !shouldPreserveLocalTimingSection('lapTimes')) setLapTimes(normalizedData.lapTimes);
@@ -654,6 +776,7 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.realStartTimes !== undefined && !shouldPreserveLocalTimingSection('realStartTimes')) setRealStartTimes(normalizedData.realStartTimes);
     if (normalizedData.retiredStages !== undefined && !shouldPreserveLocalTimingSection('retiredStages')) setRetiredStages(normalizedData.retiredStages);
     if (normalizedData.stageAlerts !== undefined && !shouldPreserveLocalTimingSection('stageAlerts')) setStageAlerts(normalizedData.stageAlerts);
+    if (normalizedData.mapPlacemarks !== undefined) setMapPlacemarks(normalizedData.mapPlacemarks);
     if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
     if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
     if (normalizedData.timeDecimals !== undefined) {
@@ -672,40 +795,68 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 100);
-  }, [buildTimingLineKey, getNextLogicalTimestamp, setTimingLineValue]);
+  }, [buildTimingLineKey, getNextLogicalTimestamp, setTimingLineValue, shouldPreserveLocalTimingSection]);
 
   // Listen for external data updates
   useEffect(() => {
     const handleStorageUpdate = () => {
-      reloadData();
+      reloadStorageDomains(ALL_STORAGE_DOMAINS);
     };
 
     window.addEventListener('rally-reload-data', handleStorageUpdate);
     return () => window.removeEventListener('rally-reload-data', handleStorageUpdate);
-  }, [reloadData]);
+  }, [reloadStorageDomains]);
 
   useEffect(() => {
-    const handleStorageEvent = (event) => {
-      if (!event?.key) return;
-      if (event.key !== 'rally_data_version') return;
+    const flushPendingStorageDomains = () => {
+      const nextDomains = Array.from(pendingStorageDomainsRef.current);
+      pendingStorageDomainsRef.current.clear();
+      storageReloadTimeout.current = null;
+
+      if (nextDomains.length > 0) {
+        reloadStorageDomains(nextDomains);
+      }
+    };
+
+    const queueStorageDomains = (domains) => {
+      domains.forEach((domain) => pendingStorageDomainsRef.current.add(domain));
 
       if (storageReloadTimeout.current) {
-        window.clearTimeout(storageReloadTimeout.current);
+        return;
       }
 
-      storageReloadTimeout.current = window.setTimeout(() => {
-        reloadData();
-      }, 30);
+      storageReloadTimeout.current = window.setTimeout(flushPendingStorageDomains, 30);
+    };
+
+    const handleStorageEvent = (event) => {
+      if (!event?.key) return;
+      const changedDomain = Object.entries(STORAGE_DOMAIN_VERSION_KEYS).find(([, storageKey]) => storageKey === event.key)?.[0];
+      if (!changedDomain) return;
+
+      queueStorageDomains([changedDomain]);
+    };
+
+    const handleDomainReloadEvent = (event) => {
+      const domains = Array.isArray(event?.detail?.domains) ? event.detail.domains : [];
+      if (domains.length === 0) {
+        return;
+      }
+
+      queueStorageDomains(domains);
     };
 
     window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener('rally-reload-domains', handleDomainReloadEvent);
     return () => {
       window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('rally-reload-domains', handleDomainReloadEvent);
       if (storageReloadTimeout.current) {
         window.clearTimeout(storageReloadTimeout.current);
+        storageReloadTimeout.current = null;
       }
+      pendingStorageDomainsRef.current.clear();
     };
-  }, [reloadData]);
+  }, [reloadStorageDomains]);
 
   const buildWebSocketSnapshot = useCallback(() => ({
     eventName,
@@ -721,6 +872,7 @@ export const RallyProvider = ({ children }) => {
     realStartTimes,
     retiredStages,
     stageAlerts,
+    mapPlacemarks,
     currentStageId,
     debugDate,
     timeDecimals,
@@ -747,6 +899,7 @@ export const RallyProvider = ({ children }) => {
     realStartTimes,
     retiredStages,
     stageAlerts,
+    mapPlacemarks,
     currentStageId,
     debugDate,
     timeDecimals,
@@ -788,6 +941,7 @@ export const RallyProvider = ({ children }) => {
       { section: 'stagePilots', payload: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) } },
       { section: 'retiredStages', payload: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) } },
       { section: 'stageAlerts', payload: { stageAlerts: pruneEmptyNestedValues(snapshot.stageAlerts) } },
+      { section: 'mapPlacemarks', payload: { mapPlacemarks: pruneEmptyNestedValues(snapshot.mapPlacemarks) } },
       { section: 'cameras', payload: { cameras: pruneEmptyNestedValues(snapshot.cameras) } },
       { section: 'externalMedia', payload: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) } },
       { section: 'streamConfigs', payload: { streamConfigs: pruneEmptyNestedValues(snapshot.streamConfigs) } }
@@ -837,6 +991,7 @@ export const RallyProvider = ({ children }) => {
       stagePilots: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) },
       retiredStages: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) },
       stageAlerts: { stageAlerts: pruneEmptyNestedValues(snapshot.stageAlerts) },
+      mapPlacemarks: { mapPlacemarks: pruneEmptyNestedValues(snapshot.mapPlacemarks) },
       cameras: { cameras: pruneEmptyNestedValues(snapshot.cameras) },
       externalMedia: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) },
       streamConfigs: { streamConfigs: pruneEmptyNestedValues(snapshot.streamConfigs) }
@@ -871,6 +1026,7 @@ export const RallyProvider = ({ children }) => {
     'pilots',
     'categories',
     'stages',
+    'mapPlacemarks',
     'cameras',
     'externalMedia',
     'streamConfigs'
@@ -974,6 +1130,10 @@ export const RallyProvider = ({ children }) => {
   const markTimingSectionDirty = useCallback((section) => {
     if (clientRole === 'setup') {
       setupPendingSections.current.add(section);
+      setupTimingSectionTouchedAtRef.current = {
+        ...(setupTimingSectionTouchedAtRef.current || {}),
+        [section]: Date.now()
+      };
       return;
     }
 
@@ -1567,10 +1727,27 @@ export const RallyProvider = ({ children }) => {
     return generateChannelKey();
   }, []);
 
-  const updateDataVersion = useCallback(() => {
+  const updateDataVersion = useCallback((domains = []) => {
+    if (!persistenceReadyRef.current || isPublishing.current) {
+      return;
+    }
+
     const newVersion = Date.now();
     setDataVersion(newVersion);
-    localStorage.setItem('rally_data_version', JSON.stringify(newVersion));
+
+    const nextDomains = Array.from(new Set(
+      (Array.isArray(domains) ? domains : [domains]).filter(Boolean)
+    ));
+
+    nextDomains.forEach((domain) => {
+      if (hydratingDomainsRef.current.has(domain)) {
+        return;
+      }
+      const storageKey = STORAGE_DOMAIN_VERSION_KEYS[domain];
+      if (storageKey) {
+        localStorage.setItem(storageKey, JSON.stringify(newVersion));
+      }
+    });
   }, []);
 
   // Publish to WebSocket when data version changes
@@ -1646,83 +1823,90 @@ export const RallyProvider = ({ children }) => {
   
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_event_name', JSON.stringify(eventName));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [eventName, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_positions', JSON.stringify(positions));
-    updateDataVersion();
+    updateDataVersion('timingExtra');
   }, [positions]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_lap_times', JSON.stringify(lapTimes));
-    updateDataVersion();
+    updateDataVersion('timingExtra');
   }, [lapTimes]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_stage_pilots', JSON.stringify(stagePilots));
-    updateDataVersion();
+    updateDataVersion('timingExtra');
   }, [stagePilots]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('pilots')) return;
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
-    updateDataVersion();
+    updateDataVersion('pilots');
     markSetupSectionDirty('pilots');
   }, [pilots, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('categories')) return;
     localStorage.setItem('rally_categories', JSON.stringify(categories));
-    updateDataVersion();
+    updateDataVersion('categories');
     markSetupSectionDirty('categories');
   }, [categories, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('stages')) return;
     localStorage.setItem('rally_stages', JSON.stringify(stages));
-    updateDataVersion();
+    updateDataVersion('stages');
     markSetupSectionDirty('stages');
   }, [stages, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('timingCore')) return;
     localStorage.setItem('rally_times', JSON.stringify(times));
-    updateDataVersion();
-  }, [times]);
-
-  useEffect(() => {
     localStorage.setItem('rally_arrival_times', JSON.stringify(arrivalTimes));
-    updateDataVersion();
-  }, [arrivalTimes]);
-
-  useEffect(() => {
     localStorage.setItem('rally_start_times', JSON.stringify(startTimes));
-    updateDataVersion();
-  }, [startTimes]);
-
-  useEffect(() => {
     localStorage.setItem('rally_real_start_times', JSON.stringify(realStartTimes));
-    updateDataVersion();
-  }, [realStartTimes]);
+    updateDataVersion('timingCore');
+  }, [arrivalTimes, realStartTimes, startTimes, times, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_retired_stages', JSON.stringify(retiredStages));
-    updateDataVersion();
+    updateDataVersion('timingExtra');
   }, [retiredStages]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_stage_alerts', JSON.stringify(stageAlerts));
-    updateDataVersion();
+    updateDataVersion('timingExtra');
   }, [stageAlerts]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('maps')) return;
+    localStorage.setItem('rally_map_placemarks', JSON.stringify(mapPlacemarks));
+    updateDataVersion('maps');
+    markSetupSectionDirty('mapPlacemarks');
+  }, [mapPlacemarks, markSetupSectionDirty, updateDataVersion]);
+
+  useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_debug_date', JSON.stringify(debugDate));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [debugDate, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_time_decimals', JSON.stringify(timeDecimals));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [timeDecimals, markSetupSectionDirty, updateDataVersion]);
 
@@ -1836,56 +2020,65 @@ export const RallyProvider = ({ children }) => {
   }, [externalMedia]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_current_stage', JSON.stringify(currentStageId));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [currentStageId, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_chroma_key', JSON.stringify(chromaKey));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [chromaKey, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_map_url', JSON.stringify(mapUrl));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [mapUrl, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_logo_url', JSON.stringify(logoUrl));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [logoUrl, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_transition_image', JSON.stringify(transitionImageUrl));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [transitionImageUrl, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('streams')) return;
     localStorage.setItem('rally_stream_configs', JSON.stringify(streamConfigs));
-    updateDataVersion();
+    updateDataVersion('streams');
     markSetupSectionDirty('streamConfigs');
   }, [streamConfigs, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('meta')) return;
     localStorage.setItem('rally_global_audio', JSON.stringify(globalAudio));
-    updateDataVersion();
+    updateDataVersion('meta');
     markSetupSectionDirty('meta');
   }, [globalAudio, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('streams')) return;
     localStorage.setItem('rally_cameras', JSON.stringify(cameras));
-    updateDataVersion();
+    updateDataVersion('streams');
     markSetupSectionDirty('cameras');
   }, [cameras, markSetupSectionDirty, updateDataVersion]);
 
   useEffect(() => {
+    if (hydratingDomainsRef.current.has('media')) return;
     localStorage.setItem('rally_external_media', JSON.stringify(externalMedia));
-    updateDataVersion();
+    updateDataVersion('media');
     markSetupSectionDirty('externalMedia');
   }, [externalMedia, markSetupSectionDirty, updateDataVersion]);
 
@@ -1926,24 +2119,50 @@ export const RallyProvider = ({ children }) => {
   }, [setExternalMedia]);
 
   const addPilot = (pilot) => {
+    const normalizedLatLong = normalizeLatLongString(pilot.latLong || '');
+    const hasLatLong = !!parseLatLongString(normalizedLatLong);
     const newPilot = {
+      ...pilot,
       id: createEntityId('pilot'),
       name: pilot.name,
       team: pilot.team || '',
       car: pilot.car || '',
+      latLong: hasLatLong ? normalizedLatLong : '',
+      lastLatLongUpdatedAt: hasLatLong ? Date.now() : null,
       picture: pilot.picture || '',
       streamUrl: pilot.streamUrl || '',
       categoryId: pilot.categoryId || null,
       startOrder: pilot.startOrder || 999,
       timeOffsetMinutes: pilot.timeOffsetMinutes || 0,
-      isActive: false,
-      ...pilot
+      isActive: pilot.isActive ?? false
     };
     setPilots(prev => [...prev, newPilot]);
   };
 
   const updatePilot = (id, updates) => {
-    setPilots(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    setPilots(prev => prev.map((pilot) => {
+      if (pilot.id !== id) {
+        return pilot;
+      }
+
+      const nextUpdates = { ...updates };
+
+      if (Object.prototype.hasOwnProperty.call(updates, 'latLong')) {
+        const normalizedLatLong = normalizeLatLongString(updates.latLong || '');
+        const previousLatLong = normalizeLatLongString(pilot.latLong || '');
+        const hasLatLong = !!parseLatLongString(normalizedLatLong);
+
+        nextUpdates.latLong = hasLatLong ? normalizedLatLong : '';
+
+        if (!hasLatLong) {
+          nextUpdates.lastLatLongUpdatedAt = null;
+        } else if (normalizedLatLong !== previousLatLong) {
+          nextUpdates.lastLatLongUpdatedAt = Date.now();
+        }
+      }
+
+      return { ...pilot, ...nextUpdates };
+    }));
   };
 
   const deletePilot = (id) => {
@@ -2077,6 +2296,7 @@ export const RallyProvider = ({ children }) => {
       distance: stage.distance || '',
       startTime: stage.startTime || '', // For SS/Super Prime/Liaison/Service Park: schedule time. For Lap Race: race start time
       endTime: stage.endTime || '',
+      mapPlacemarkId: stage.mapPlacemarkId || '',
       numberOfLaps: stage.numberOfLaps || 5, // For Lap Race type
       ...stage
     };
@@ -2166,6 +2386,18 @@ export const RallyProvider = ({ children }) => {
       return newStageAlerts;
     });
   };
+
+  const importMapPlacemarks = useCallback((placemarks) => {
+    if (!Array.isArray(placemarks) || placemarks.length === 0) {
+      return;
+    }
+
+    setMapPlacemarks((prev) => [...prev, ...placemarks]);
+  }, []);
+
+  const clearMapPlacemarks = useCallback(() => {
+    setMapPlacemarks([]);
+  }, []);
 
   // Stage pilots functions (for Lap Race pilot selection)
   const getStagePilots = useCallback((stageId) => (
@@ -2531,11 +2763,11 @@ export const RallyProvider = ({ children }) => {
       chromaKey: loadFromStorage('rally_chroma_key', '#000000'),
       mapUrl: loadFromStorage('rally_map_url', ''),
       logoUrl: loadFromStorage('rally_logo_url', ''),
-      dataVersion: loadFromStorage('rally_data_version', Date.now()),
+      dataVersion,
       exportDate: new Date().toISOString()
     };
     return JSON.stringify(data, null, 2);
-  }, []);
+  }, [dataVersion]);
 
   const importData = useCallback((jsonString) => {
     try {
@@ -2565,7 +2797,7 @@ export const RallyProvider = ({ children }) => {
       if (data.positions) setPositions(data.positions);
       if (data.lapTimes) setLapTimes(data.lapTimes);
       if (data.stagePilots) setStagePilots(data.stagePilots);
-      updateDataVersion();
+      updateDataVersion(ALL_STORAGE_DOMAINS);
       return true;
     } catch (error) {
       console.error('Error importing data:', error);
@@ -2587,6 +2819,7 @@ export const RallyProvider = ({ children }) => {
     setRealStartTimes({});
     setRetiredStages({});
     setStageAlerts({});
+    setMapPlacemarks([]);
     setDebugDate('');
     setTimeDecimals(3);
     setStreamConfigs({});
@@ -2598,8 +2831,8 @@ export const RallyProvider = ({ children }) => {
     setMapUrl('');
     setLogoUrl('');
     setTransitionImageUrl('');
-    updateDataVersion();
-  }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
+    updateDataVersion(ALL_STORAGE_DOMAINS);
+  }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -2617,6 +2850,7 @@ export const RallyProvider = ({ children }) => {
     realStartTimes,
     retiredStages,
     stageAlerts,
+    mapPlacemarks,
     debugDate,
     timeDecimals,
     streamConfigs,
@@ -2676,6 +2910,8 @@ export const RallyProvider = ({ children }) => {
     addStage,
     updateStage,
     deleteStage,
+    importMapPlacemarks,
+    clearMapPlacemarks,
     setTime,
     getTime,
     setArrivalTime,
@@ -2739,6 +2975,10 @@ export const RallyProvider = ({ children }) => {
     setChromaKey,
     setLogoUrl,
     setTransitionImageUrl,
+    addPilot,
+    updatePilot,
+    deletePilot,
+    togglePilotActive,
     addExternalMedia,
     updateExternalMedia,
     deleteExternalMedia,
@@ -2759,6 +2999,10 @@ export const RallyProvider = ({ children }) => {
     setChromaKey,
     setLogoUrl,
     setTransitionImageUrl,
+    addPilot,
+    updatePilot,
+    deletePilot,
+    togglePilotActive,
     addExternalMedia,
     updateExternalMedia,
     deleteExternalMedia,

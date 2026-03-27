@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Upload, Download, Image, Globe, Trash2, Palette, Timer } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
 import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 export default function ConfigTab() {
@@ -55,6 +56,7 @@ export default function ConfigTab() {
   const mediaOptionByValue = useMemo(() => (
     new Map(EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => [option.value, option]))
   ), []);
+  const resolvedLogoUrl = useMemo(() => getResolvedBrandingLogoUrl(logoUrl), [logoUrl]);
 
   const renderMediaIconValue = (iconValue) => {
     const option = mediaOptionByValue.get(iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
@@ -132,17 +134,15 @@ export default function ConfigTab() {
                 Your logo will appear on all overlay scenes. Recommended: PNG with transparent background.
               </p>
             </div>
-            {logoUrl && (
-              <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
-                <span className="text-xs text-zinc-400">Preview:</span>
-                <img 
-                  src={logoUrl} 
-                  alt="Logo preview" 
-                  className="h-10 max-w-[150px] object-contain"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              </div>
-            )}
+            <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
+              <span className="text-xs text-zinc-400">Preview:</span>
+              <img
+                src={resolvedLogoUrl}
+                alt="Logo preview"
+                className="h-10 max-w-[180px] object-contain"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </div>
             <div className="space-y-2">
               <Label className="text-white">{t('config.transitionImage')}</Label>
               <Input

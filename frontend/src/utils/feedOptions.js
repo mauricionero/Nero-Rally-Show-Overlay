@@ -1,6 +1,43 @@
+import { compareStagesBySchedule } from './stageSchedule.js';
+import { getStageTitle } from './stageTypes.js';
+
 export const getFeedOptionValue = (type, id) => `${type}:${id}`;
 
-export const buildFeedOptions = ({ pilots = [], cameras = [], externalMedia = [], pilotPositions = {} }) => {
+export const buildStageMapFeeds = ({ stages = [], mapPlacemarks = [] }) => {
+  const placemarkById = new Map(mapPlacemarks.map((placemark) => [placemark.id, placemark]));
+
+  return [...stages]
+    .sort(compareStagesBySchedule)
+    .map((stage) => {
+      const placemark = placemarkById.get(stage.mapPlacemarkId);
+      if (!placemark) {
+        return null;
+      }
+
+      return {
+        value: getFeedOptionValue('stage-map', stage.id),
+        id: stage.id,
+        type: 'stage-map',
+        name: getStageTitle(stage),
+        stageId: stage.id,
+        stageName: stage.name,
+        placemarkId: placemark.id,
+        placemarkName: placemark.name,
+        geometryType: placemark.geometryType,
+        coordinateGroups: placemark.coordinateGroups
+      };
+    })
+    .filter(Boolean);
+};
+
+export const buildFeedOptions = ({
+  pilots = [],
+  cameras = [],
+  externalMedia = [],
+  stages = [],
+  mapPlacemarks = [],
+  pilotPositions = {}
+}) => {
   const feeds = [];
 
   cameras
@@ -26,6 +63,11 @@ export const buildFeedOptions = ({ pilots = [], cameras = [], externalMedia = []
         url: media.url,
         icon: media.icon || 'Map'
       });
+    });
+
+  buildStageMapFeeds({ stages, mapPlacemarks })
+    .forEach((feed) => {
+      feeds.push(feed);
     });
 
   pilots

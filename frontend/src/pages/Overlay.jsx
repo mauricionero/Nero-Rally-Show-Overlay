@@ -14,9 +14,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
+import PerformanceLed from '../components/PerformanceLed.jsx';
 
 // version constant
 import { VERSION } from '../config/version.js';
+
+const STORAGE_DOMAIN_VERSION_KEYS = {
+  meta: 'rally_meta_version',
+  pilots: 'rally_pilots_version',
+  categories: 'rally_categories_version',
+  stages: 'rally_stages_version',
+  timingCore: 'rally_timing_core_version',
+  timingExtra: 'rally_timing_extra_version',
+  maps: 'rally_maps_version',
+  streams: 'rally_streams_version',
+  media: 'rally_media_version'
+};
+
+const readStoredDomainVersions = () => Object.fromEntries(
+  Object.entries(STORAGE_DOMAIN_VERSION_KEYS).map(([domain, storageKey]) => {
+    const parsedValue = Number(localStorage.getItem(storageKey) || 0);
+    return [domain, Number.isFinite(parsedValue) ? parsedValue : 0];
+  })
+);
 
 export default function Overlay() {
   const [searchParams] = useSearchParams();
@@ -26,7 +46,6 @@ export default function Overlay() {
     transitionImageUrl,
     currentScene,
     setCurrentScene,
-    dataVersion,
     wsEnabled,
     wsConnectionStatus,
     wsError,
@@ -43,6 +62,7 @@ export default function Overlay() {
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
   const [messagesLastMinute, setMessagesLastMinute] = useState(0);
   const [messagesThisSecond, setMessagesThisSecond] = useState(0);
+  const defaultTransitionImageUrl = '/transition-default.png';
   const [transitionType, setTransitionType] = useState(() => {
     try {
       return localStorage.getItem('rally_transition_type') || 'fade';
@@ -68,6 +88,7 @@ export default function Overlay() {
   const messageSecondAlertRef = React.useRef(false);
   const transitionTimersRef = React.useRef([]);
   const transitionRafRef = React.useRef(null);
+  const domainVersionSnapshotRef = React.useRef(readStoredDomainVersions());
 
   useEffect(() => {
     document.title = `${t('header.title')} - ${t('header.overlay')}`;
@@ -100,19 +121,6 @@ export default function Overlay() {
       connectWebSocket(wsKey, { readOnly: true, role: 'overlay' });
     }
   }, [searchParams, wsConnectionStatus, connectWebSocket, autoConnectAttempted]);
-
-  // Hide Emergent badge on Overlay page (for clean screen capture)
-  useEffect(() => {
-    const badge = document.getElementById('emergent-badge');
-    if (badge) {
-      badge.style.display = 'none';
-    }
-    return () => {
-      if (badge) {
-        badge.style.display = 'inline-flex';
-      }
-    };
-  }, []);
 
   const clearTransitionTimers = useCallback(() => {
     transitionTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -212,12 +220,19 @@ export default function Overlay() {
       setHeartbeatStatus('checking');
       
       try {
-        const storedVersionStr = localStorage.getItem('rally_data_version');
-        const storedVersion = storedVersionStr ? JSON.parse(storedVersionStr) : null;
-        
-        if (storedVersion && typeof storedVersion === 'number' && storedVersion !== dataVersion) {
+        const nextDomainVersions = readStoredDomainVersions();
+        const changedDomains = Object.keys(STORAGE_DOMAIN_VERSION_KEYS).filter(
+          (domain) => nextDomainVersions[domain] !== domainVersionSnapshotRef.current[domain]
+        );
+
+        if (changedDomains.length > 0) {
+          domainVersionSnapshotRef.current = nextDomainVersions;
           setHeartbeatStatus('changed');
-          window.dispatchEvent(new Event('rally-reload-data'));
+          window.dispatchEvent(new CustomEvent('rally-reload-domains', {
+            detail: {
+              domains: changedDomains
+            }
+          }));
           setTimeout(() => setHeartbeatStatus('normal'), 1000);
         } else {
           setTimeout(() => setHeartbeatStatus('normal'), 300);
@@ -229,7 +244,7 @@ export default function Overlay() {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [dataVersion]);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setConnectionNow(Date.now()), 3000);
@@ -331,6 +346,9 @@ export default function Overlay() {
     { num: 3, name: t('scenes.leaderboard') },
     { num: 4, name: t('scenes.pilotFocus') }
   ];
+  const resolvedTransitionImageUrl = transitionImageUrl?.trim()
+    ? transitionImageUrl.trim()
+    : defaultTransitionImageUrl;
   const transitionOptions = [
     { value: 'none', label: t('header.transitionNone') },
     { value: 'fade', label: t('header.transitionFade') },
@@ -480,6 +498,7 @@ export default function Overlay() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              <PerformanceLed />
             </div>
           </div>
         </div>
@@ -561,7 +580,7 @@ export default function Overlay() {
                   transitionDuration: '300ms',
                   opacity: transitionOpacity,
                   transform: transitionTransform,
-                  ['--transition-image']: transitionImageUrl ? `url("${transitionImageUrl}")` : 'none'
+                  ['--transition-image']: resolvedTransitionImageUrl ? `url("${resolvedTransitionImageUrl}")` : 'none'
                 }}
               />
             </div>

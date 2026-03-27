@@ -3,9 +3,11 @@ import { useRallyMeta, useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { useSearchParams } from 'react-router-dom';
 import TimesTab from '../components/setup/TimesTab.jsx';
+import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import { Flag, RotateCcw, Car, Timer, Lock, Unlock } from 'lucide-react';
+import PerformanceLed from '../components/PerformanceLed.jsx';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../utils/stageSchedule.js';
 import {
   getStageNumberLabel,
@@ -171,14 +173,66 @@ export default function Times() {
 
   return (
     <div className="min-h-screen bg-[#09090B] text-white">
+      <div className="fixed top-0.5 right-0.5 z-50 flex items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
+                style={{ backgroundColor: connectionLed.color, boxShadow: connectionLed.glow }}
+                aria-label={`WebSocket ${wsConnectionStatus}`}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+              <div className="text-xs">
+                <div className="font-semibold">WebSocket Connection</div>
+                <div>Status: {wsConnectionStatus}</div>
+                <div>{connectionLed.label}</div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
+                style={{ backgroundColor: activityLed.color, boxShadow: activityLed.glow }}
+                aria-label="WebSocket activity"
+              />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+              <div className="text-xs">
+                <div className="font-semibold">Message Activity</div>
+                {connectionAgeMs !== null ? (
+                  <>
+                    <div>Last message: {Math.round(connectionAgeMs / 1000)}s ago</div>
+                    <div>Messages last minute: {messagesLastMinute}</div>
+                    <div>Messages this second: {messagesThisSecond}</div>
+                    <div>LED fades from full brightness to off over 30 seconds.</div>
+                  </>
+                ) : (
+                  <div>No WebSocket messages received yet.</div>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <PerformanceLed className="w-2.5 h-2.5" />
+      </div>
       <div className="sticky top-0 z-30 bg-black/95 border-b border-[#FF4500] backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-3">
             <div className="flex items-start gap-3 min-w-0 flex-1">
               <StageIcon className="w-6 h-6 text-[#FF4500] flex-shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="text-xs uppercase text-zinc-400">
-                  {headerStage ? t('times.editingStage') : t('times.noStageSelected')}
+                <div className="flex items-center gap-2 text-xs uppercase text-zinc-400">
+                  {selectedStageId ? (
+                    <Unlock className="w-3.5 h-3.5 text-[#22C55E]" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5 text-zinc-500" />
+                  )}
+                  <span>{headerStage ? t('times.editingStage') : t('times.noStageSelected')}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-2xl font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -194,83 +248,24 @@ export default function Times() {
               </div>
             </div>
             <div className="flex flex-col items-start gap-2 md:items-end md:gap-1">
-              <div className="text-[11px] uppercase text-zinc-500">
-                {t('times.selectStageHelp')}
-              </div>
-              <select
-                value={selectedStageId || ''}
-                onChange={(e) => {
-                  const nextId = e.target.value || null;
-                  setSelectedStageId(nextId);
-                  setOpenStageIds(nextId ? [nextId] : []);
-                }}
-                className="bg-[#18181B] border border-zinc-700 text-white text-sm rounded px-2 py-1 w-full md:w-[240px]"
-              >
-                <option value="">{t('times.selectStageToEdit')}</option>
-                {sortedStages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>
-                    {getStageTitle(stage)}
-                  </option>
-                ))}
-              </select>
-              <div className="flex items-center gap-2 text-xs text-zinc-400">
-                {selectedStageId ? (
-                  <>
-                    <Unlock className="w-3.5 h-3.5 text-[#22C55E]" />
-                    <span>{t('times.editingStage')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-3.5 h-3.5 text-zinc-500" />
-                    <span>{t('times.noStageSelected')}</span>
-                  </>
-                )}
-                <div className="ml-2 flex items-center gap-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span
-                          className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
-                          style={{ backgroundColor: connectionLed.color, boxShadow: connectionLed.glow }}
-                          aria-label={`WebSocket ${wsConnectionStatus}`}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                        <div className="text-xs">
-                          <div className="font-semibold">WebSocket Connection</div>
-                          <div>Status: {wsConnectionStatus}</div>
-                          <div>{connectionLed.label}</div>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span
-                          className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
-                          style={{ backgroundColor: activityLed.color, boxShadow: activityLed.glow }}
-                          aria-label="WebSocket activity"
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                        <div className="text-xs">
-                          <div className="font-semibold">Message Activity</div>
-                          {connectionAgeMs !== null ? (
-                            <>
-                              <div>Last message: {Math.round(connectionAgeMs / 1000)}s ago</div>
-                              <div>Messages last minute: {messagesLastMinute}</div>
-                              <div>Messages this second: {messagesThisSecond}</div>
-                              <div>LED fades from full brightness to off over 30 seconds.</div>
-                            </>
-                          ) : (
-                            <div>No WebSocket messages received yet.</div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+              <div className="flex w-full items-center gap-2 md:w-auto">
+                <select
+                  value={selectedStageId || ''}
+                  onChange={(e) => {
+                    const nextId = e.target.value || null;
+                    setSelectedStageId(nextId);
+                    setOpenStageIds(nextId ? [nextId] : []);
+                  }}
+                  className="bg-[#18181B] border border-zinc-700 text-white text-sm rounded px-2 py-1 flex-1 md:w-[240px]"
+                >
+                  <option value="">{t('times.selectStageToEdit')}</option>
+                  {sortedStages.map((stage) => (
+                    <option key={stage.id} value={stage.id}>
+                      {getStageTitle(stage)}
+                    </option>
+                  ))}
+                </select>
+                <LanguageSelectorCompact className="h-8 border-zinc-700 bg-[#18181B] px-2" />
               </div>
             </div>
           </div>

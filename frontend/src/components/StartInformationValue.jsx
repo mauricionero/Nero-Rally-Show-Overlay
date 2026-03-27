@@ -11,7 +11,7 @@ const SIGNAL_COLORS = {
   }
 };
 
-const StartSignalDots = ({ signal }) => {
+const StartSignalDots = React.memo(({ signal }) => {
   if (!signal?.mode) return null;
 
   const palette = SIGNAL_COLORS[signal.mode] || SIGNAL_COLORS.red;
@@ -37,9 +37,9 @@ const StartSignalDots = ({ signal }) => {
       })}
     </span>
   );
-};
+});
 
-export function StartInformationValue({ info, fallback = '', className = '', style, as: Component = 'span' }) {
+function StartInformationValueBase({ info, fallback = '', className = '', style, as: Component = 'span' }) {
   const content = info?.signal
     ? (
         <>
@@ -62,3 +62,33 @@ export function StartInformationValue({ info, fallback = '', className = '', sty
     </Component>
   );
 }
+
+const shallowEqual = (left = {}, right = {}) => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => left[key] === right[key]);
+};
+
+const isSameSignal = (leftSignal, rightSignal) => (
+  leftSignal?.mode === rightSignal?.mode &&
+  Number(leftSignal?.activeCount || 0) === Number(rightSignal?.activeCount || 0) &&
+  Number(leftSignal?.totalCount || 0) === Number(rightSignal?.totalCount || 0) &&
+  Number(leftSignal?.seconds || 0) === Number(rightSignal?.seconds || 0)
+);
+
+const areStartInformationPropsEqual = (prevProps, nextProps) => (
+  prevProps.as === nextProps.as &&
+  prevProps.className === nextProps.className &&
+  prevProps.fallback === nextProps.fallback &&
+  prevProps.info?.text === nextProps.info?.text &&
+  prevProps.info?.label === nextProps.info?.label &&
+  isSameSignal(prevProps.info?.signal, nextProps.info?.signal) &&
+  shallowEqual(prevProps.style, nextProps.style)
+);
+
+export const StartInformationValue = React.memo(StartInformationValueBase, areStartInformationPropsEqual);

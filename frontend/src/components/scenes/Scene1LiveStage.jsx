@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
+import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -10,7 +11,7 @@ import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { Button } from '../ui/button';
 import * as rallyHelpers from '../../utils/rallyHelpers';
-import { ChevronLeft, ChevronRight, Flag, Maximize2, Minimize2, RotateCcw, Video } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, Maximize2, Minimize2, RotateCcw, Video, Map as MapIcon } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
@@ -18,6 +19,9 @@ import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { buildStageMapFeeds } from '../../utils/feedOptions.js';
+import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -98,8 +102,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
-    cameras, externalMedia, debugDate, retiredStages, stageAlerts
+    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts
   } = useRally();
+  const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
   const initialSceneConfig = useMemo(
     () => loadSceneConfig(SCENE_1_CONFIG_KEY, { selectedLayout: '2x2', isExpandedView: false, selectedSlotIds: [] }),
@@ -121,17 +126,21 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const [maxScroll, setMaxScroll] = useState(0);
   const bottomContainerRef = useRef(null);
   const bottomTrackRef = useRef(null);
+  const bottomMetricsRef = useRef({ maxScroll: 0, bottomScroll: 0 });
   
   const currentStage = stages.find(s => s.id === currentStageId);
   const activeMedia = externalMedia.filter(m => m.url);
+  const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [stages, mapPlacemarks]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories), [pilots, categories]);
   const isLapRace = isLapRaceStageType(currentStage?.type);
   const isSSStage = isSpecialStageType(currentStage?.type);
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
   const validSlotIds = useMemo(() => new Set([
     ...pilots.filter((pilot) => pilot.isActive && pilot.streamUrl).map((pilot) => pilot.id),
     ...activeCameras.map((camera) => camera.id),
-    ...activeMedia.map((media) => `media-${media.id}`)
-  ]), [pilots, activeCameras, activeMedia]);
+    ...activeMedia.map((media) => `media-${media.id}`),
+    ...activeStageMaps.map((feed) => feed.value)
+  ]), [pilots, activeCameras, activeMedia, activeStageMaps]);
   const displaySortedPilots = useMemo(() => (
     sortPilotsByDisplayOrder(pilots, categories)
   ), [pilots, categories]);
@@ -248,24 +257,66 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       return undefined;
     }
 
-    const updateBottomMetrics = () => {
+    let animationFrameId = null;
+
+    const applyBottomMetrics = () => {
       const nextMaxScroll = Math.max(0, track.scrollWidth - container.clientWidth);
-      setMaxScroll(nextMaxScroll);
-      setBottomScroll(prev => Math.min(prev, nextMaxScroll));
+      const nextBottomScroll = Math.min(bottomMetricsRef.current.bottomScroll, nextMaxScroll);
+      const metricsChanged = (
+        bottomMetricsRef.current.maxScroll !== nextMaxScroll ||
+        bottomMetricsRef.current.bottomScroll !== nextBottomScroll
+      );
+
+      if (!metricsChanged) {
+        return;
+      }
+
+      bottomMetricsRef.current = {
+        maxScroll: nextMaxScroll,
+        bottomScroll: nextBottomScroll
+      };
+
+      setMaxScroll((prev) => (prev === nextMaxScroll ? prev : nextMaxScroll));
+      setBottomScroll((prev) => (prev === nextBottomScroll ? prev : nextBottomScroll));
     };
 
-    updateBottomMetrics();
+    const updateBottomMetrics = () => {
+      if (animationFrameId !== null) {
+        return;
+      }
+
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+        applyBottomMetrics();
+      });
+    };
+
+    applyBottomMetrics();
 
     if (typeof ResizeObserver !== 'undefined') {
       const resizeObserver = new ResizeObserver(updateBottomMetrics);
       resizeObserver.observe(container);
       resizeObserver.observe(track);
-      return () => resizeObserver.disconnect();
+      return () => {
+        resizeObserver.disconnect();
+        if (animationFrameId !== null) {
+          window.cancelAnimationFrame(animationFrameId);
+        }
+      };
     }
 
     window.addEventListener('resize', updateBottomMetrics);
-    return () => window.removeEventListener('resize', updateBottomMetrics);
+    return () => {
+      window.removeEventListener('resize', updateBottomMetrics);
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [sortedPilotsWithPositions, pilots]);
+
+  useEffect(() => {
+    bottomMetricsRef.current.bottomScroll = bottomScroll;
+  }, [bottomScroll]);
   
   // Auto-select active pilots up to layout slots
   useEffect(() => {
@@ -377,6 +428,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     const camera = cameras.find(c => c.id === slotId);
     if (camera) {
       return { type: 'camera', ...camera };
+    }
+    if (slotId.startsWith('stage-map:')) {
+      return activeStageMaps.find((feed) => feed.value === slotId) || null;
     }
     // Check external media
     if (slotId.startsWith('media-')) {
@@ -523,6 +577,26 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   })}
                 </div>
               )}
+
+              {activeStageMaps.length > 0 && (
+                <div className="pb-2 border-b border-zinc-700 mb-2">
+                  <div className="text-xs text-zinc-500 uppercase mb-2">{t('config.stageMaps')}</div>
+                  {activeStageMaps.map((feed) => (
+                    <div key={feed.value} className="flex items-center space-x-2 mb-1">
+                      <Checkbox
+                        id={feed.value}
+                        checked={draftSelectedSlotIds.includes(feed.value)}
+                        onCheckedChange={() => toggleSlot(feed.value)}
+                        disabled={!draftSelectedSlotIds.includes(feed.value) && draftSelectedSlotIds.length >= draftLayout.slots}
+                      />
+                      <label htmlFor={feed.value} className="text-white text-sm cursor-pointer flex items-center gap-2">
+                        <MapIcon className="w-4 h-4 text-[#FF4500]" />
+                        {feed.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
               
               {/* Pilot Options - Third priority */}
               {activePilots.length > 0 && (
@@ -559,9 +633,13 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   const media = slotId.startsWith('media-')
                     ? externalMedia.find(m => m.id === slotId.replace('media-', ''))
                     : null;
-                  const pilot = !camera && !media ? pilots.find(p => p.id === slotId) : null;
+                  const stageMap = !camera && !media && slotId.startsWith('stage-map:')
+                    ? activeStageMaps.find((feed) => feed.value === slotId)
+                    : null;
+                  const pilot = !camera && !media && !stageMap ? pilots.find(p => p.id === slotId) : null;
                   let label = '';
                   if (media) label = media.name;
+                  else if (stageMap) label = stageMap.name;
                   else if (camera) label = camera.name;
                   else if (pilot) label = pilot.name;
                   const isCamera = !!camera;
@@ -579,6 +657,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       <div className="flex items-center gap-2">
                         <span className="text-zinc-500 text-xs">{index + 1}.</span>
                         {media && renderIcon(media.icon)}
+                        {stageMap && <MapIcon className="w-3 h-3 text-[#FF4500]" />}
                         {isCamera && <Video className="w-3 h-3 text-[#FF4500]" />}
                         <span className="text-white text-sm">{label}</span>
                       </div>
@@ -634,6 +713,30 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     <p className="text-white font-bold text-lg uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
                       {item.name}
                     </p>
+                  </div>
+                </div>
+              );
+            }
+
+            if (item.type === 'stage-map') {
+              return (
+                <div key={item.id} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: chromaKey }}>
+                  <PlacemarkMapFeed placemark={item} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+                  <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
+                    <div className="flex items-center gap-2">
+                      <MapIcon className="w-5 h-5 text-[#FF4500]" />
+                      <div className="min-w-0 flex-1 relative pr-32">
+                        <p className="text-white font-bold text-lg uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 8px rgba(0,0,0,1)' }}>
+                          {item.name}
+                        </p>
+                        {item.placemarkName && (
+                          <p className="text-zinc-300 text-xs uppercase tracking-wide truncate mt-1">
+                            {item.placemarkName}
+                          </p>
+                        )}
+                        <MapWeatherBadges placemark={item} className="absolute right-0 bottom-0" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
@@ -802,9 +905,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   </div>
                 </div>
               </div>
-              {logoUrl && (
+              {resolvedLogoUrl && (
                 <img 
-                  src={logoUrl} 
+                  src={resolvedLogoUrl} 
                   alt="Channel Logo" 
                   className="h-16 max-w-[200px] object-contain"
                 />

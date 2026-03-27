@@ -3,13 +3,15 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
+import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import StatusPill from '../StatusPill.jsx';
 import { parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
-import { ChevronRight, Radio, RotateCcw, Flag, Video } from 'lucide-react';
+import { ChevronRight, Radio, RotateCcw, Flag, Video, Map as MapIcon } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
+import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageNumberLabel, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -18,6 +20,7 @@ import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { formatDurationMs, formatSecondsValue } from '../../utils/timeFormat.js';
+import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 
 const TIMING_TOWER_WIDTH_KEY = 'scene2TimingTowerWidth';
 const SCENE_2_CONFIG_KEY = 'scene2Config';
@@ -93,9 +96,11 @@ const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLa
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, retiredStages, stageAlerts, timeDecimals, debugDate
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate
   } = useRally();
+  const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories), [pilots, categories]);
   
   const [selectedFeedValue, setSelectedFeedValue] = useState(() => (
     loadSceneConfig(SCENE_2_CONFIG_KEY, { selectedFeedValue: null }).selectedFeedValue
@@ -243,8 +248,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   // MUST be before any early returns to follow React Hook rules
   const availableFeeds = useMemo(() => {
     const pilotPositions = Object.fromEntries(sortedPilotsData.map((data) => [data.pilot.id, data.position]));
-    return buildFeedOptions({ pilots, cameras, externalMedia, pilotPositions });
-  }, [pilots, cameras, externalMedia, sortedPilotsData]);
+    return buildFeedOptions({ pilots, cameras, externalMedia, stages, mapPlacemarks, pilotPositions });
+  }, [pilots, cameras, externalMedia, stages, mapPlacemarks, sortedPilotsData]);
 
   useEffect(() => {
     if (!selectedFeedValue && availableFeeds.length > 0) {
@@ -353,6 +358,32 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       retired: retiredItems
     };
   }, [displayedTowerItems]);
+
+  const sectionPositionByPilotId = useMemo(() => {
+    const positionMap = new Map();
+
+    if (isLapRace) {
+      sortedLapRacePilotsData.forEach((data, index) => {
+        positionMap.set(data.pilot.id, index + 1);
+      });
+      return positionMap;
+    }
+
+    onStageOrdered.forEach((data, index) => {
+      positionMap.set(data.pilot.id, index + 1);
+    });
+    finished.forEach((data, index) => {
+      positionMap.set(data.pilot.id, index + 1);
+    });
+    notStarted.forEach((data, index) => {
+      positionMap.set(data.pilot.id, index + 1);
+    });
+    retired.forEach((data, index) => {
+      positionMap.set(data.pilot.id, index + 1);
+    });
+
+    return positionMap;
+  }, [finished, isLapRace, notStarted, onStageOrdered, retired, sortedLapRacePilotsData]);
   const leader = finished[0];
 
   if (!currentStageId) {
@@ -571,6 +602,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const SelectedMediaIcon = selectedFeed?.type === 'media'
     ? getExternalMediaIconComponent(selectedFeed.icon)
     : null;
+  const selectedPilotSectionPosition = selectedPilot
+    ? sectionPositionByPilotId.get(selectedPilot.id) || selectedPilotData?.position || null
+    : null;
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-2-timing-tower">
@@ -589,6 +623,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 groupLabels={{
                   cameras: t('streams.additionalCameras'),
                   media: t('config.externalMedia'),
+                  maps: t('config.stageMaps'),
                   pilots: t('tabs.pilots')
                 }}
               />
@@ -617,10 +652,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         {/* Header with diagonal accent */}
         <div className="relative p-4 pb-3 overflow-hidden">
           <div className="absolute -right-10 -top-10 w-32 h-32 bg-[#FF4500]/20 rotate-45" />
-          {logoUrl && (
+          {resolvedLogoUrl && (
             <div className="flex justify-center mb-3 relative z-10">
               <img 
-                src={logoUrl} 
+                src={resolvedLogoUrl} 
                 alt="Channel Logo" 
                 className="w-1/2 max-h-24 object-contain"
               />
@@ -726,6 +761,26 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               </div>
             </div>
           </>
+        ) : selectedFeed?.type === 'stage-map' ? (
+          <>
+            <PlacemarkMapFeed placemark={selectedFeed} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
+              <div className="flex items-center gap-4">
+                <MapIcon className="w-8 h-8 text-[#FF4500]" />
+                <div className="relative min-w-0 flex-1 pr-44">
+                  <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {selectedFeed.name}
+                  </p>
+                  {selectedFeed.placemarkName && (
+                    <p className="text-zinc-300 text-sm uppercase tracking-wide min-w-0 truncate mt-1">
+                      {selectedFeed.placemarkName}
+                    </p>
+                  )}
+                  <MapWeatherBadges placemark={selectedFeed} className="absolute right-0 bottom-0" />
+                </div>
+              </div>
+            </div>
+          </>
         ) : selectedFeed?.type === 'camera' && selectedFeed.streamUrl && !hideStreams ? (
           <>
             <StreamPlayer
@@ -754,15 +809,22 @@ export default function Scene2TimingTower({ hideStreams = false }) {
             />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
               <div className="flex items-center gap-4">
-                {selectedPilotData && (
+                {selectedPilot?.carNumber && (
                   <div className="bg-[#FF4500] px-3 py-1 rounded">
-                    <span className="text-white font-bold text-2xl">P{selectedPilotData.position}</span>
+                    <span className="text-white font-bold text-2xl">{selectedPilot.carNumber}</span>
                   </div>
                 )}
                 <div>
-                  <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    {selectedPilot.name}
-                  </p>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {selectedPilot.name}
+                    </p>
+                    {selectedPilotSectionPosition && (
+                      <span className="text-[#22C55E] text-xl font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        #{selectedPilotSectionPosition}
+                      </span>
+                    )}
+                  </div>
                   {selectedPilotMeta && (
                     <p className="text-zinc-300 text-sm uppercase tracking-wide mt-1">
                       {selectedPilotMeta}
