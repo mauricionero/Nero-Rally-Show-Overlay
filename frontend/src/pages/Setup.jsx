@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Play, VideoOff, Wifi } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import PerformanceLed from '../components/PerformanceLed.jsx';
+import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 
 // app version constant
 import { VERSION } from '../config/version.js';
@@ -192,6 +193,14 @@ export default function Setup() {
           <div className="flex flex-col items-end gap-2">
             <div className="flex items-start gap-3">
               <div className="flex flex-col items-end gap-2">
+                <div className="rounded-xl border border-zinc-800 bg-[#18181B] p-2">
+                  <div className="px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
+                    {t('config.language')}
+                  </div>
+                  <div className="flex justify-center">
+                    <LanguageSelectorCompact className="h-9 border-zinc-700 bg-[#09090B] px-3" />
+                  </div>
+                </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none rounded-xl border border-zinc-800 bg-[#18181B] px-3 py-2">
                   <Checkbox
                     checked={hideStreams}

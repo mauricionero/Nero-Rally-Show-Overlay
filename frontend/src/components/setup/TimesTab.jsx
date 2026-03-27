@@ -426,7 +426,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-zinc-700">
-                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[90px] sticky left-0 z-30 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[90px] sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   #
                 </th>
                 <th className="text-left text-white uppercase font-bold p-1 sm:p-2 min-w-[200px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -473,7 +473,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 
                 return (
                   <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
-                    <td className="p-1 sm:p-2 sticky left-0 z-20 bg-[#0B0B0F] border-r border-zinc-800">
+                    <td className="p-1 sm:p-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800">
                       <div
                         className="flex items-center gap-1.5 px-1.5 py-0.5"
                         style={{ borderLeft: `2px solid ${category?.color || 'transparent'}` }}
@@ -934,7 +934,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-zinc-700">
-                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[90px] sticky left-0 z-30 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[90px] sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   #
                 </th>
                 <th className="text-left text-white uppercase font-bold p-1 sm:p-2 min-w-[200px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -955,7 +955,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
               const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
               return (
                 <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
-                  <td className="p-1 sm:p-2 sticky left-0 z-20 bg-[#0B0B0F] border-r border-zinc-800">
+                  <td className="p-1 sm:p-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800">
                     <div
                       className="flex items-center gap-1.5 px-1.5 py-0.5"
                       style={{ borderLeft: `2px solid ${category?.color || 'transparent'}` }}
