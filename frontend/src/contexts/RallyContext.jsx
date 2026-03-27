@@ -223,6 +223,7 @@ export const RallyProvider = ({ children }) => {
   const publishDirtySetupSectionsRef = useRef(null);
   const publishDirtyTimingDeltasRef = useRef(null);
   const publishSetupSnapshotRef = useRef(null);
+  const publishSessionManifestUpdateRef = useRef(null);
   const persistenceReadyRef = useRef(false);
   const hydratingDomainsRef = useRef(new Set());
   const logicalTimestampRef = useRef(loadFromStorage('rally_logical_timestamp', 0));
@@ -1099,6 +1100,10 @@ export const RallyProvider = ({ children }) => {
     setLatestSnapshotVersion(nextManifest.latestSnapshotVersion || 0);
     return nextManifest;
   }, [lastSetupSyncAt, lastTimesSyncAt, latestSnapshotVersion, sessionManifest, wsChannelKey]);
+
+  useEffect(() => {
+    publishSessionManifestUpdateRef.current = publishSessionManifestUpdate;
+  }, [publishSessionManifestUpdate]);
 
   const publishSetupSnapshot = useCallback(async (channelKey, allowedSections = null, baseManifest = null) => {
     const previousManifest = baseManifest || sessionManifest || {};
@@ -2093,10 +2098,10 @@ export const RallyProvider = ({ children }) => {
       return;
     }
 
-    publishSessionManifestUpdate({
+    publishSessionManifestUpdateRef.current?.({
       latestTimesSyncAt: lastTimesSyncAt
     });
-  }, [lastTimesSyncAt, publishSessionManifestUpdate, wsEnabled, wsRole]);
+  }, [lastTimesSyncAt, wsEnabled, wsRole]);
 
   // CRUD for external media items
   const addExternalMedia = useCallback((item) => {

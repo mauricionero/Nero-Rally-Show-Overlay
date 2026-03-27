@@ -1,26 +1,22 @@
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { usePerformanceHealth } from '../hooks/usePerformanceHealth.js';
+import { getLedLoadColor } from '../utils/ledLoadColors.js';
 
-const getLedColor = (grade) => {
-  if (grade >= 9) return '239, 68, 68';
-  if (grade >= 6) return '249, 115, 22';
-  if (grade >= 3) return '250, 204, 21';
-  return '34, 197, 94';
-};
-
-export default function PerformanceLed({ className }) {
+export default function PerformanceLed({ className, icon: Icon = null, iconClassName = '' }) {
   const { grade, metricLabel, metricValue, metrics } = usePerformanceHealth();
-  const color = getLedColor(grade);
+  const color = getLedLoadColor(grade);
 
   return (
     <TooltipProvider delayDuration={150}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`w-3 h-3 rounded-full border border-zinc-700 ${className || ''}`}
-            style={{ backgroundColor: `rgb(${color})` }}
-          />
+            className={`relative w-3 h-3 rounded-full border border-zinc-700 flex items-center justify-center ${className || ''}`}
+            style={{ backgroundColor: color }}
+          >
+            {Icon && <Icon className={iconClassName || 'w-2 h-2 text-black/80'} />}
+          </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
           <div className="text-xs space-y-1">

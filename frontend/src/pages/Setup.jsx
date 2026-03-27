@@ -6,10 +6,11 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { Play, VideoOff, Wifi } from 'lucide-react';
+import { Cpu, Mail, Play, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
+import { getLedLoadRgba, getMessagesPerMinuteLoadLevel } from '../utils/ledLoadColors.js';
 
 // app version constant
 import { VERSION } from '../config/version.js';
@@ -100,28 +101,25 @@ export default function Setup() {
 
   const wsMessageAgeMs = wsLastMessageAt ? Math.max(0, connectionNow - wsLastMessageAt) : null;
   const connectionBadge = (() => {
-    if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
-    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', label: t('config.connecting') };
-    if (wsConnectionStatus === 'connected') return { color: 'bg-[#22C55E] text-black border-transparent', label: 'Live' };
-    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316] text-black border-transparent', label: 'Suspended' };
-    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', label: 'Failed' };
-    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
+    if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: WifiOff };
+    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', Icon: WifiLow };
+    if (wsConnectionStatus === 'connected') return { color: 'bg-[#22C55E] text-black border-transparent', Icon: Wifi };
+    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316] text-black border-transparent', Icon: WifiLow };
+    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', Icon: WifiOff };
+    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: WifiOff };
   })();
   const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && wsMessageAgeMs !== null
     ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
     : 0;
-  const activityColor = (() => {
-    if (messagesLastMinute >= 500) return '239, 68, 68';
-    if (messagesLastMinute >= 250) return '249, 115, 22';
-    if (messagesLastMinute >= 100) return '250, 204, 21';
-    return '34, 197, 94';
-  })();
+  const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
   const activityGlow = activityProgress > 0
-    ? `0 0 ${8 + (18 * activityProgress)}px rgba(${activityColor}, ${0.18 + (0.5 * activityProgress)})`
+    ? `0 0 ${8 + (18 * activityProgress)}px ${getLedLoadRgba(activityLevel, 0.18 + (0.5 * activityProgress))}`
     : '0 0 0 rgba(34, 197, 94, 0)';
   const activityFill = activityProgress > 0
-    ? `rgba(${activityColor}, ${0.2 + (0.8 * activityProgress)})`
+    ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
     : 'rgba(63, 63, 70, 0.45)';
+  const statusBadgeClassName = 'flex items-center justify-center gap-1 px-1 py-0 rounded text-[10px] font-bold uppercase tracking-wide border min-w-[20px] h-[16px]';
+  const ConnectionIcon = connectionBadge.Icon;
 
   const handleGoLive = (url) => {
     window.open(url, '_blank');
@@ -135,9 +133,8 @@ export default function Setup() {
           <TooltipProvider delayDuration={150}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${connectionBadge.color}`}>
-                  <Wifi className="w-2.5 h-2.5" />
-                  <span>{connectionBadge.label}</span>
+                <div className={`${statusBadgeClassName} ${connectionBadge.color}`}>
+                  <ConnectionIcon className="w-3 h-3" />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
@@ -153,12 +150,14 @@ export default function Setup() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
+                  className={`${statusBadgeClassName} border-zinc-700 transition-all duration-500`}
                   style={{
                     backgroundColor: activityFill,
                     boxShadow: activityGlow
                   }}
-                />
+                >
+                  <Mail className={`w-3 h-3 ${activityProgress > 0 ? 'text-black/80' : 'text-zinc-400'}`} />
+                </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
                 <div className="text-xs">
@@ -177,7 +176,11 @@ export default function Setup() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <PerformanceLed />
+          <PerformanceLed
+            icon={Cpu}
+            className={`${statusBadgeClassName} border-zinc-700`}
+            iconClassName="w-3 h-3 text-black/80"
+          />
         </div>
       </div>
       <div className="max-w-[1600px] mx-auto">

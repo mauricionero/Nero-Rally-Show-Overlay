@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Flag, RotateCcw, Car, Timer, Lock, Unlock } from 'lucide-react';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../utils/stageSchedule.js';
+import { getLedLoadRgba, getMessagesPerMinuteLoadLevel } from '../utils/ledLoadColors.js';
 import {
   getStageNumberLabel,
   getStageTitle,
@@ -146,18 +147,13 @@ export default function Times() {
   const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && connectionAgeMs !== null
     ? Math.max(0, 1 - (connectionAgeMs / 30000))
     : 0;
-  const activityColor = (() => {
-    if (messagesLastMinute >= 500) return '239, 68, 68';
-    if (messagesLastMinute >= 250) return '249, 115, 22';
-    if (messagesLastMinute >= 100) return '250, 204, 21';
-    return '34, 197, 94';
-  })();
+  const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
   const activityLed = {
     color: activityProgress > 0
-      ? `rgba(${activityColor}, ${0.2 + (0.8 * activityProgress)})`
+      ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
       : 'rgba(63, 63, 70, 0.45)',
     glow: activityProgress > 0
-      ? `0 0 ${8 + (18 * activityProgress)}px rgba(${activityColor}, ${0.18 + (0.5 * activityProgress)})`
+      ? `0 0 ${8 + (18 * activityProgress)}px ${getLedLoadRgba(activityLevel, 0.18 + (0.5 * activityProgress))}`
       : '0 0 0 rgba(0,0,0,0)'
   };
 
