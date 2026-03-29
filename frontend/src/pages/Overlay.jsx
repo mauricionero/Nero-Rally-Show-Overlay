@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
+import { getLedLoadRgba, getMessagesPerMinuteLoadLevel } from '../utils/ledLoadColors.js';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 
 // version constant
@@ -303,17 +304,12 @@ export default function Overlay() {
   const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && wsMessageAgeMs !== null
     ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
     : 0;
-  const activityColor = (() => {
-    if (messagesLastMinute >= 500) return '239, 68, 68';
-    if (messagesLastMinute >= 250) return '249, 115, 22';
-    if (messagesLastMinute >= 100) return '250, 204, 21';
-    return '34, 197, 94';
-  })();
+  const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
   const activityGlow = activityProgress > 0
-    ? `0 0 ${8 + (18 * activityProgress)}px rgba(${activityColor}, ${0.18 + (0.5 * activityProgress)})`
+    ? `0 0 ${8 + (18 * activityProgress)}px ${getLedLoadRgba(activityLevel, 0.18 + (0.5 * activityProgress))}`
     : '0 0 0 rgba(34, 197, 94, 0)';
   const activityFill = activityProgress > 0
-    ? `rgba(${activityColor}, ${0.2 + (0.8 * activityProgress)})`
+    ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
     : 'rgba(63, 63, 70, 0.45)';
 
   const handleWsConnect = async () => {

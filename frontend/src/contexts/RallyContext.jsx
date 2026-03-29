@@ -5,6 +5,8 @@ import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../utils/stageSchedule.js';
 import { isLapRaceStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
 import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
+import { normalizePilotId } from '../utils/pilotIdentity.js';
+import { compressMapPlacemarkForTransport } from '../utils/mapPlacemarkCompression.js';
 
 const RallyContext = createContext();
 const RallyConfigContext = createContext();
@@ -62,9 +64,48 @@ const loadFromStorage = (key, defaultValue) => {
   }
 };
 
+const loadSplitStageTimingMapFromStorage = (storagePrefix, legacyKey = null) => {
+  const merged = legacyKey ? loadFromStorage(legacyKey, {}) : {};
+
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return { map: merged, stageIds: new Set() };
+  }
+
+  const stageIds = new Set();
+
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const storageKey = window.localStorage.key(i);
+    if (!storageKey || !storageKey.startsWith(storagePrefix)) {
+      continue;
+    }
+
+    const stageId = storageKey.slice(storagePrefix.length);
+    if (!stageId) {
+      continue;
+    }
+
+    stageIds.add(stageId);
+
+    const stageMap = loadFromStorage(storageKey, {});
+    Object.entries(stageMap || {}).forEach(([pilotId, value]) => {
+      if (value === undefined || value === null || value === '') {
+        return;
+      }
+
+      merged[pilotId] = {
+        ...(merged[pilotId] || {}),
+        [stageId]: value
+      };
+    });
+  }
+
+  return { map: merged, stageIds };
+};
+
 const STORAGE_DOMAIN_VERSION_KEYS = {
   meta: 'rally_meta_version',
   pilots: 'rally_pilots_version',
+  pilotTelemetry: 'rally_pilot_telemetry_version',
   categories: 'rally_categories_version',
   stages: 'rally_stages_version',
   timingCore: 'rally_timing_core_version',
@@ -144,6 +185,52 @@ const pruneEmptyNestedValues = (value) => {
   return nextObject;
 };
 
+const mergeMapPlacemarksById = (currentPlacemarks = [], incomingPlacemark = null) => {
+  if (!incomingPlacemark?.id) {
+    return Array.isArray(currentPlacemarks) ? currentPlacemarks : [];
+  }
+
+  const nextPlacemarks = Array.isArray(currentPlacemarks) ? [...currentPlacemarks] : [];
+  const existingIndex = nextPlacemarks.findIndex((placemark) => placemark?.id === incomingPlacemark.id);
+
+  if (existingIndex >= 0) {
+    nextPlacemarks[existingIndex] = {
+      ...nextPlacemarks[existingIndex],
+      ...incomingPlacemark
+    };
+    return nextPlacemarks;
+  }
+
+  nextPlacemarks.push(incomingPlacemark);
+  return nextPlacemarks;
+};
+
+const normalizeMessageSource = (source) => String(source || '').trim().toLowerCase();
+const TRUSTED_PILOT_TELEMETRY_SOURCES = new Set(['android-app', 'setup-relay']);
+
+const buildPilotTelemetryPayload = (telemetry = {}) => {
+  const payload = {};
+
+  if (telemetry.latLong !== undefined) payload.latLong = telemetry.latLong;
+  if (telemetry.latlongTimestamp !== undefined) payload.latlongTimestamp = telemetry.latlongTimestamp;
+  if (telemetry.lastLatLongUpdatedAt !== undefined) payload.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt;
+  if (telemetry.speed !== undefined) payload.speed = telemetry.speed;
+  if (telemetry.heading !== undefined) payload.heading = telemetry.heading;
+  if (telemetry.lastTelemetryAt !== undefined) payload.lastTelemetryAt = telemetry.lastTelemetryAt;
+
+  return payload;
+};
+
+const getStageLinkedMapPlacemarks = (stages = [], mapPlacemarks = []) => {
+  const linkedPlacemarkIds = new Set(
+    (Array.isArray(stages) ? stages : [])
+      .map((stage) => stage?.mapPlacemarkId)
+      .filter(Boolean)
+  );
+
+  return (Array.isArray(mapPlacemarks) ? mapPlacemarks : []).filter((placemark) => linkedPlacemarkIds.has(placemark?.id));
+};
+
 export const RallyProvider = ({ children }) => {
   // Event configuration
   const [eventName, setEventName] = useState(() => loadFromStorage('rally_event_name', ''));
@@ -152,9 +239,10 @@ export const RallyProvider = ({ children }) => {
   const [stagePilots, setStagePilots] = useState(() => loadFromStorage('rally_stage_pilots', {})); // stageId -> [pilotIds] (for lap race pilot selection)
   
   const [pilots, setPilots] = useState(() => loadFromStorage('rally_pilots', []));
+  const [pilotTelemetryByPilotId, setPilotTelemetryByPilotId] = useState(() => loadFromStorage('rally_pilot_telemetry', {}));
   const [categories, setCategories] = useState(() => loadFromStorage('rally_categories', []));
   const [stages, setStages] = useState(() => loadFromStorage('rally_stages', []));
-  const [times, setTimes] = useState(() => loadFromStorage('rally_times', {}));
+  const [times, setTimes] = useState(() => loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map);
   const [arrivalTimes, setArrivalTimes] = useState(() => loadFromStorage('rally_arrival_times', {}));
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [realStartTimes, setRealStartTimes] = useState(() => loadFromStorage('rally_real_start_times', {}));
@@ -226,6 +314,14 @@ export const RallyProvider = ({ children }) => {
   const publishSessionManifestUpdateRef = useRef(null);
   const persistenceReadyRef = useRef(false);
   const hydratingDomainsRef = useRef(new Set());
+  const suppressPilotPublishRef = useRef(0);
+  const pilotsRef = useRef(pilots);
+  const pilotTelemetryByPilotIdRef = useRef(pilotTelemetryByPilotId);
+  const pilotTelemetryQueueRef = useRef(new Map());
+  const pilotTelemetryFlushTimerRef = useRef(null);
+  const pilotTelemetrySyncSuppressionRef = useRef(0);
+  const timesPersistedStageIdsRef = useRef(loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').stageIds);
+  const timesPersistenceTimerRef = useRef(null);
   const logicalTimestampRef = useRef(loadFromStorage('rally_logical_timestamp', 0));
   const setupTimingSectionTouchedAtRef = useRef({});
   const timesRef = useRef(times);
@@ -237,6 +333,44 @@ export const RallyProvider = ({ children }) => {
   const stagePilotsRef = useRef(stagePilots);
   const retiredStagesRef = useRef(retiredStages);
   const stageAlertsRef = useRef(stageAlerts);
+
+  useEffect(() => {
+    pilotsRef.current = pilots;
+  }, [pilots]);
+
+  useEffect(() => {
+    pilotTelemetryByPilotIdRef.current = pilotTelemetryByPilotId;
+  }, [pilotTelemetryByPilotId]);
+
+  const mergePilotTelemetryEntries = useCallback((entries = [], options = {}) => {
+    const safeEntries = Array.isArray(entries)
+      ? entries
+        .map(([pilotId, telemetry]) => [normalizePilotId(pilotId), telemetry])
+        .filter(([pilotId, telemetry]) => pilotId && telemetry && typeof telemetry === 'object')
+      : [];
+
+    if (safeEntries.length === 0) {
+      return;
+    }
+
+    if (options.suppressSync) {
+      pilotTelemetrySyncSuppressionRef.current += 1;
+    }
+
+    setPilotTelemetryByPilotId((prev) => {
+      const next = options.replace ? {} : { ...(prev || {}) };
+
+      safeEntries.forEach(([pilotId, telemetry]) => {
+        next[pilotId] = {
+          ...(!options.replace ? (next[pilotId] || {}) : {}),
+          ...telemetry
+        };
+      });
+
+      pilotTelemetryByPilotIdRef.current = next;
+      return next;
+    });
+  }, []);
 
   const getNextLogicalTimestamp = useCallback(() => {
     const now = Date.now();
@@ -252,6 +386,200 @@ export const RallyProvider = ({ children }) => {
     persistenceReadyRef.current = true;
   }, []);
 
+  const updateDataVersion = useCallback((domains = []) => {
+    if (!persistenceReadyRef.current || isPublishing.current) {
+      return;
+    }
+
+    const newVersion = Date.now();
+    setDataVersion(newVersion);
+
+    const nextDomains = Array.from(new Set(
+      (Array.isArray(domains) ? domains : [domains]).filter(Boolean)
+    ));
+
+    nextDomains.forEach((domain) => {
+      if (hydratingDomainsRef.current.has(domain)) {
+        return;
+      }
+      const storageKey = STORAGE_DOMAIN_VERSION_KEYS[domain];
+      if (storageKey) {
+        localStorage.setItem(storageKey, JSON.stringify(newVersion));
+      }
+    });
+  }, []);
+
+  const flushTimesPersistence = useCallback(() => {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    const timesSnapshot = timesRef.current || {};
+    const nextStageBuckets = new Map();
+
+    Object.entries(timesSnapshot).forEach(([pilotId, pilotTimes]) => {
+      if (!pilotTimes || typeof pilotTimes !== 'object') {
+        return;
+      }
+
+      Object.entries(pilotTimes).forEach(([stageId, value]) => {
+        if (value === undefined || value === null || value === '') {
+          return;
+        }
+
+        const currentStageBucket = nextStageBuckets.get(stageId) || {};
+        currentStageBucket[pilotId] = value;
+        nextStageBuckets.set(stageId, currentStageBucket);
+      });
+    });
+
+    const nextStageIds = new Set(nextStageBuckets.keys());
+
+    timesPersistedStageIdsRef.current.forEach((stageId) => {
+      if (!nextStageIds.has(stageId)) {
+        window.localStorage.removeItem(`rally_times_stage_${stageId}`);
+      }
+    });
+
+    nextStageBuckets.forEach((stageBucket, stageId) => {
+      window.localStorage.setItem(`rally_times_stage_${stageId}`, JSON.stringify(stageBucket));
+    });
+
+    timesPersistedStageIdsRef.current = nextStageIds;
+    window.localStorage.removeItem('rally_times');
+    updateDataVersion('timingCore');
+  }, [updateDataVersion]);
+
+  const scheduleTimesPersistenceFlush = useCallback(() => {
+    if (timesPersistenceTimerRef.current) {
+      return;
+    }
+
+    timesPersistenceTimerRef.current = window.setTimeout(() => {
+      timesPersistenceTimerRef.current = null;
+      flushTimesPersistence();
+    }, 1000);
+  }, [flushTimesPersistence]);
+
+  useEffect(() => () => {
+    if (timesPersistenceTimerRef.current) {
+      window.clearTimeout(timesPersistenceTimerRef.current);
+      timesPersistenceTimerRef.current = null;
+    }
+  }, []);
+
+  const flushPilotTelemetryQueue = useCallback(() => {
+    if (pilotTelemetryQueueRef.current.size === 0) {
+      return;
+    }
+
+    const updatesByPilotId = new Map(pilotTelemetryQueueRef.current);
+    pilotTelemetryQueueRef.current.clear();
+    const nextTelemetryByPilotId = { ...(pilotTelemetryByPilotIdRef.current || {}) };
+    let shouldRelayTelemetry = false;
+
+    updatesByPilotId.forEach((telemetry, pilotId) => {
+      if (!pilotId || !telemetry) {
+        return;
+      }
+
+      const normalizedPilotId = normalizePilotId(pilotId);
+      const currentTelemetry = nextTelemetryByPilotId[normalizedPilotId] || {};
+      const nextTelemetry = { ...currentTelemetry };
+
+      if (Object.prototype.hasOwnProperty.call(telemetry, 'latLong')) {
+        const normalizedLatLong = normalizeLatLongString(telemetry.latLong || '');
+        nextTelemetry.latLong = normalizedLatLong;
+
+        if (!parseLatLongString(normalizedLatLong)) {
+          nextTelemetry.lastLatLongUpdatedAt = null;
+        } else if (normalizedLatLong !== normalizeLatLongString(currentTelemetry.latLong || '')) {
+          nextTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt ?? telemetry.latlongTimestamp ?? Date.now();
+        }
+      }
+
+      if (telemetry.latlongTimestamp !== undefined || telemetry.lastLatLongUpdatedAt !== undefined) {
+        const timestampValue = telemetry.latlongTimestamp ?? telemetry.lastLatLongUpdatedAt;
+        nextTelemetry.latlongTimestamp = timestampValue;
+        nextTelemetry.lastLatLongUpdatedAt = timestampValue;
+      }
+
+      if (telemetry.speed !== undefined) {
+        nextTelemetry.speed = telemetry.speed;
+      }
+
+      if (telemetry.heading !== undefined) {
+        nextTelemetry.heading = telemetry.heading;
+      }
+
+      if (telemetry.lastTelemetryAt !== undefined) {
+        nextTelemetry.lastTelemetryAt = telemetry.lastTelemetryAt;
+      }
+
+      if (telemetry.source) {
+        nextTelemetry.source = telemetry.source;
+      }
+
+      nextTelemetryByPilotId[normalizedPilotId] = nextTelemetry;
+      if (normalizeMessageSource(telemetry.source) === 'android-app') {
+        shouldRelayTelemetry = true;
+      }
+
+      console.debug('[Telemetry] Applied pilot telemetry relation', {
+        pilotId: normalizedPilotId,
+        source: telemetry.source || 'unknown',
+        latLong: nextTelemetry.latLong || '',
+        lastTelemetryAt: nextTelemetry.lastTelemetryAt || null
+      });
+    });
+
+    setPilotTelemetryByPilotId(nextTelemetryByPilotId);
+
+    if (shouldRelayTelemetry && wsEnabled && wsRoleRef.current === 'setup' && wsCanPublish && wsProvider.current?.isConnected) {
+      wsProvider.current.publish({
+        messageType: 'sync-update',
+        section: 'pilotTelemetry',
+        source: 'setup-relay',
+        payload: {
+          pilotTelemetry: updatesByPilotId.size > 0
+            ? Object.fromEntries(Array.from(updatesByPilotId.entries()).map(([pilotId, telemetry]) => ([
+                normalizePilotId(pilotId),
+                buildPilotTelemetryPayload(telemetry)
+              ])))
+            : {}
+        },
+        timestamp: getNextLogicalTimestamp()
+      }).catch((error) => {
+        console.error('[WebSocket] Pilot telemetry relay failed', error);
+      });
+    }
+
+    window.setTimeout(() => {
+      if (suppressPilotPublishRef.current > 0) {
+        suppressPilotPublishRef.current -= 1;
+      }
+    }, 0);
+  }, [getNextLogicalTimestamp, wsCanPublish, wsEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if (pilotTelemetryFlushTimerRef.current) {
+        clearTimeout(pilotTelemetryFlushTimerRef.current);
+      }
+    };
+  }, []);
+
+  const schedulePilotTelemetryFlush = useCallback(() => {
+    if (pilotTelemetryFlushTimerRef.current) {
+      return;
+    }
+
+    pilotTelemetryFlushTimerRef.current = window.setTimeout(() => {
+      pilotTelemetryFlushTimerRef.current = null;
+      flushPilotTelemetryQueue();
+    }, 1000);
+  }, [flushPilotTelemetryQueue]);
+
   const buildTimingLineKey = useCallback((section, pilotId = null, stageId = null) => (
     `${section}:${pilotId ?? '_'}:${stageId ?? '_'}`
   ), []);
@@ -263,9 +591,10 @@ export const RallyProvider = ({ children }) => {
     setLapTimes(loadFromStorage('rally_lap_times', {}));
     setStagePilots(loadFromStorage('rally_stage_pilots', {}));
     setPilots(loadFromStorage('rally_pilots', []));
+    setPilotTelemetryByPilotId(loadFromStorage('rally_pilot_telemetry', {}));
     setCategories(loadFromStorage('rally_categories', []));
     setStages(loadFromStorage('rally_stages', []));
-    setTimes(loadFromStorage('rally_times', {}));
+    setTimes(loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map);
     setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
     setStartTimes(loadFromStorage('rally_start_times', {}));
     setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
@@ -335,6 +664,11 @@ export const RallyProvider = ({ children }) => {
       setPilots(loadFromStorage('rally_pilots', []));
     }
 
+    if (nextDomains.includes('pilotTelemetry')) {
+      hydratingDomainsRef.current.add('pilotTelemetry');
+      setPilotTelemetryByPilotId(loadFromStorage('rally_pilot_telemetry', {}));
+    }
+
     if (nextDomains.includes('categories')) {
       hydratingDomainsRef.current.add('categories');
       setCategories(loadFromStorage('rally_categories', []));
@@ -354,7 +688,7 @@ export const RallyProvider = ({ children }) => {
 
       if (shouldReloadTimes || shouldReloadArrivalTimes || shouldReloadStartTimes || shouldReloadRealStartTimes) {
         hydratingDomainsRef.current.add('timingCore');
-        if (shouldReloadTimes) setTimes(loadFromStorage('rally_times', {}));
+        if (shouldReloadTimes) setTimes(loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map);
         if (shouldReloadArrivalTimes) setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
         if (shouldReloadStartTimes) setStartTimes(loadFromStorage('rally_start_times', {}));
         if (shouldReloadRealStartTimes) setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
@@ -726,6 +1060,225 @@ export const RallyProvider = ({ children }) => {
       ? data.payload
       : data;
 
+    const messageSource = normalizeMessageSource(
+      normalizedData?.source
+      || normalizedData?.origin
+      || normalizedData?.clientSource
+      || data?.source
+      || data?.origin
+      || data?.clientSource
+    );
+    if (messageSource === 'android-app' && normalizedData?.messageType !== 'pilot-telemetry' && data?.section !== 'pilotTelemetry') {
+      console.debug('[Telemetry] Ignoring non-telemetry payload from android-app', {
+        messageType: normalizedData?.messageType || null,
+        section: data?.section || null
+      });
+      setWsLastMessageAt(Date.now());
+      isPublishing.current = true;
+      setTimeout(() => {
+        isPublishing.current = false;
+      }, 100);
+      return;
+    }
+
+    if (normalizedData?.messageType === 'pilot-telemetry') {
+      const pilotId = normalizePilotId(normalizedData.pilotId || normalizedData.pilotid || null);
+      const telemetrySource = messageSource;
+
+      if (telemetrySource && !TRUSTED_PILOT_TELEMETRY_SOURCES.has(telemetrySource)) {
+        console.debug('[Telemetry] Ignoring pilot telemetry from untrusted source', {
+          pilotId,
+          source: telemetrySource
+        });
+        setWsLastMessageAt(Date.now());
+        isPublishing.current = true;
+        setTimeout(() => {
+          isPublishing.current = false;
+        }, 100);
+        return;
+      }
+
+      console.debug('[Telemetry] Queued pilot telemetry', {
+        pilotId,
+        source: telemetrySource || 'unknown',
+        latLong: normalizedData.latLong ?? '',
+        latlongTimestamp: normalizedData.latlongTimestamp ?? normalizedData.lastLatLongUpdatedAt ?? null
+      });
+
+      if (pilotId) {
+        const pilotExists = Array.isArray(pilotsRef.current)
+          && pilotsRef.current.some((pilot) => normalizePilotId(pilot?.id) === pilotId);
+
+        if (!pilotExists) {
+          console.warn('[Telemetry] Received telemetry for unknown pilot', {
+            pilotId,
+            source: telemetrySource || 'unknown'
+          });
+        }
+
+        const telemetryReceivedAt = Date.now();
+        const telemetryTimestamp = normalizedData.latlongTimestamp ?? normalizedData.lastLatLongUpdatedAt;
+        const immediateTelemetry = {
+          ...(pilotTelemetryByPilotIdRef.current?.[pilotId] || {}),
+          lastTelemetryAt: telemetryReceivedAt,
+          source: telemetrySource || (pilotTelemetryByPilotIdRef.current?.[pilotId]?.source || '')
+        };
+
+        if (normalizedData.latLong !== undefined) {
+          immediateTelemetry.latLong = normalizeLatLongString(normalizedData.latLong || '');
+        }
+
+        if (telemetryTimestamp !== undefined) {
+          immediateTelemetry.latlongTimestamp = telemetryTimestamp;
+          immediateTelemetry.lastLatLongUpdatedAt = telemetryTimestamp;
+        }
+
+        if (normalizedData.speed !== undefined) {
+          immediateTelemetry.speed = normalizedData.speed;
+        }
+
+        if (normalizedData.heading !== undefined) {
+          immediateTelemetry.heading = normalizedData.heading;
+        }
+
+        mergePilotTelemetryEntries([[pilotId, immediateTelemetry]], { suppressSync: true });
+
+        const queuedTelemetry = {
+          ...(pilotTelemetryQueueRef.current.get(pilotId) || {}),
+          lastTelemetryAt: telemetryReceivedAt,
+          source: telemetrySource || (pilotTelemetryQueueRef.current.get(pilotId)?.source || '')
+        };
+
+        if (normalizedData.latLong !== undefined) {
+          queuedTelemetry.latLong = normalizedData.latLong;
+        }
+
+        if (telemetryTimestamp !== undefined) {
+          queuedTelemetry.latlongTimestamp = telemetryTimestamp;
+          queuedTelemetry.lastLatLongUpdatedAt = telemetryTimestamp;
+        }
+
+        if (normalizedData.speed !== undefined) {
+          queuedTelemetry.speed = normalizedData.speed;
+        }
+
+        if (normalizedData.heading !== undefined) {
+          queuedTelemetry.heading = normalizedData.heading;
+        }
+
+        pilotTelemetryQueueRef.current.set(pilotId, queuedTelemetry);
+        schedulePilotTelemetryFlush();
+      }
+
+      setWsLastMessageAt(Date.now());
+      isPublishing.current = true;
+      setTimeout(() => {
+        isPublishing.current = false;
+      }, 100);
+      return;
+    }
+
+    if (data?.section === 'pilotTelemetry' && normalizedData?.pilotTelemetry && typeof normalizedData.pilotTelemetry === 'object') {
+      const pilotTelemetryEntries = Object.entries(normalizedData.pilotTelemetry).map(([pilotId, telemetry]) => [
+        normalizePilotId(pilotId),
+        telemetry
+      ]);
+      const telemetrySource = normalizeMessageSource(
+        normalizedData.source
+        || normalizedData.origin
+        || normalizedData.clientSource
+        || data?.source
+        || data?.origin
+        || data?.clientSource
+      );
+
+      if (telemetrySource && !TRUSTED_PILOT_TELEMETRY_SOURCES.has(telemetrySource)) {
+        console.debug('[Telemetry] Ignoring pilot telemetry relay from untrusted source', {
+          source: telemetrySource
+        });
+        setWsLastMessageAt(Date.now());
+        isPublishing.current = true;
+        setTimeout(() => {
+          isPublishing.current = false;
+        }, 100);
+        return;
+      }
+
+      const nextTelemetryEntries = pilotTelemetryEntries.map(([pilotId, telemetry]) => {
+        if (!pilotId || !telemetry || typeof telemetry !== 'object') {
+          return null;
+        }
+
+        const nextTelemetry = {
+          ...(pilotTelemetryByPilotIdRef.current?.[pilotId] || {}),
+          lastTelemetryAt: Number(telemetry.lastTelemetryAt || Date.now())
+        };
+
+        if (telemetry.latLong !== undefined) {
+          nextTelemetry.latLong = telemetry.latLong;
+        }
+
+        if (telemetry.latlongTimestamp !== undefined) {
+          nextTelemetry.latlongTimestamp = telemetry.latlongTimestamp;
+          nextTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt ?? telemetry.latlongTimestamp;
+        } else if (telemetry.lastLatLongUpdatedAt !== undefined) {
+          nextTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt;
+        }
+
+        if (telemetry.speed !== undefined) {
+          nextTelemetry.speed = telemetry.speed;
+        }
+
+        if (telemetry.heading !== undefined) {
+          nextTelemetry.heading = telemetry.heading;
+        }
+
+        nextTelemetry.source = telemetrySource || 'setup-relay';
+        return [pilotId, nextTelemetry];
+      }).filter(Boolean);
+
+      mergePilotTelemetryEntries(nextTelemetryEntries, { suppressSync: true });
+
+      if (pilotTelemetryEntries.length > 0) {
+        console.debug('[Telemetry] Received pilotTelemetry relay', {
+          count: pilotTelemetryEntries.length,
+          source: telemetrySource || 'unknown'
+        });
+      }
+
+      setWsLastMessageAt(Date.now());
+      isPublishing.current = true;
+      setTimeout(() => {
+        isPublishing.current = false;
+      }, 100);
+      return;
+    }
+
+    if (data?.section === 'times' && data?.stageId && normalizedData?.times && typeof normalizedData.times === 'object') {
+      const stageId = data.stageId;
+
+      Object.entries(normalizedData.times).forEach(([pilotId, value]) => {
+        setTimingLineValue('times', pilotId, stageId, value);
+      });
+
+      setWsLastMessageAt(Date.now());
+      isPublishing.current = true;
+      setTimeout(() => {
+        isPublishing.current = false;
+      }, 100);
+      return;
+    }
+
+    if (data?.section === 'mapPlacemarks' && normalizedData?.mapPlacemark) {
+      setMapPlacemarks((prev) => mergeMapPlacemarksById(prev, normalizedData.mapPlacemark));
+      setWsLastMessageAt(Date.now());
+      isPublishing.current = true;
+      setTimeout(() => {
+        isPublishing.current = false;
+      }, 100);
+      return;
+    }
+
     if (data?.section === 'bundle' && normalizedData) {
       const flat = {};
       Object.values(normalizedData).forEach((sectionPayload) => {
@@ -769,6 +1322,12 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.lapTimes !== undefined && !shouldPreserveLocalTimingSection('lapTimes')) setLapTimes(normalizedData.lapTimes);
     if (normalizedData.stagePilots !== undefined && !shouldPreserveLocalTimingSection('stagePilots')) setStagePilots(normalizedData.stagePilots);
     if (normalizedData.pilots !== undefined) setPilots(normalizedData.pilots);
+    if (normalizedData.pilotTelemetry !== undefined) {
+      mergePilotTelemetryEntries(Object.entries(normalizedData.pilotTelemetry || {}), {
+        suppressSync: true,
+        replace: true
+      });
+    }
     if (normalizedData.categories !== undefined) setCategories(normalizedData.categories);
     if (normalizedData.stages !== undefined) setStages(normalizedData.stages);
     if (normalizedData.times !== undefined && !shouldPreserveLocalTimingSection('times')) setTimes(normalizedData.times);
@@ -796,7 +1355,7 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 100);
-  }, [buildTimingLineKey, getNextLogicalTimestamp, setTimingLineValue, shouldPreserveLocalTimingSection]);
+  }, [buildTimingLineKey, getNextLogicalTimestamp, mergePilotTelemetryEntries, schedulePilotTelemetryFlush, setTimingLineValue, shouldPreserveLocalTimingSection]);
 
   // Listen for external data updates
   useEffect(() => {
@@ -865,6 +1424,7 @@ export const RallyProvider = ({ children }) => {
     lapTimes,
     stagePilots,
     pilots,
+    pilotTelemetry: pilotTelemetryByPilotId,
     categories,
     stages,
     times,
@@ -892,6 +1452,7 @@ export const RallyProvider = ({ children }) => {
     lapTimes,
     stagePilots,
     pilots,
+    pilotTelemetryByPilotId,
     categories,
     stages,
     times,
@@ -918,6 +1479,64 @@ export const RallyProvider = ({ children }) => {
     const snapshot = buildWebSocketSnapshot();
     const snapshotId = createEntityId('snapshot');
     const messageTimestamp = getNextLogicalTimestamp();
+    const timesStageParts = Array.isArray(snapshot.stages)
+      ? snapshot.stages.flatMap((stage) => {
+          if (!stage?.id) {
+            return [];
+          }
+
+          const stageTimes = {};
+          Object.entries(snapshot.times || {}).forEach(([pilotId, pilotTimes]) => {
+            const stageValue = pilotTimes?.[stage.id];
+            if (stageValue === undefined || stageValue === null || stageValue === '') {
+              return;
+            }
+            stageTimes[pilotId] = stageValue;
+          });
+
+          if (Object.keys(stageTimes).length === 0) {
+            return [];
+          }
+
+          return [{
+            section: 'times',
+            stageId: stage.id,
+            payload: { times: stageTimes }
+          }];
+        })
+      : [];
+    const stageLinkedMapPlacemarks = getStageLinkedMapPlacemarks(snapshot.stages, snapshot.mapPlacemarks);
+    const mapPlacemarkParts = Array.isArray(stageLinkedMapPlacemarks)
+      ? stageLinkedMapPlacemarks.flatMap((placemark) => {
+          if (!placemark?.id) {
+            return [];
+          }
+
+          const originalSize = JSON.stringify(placemark).length;
+          const transportPlacemark = originalSize > 55000
+            ? compressMapPlacemarkForTransport(placemark, {
+                maxBytes: 55000,
+                initialTolerance: 0.00001,
+                maxTolerance: 0.05
+              })
+            : placemark;
+          const compressedSize = JSON.stringify(transportPlacemark).length;
+
+          if (compressedSize > 55000 || compressedSize !== originalSize) {
+            console.debug('[WebSocket] mapPlacemark transport size', {
+              placemarkId: placemark.id,
+              originalSize,
+              compressedSize
+            });
+          }
+
+          return [{
+            section: 'mapPlacemarks',
+            mapPlacemarkId: placemark.id,
+            payload: { mapPlacemark: pruneEmptyNestedValues(transportPlacemark) }
+          }];
+        })
+      : [];
     const allParts = [
       { section: 'meta', payload: {
         eventName: snapshot.eventName,
@@ -931,9 +1550,9 @@ export const RallyProvider = ({ children }) => {
         globalAudio: snapshot.globalAudio
       } },
       { section: 'pilots', payload: { pilots: pruneEmptyNestedValues(snapshot.pilots) } },
+      { section: 'pilotTelemetry', payload: { pilotTelemetry: pruneEmptyNestedValues(snapshot.pilotTelemetry) } },
       { section: 'categories', payload: { categories: pruneEmptyNestedValues(snapshot.categories) } },
       { section: 'stages', payload: { stages: pruneEmptyNestedValues(snapshot.stages) } },
-      { section: 'times', payload: { times: pruneEmptyNestedValues(snapshot.times) } },
       { section: 'arrivalTimes', payload: { arrivalTimes: pruneEmptyNestedValues(snapshot.arrivalTimes) } },
       { section: 'startTimes', payload: { startTimes: pruneEmptyNestedValues(snapshot.startTimes) } },
       { section: 'realStartTimes', payload: { realStartTimes: pruneEmptyNestedValues(snapshot.realStartTimes) } },
@@ -942,15 +1561,21 @@ export const RallyProvider = ({ children }) => {
       { section: 'stagePilots', payload: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) } },
       { section: 'retiredStages', payload: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) } },
       { section: 'stageAlerts', payload: { stageAlerts: pruneEmptyNestedValues(snapshot.stageAlerts) } },
-      { section: 'mapPlacemarks', payload: { mapPlacemarks: pruneEmptyNestedValues(snapshot.mapPlacemarks) } },
+      ...mapPlacemarkParts,
       { section: 'cameras', payload: { cameras: pruneEmptyNestedValues(snapshot.cameras) } },
       { section: 'externalMedia', payload: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) } },
       { section: 'streamConfigs', payload: { streamConfigs: pruneEmptyNestedValues(snapshot.streamConfigs) } }
     ];
 
+    const allPartsWithStages = [
+      ...allParts.slice(0, 5),
+      ...timesStageParts,
+      ...allParts.slice(5)
+    ];
+
     const parts = Array.isArray(allowedSections) && allowedSections.length > 0
-      ? allParts.filter((part) => allowedSections.includes(part.section))
-      : allParts;
+      ? allPartsWithStages.filter((part) => allowedSections.includes(part.section))
+      : allPartsWithStages;
 
     const totalParts = parts.length;
 
@@ -981,6 +1606,7 @@ export const RallyProvider = ({ children }) => {
         globalAudio: snapshot.globalAudio
       },
       pilots: { pilots: pruneEmptyNestedValues(snapshot.pilots) },
+      pilotTelemetry: { pilotTelemetry: pruneEmptyNestedValues(snapshot.pilotTelemetry) },
       categories: { categories: pruneEmptyNestedValues(snapshot.categories) },
       stages: { stages: pruneEmptyNestedValues(snapshot.stages) },
       times: { times: pruneEmptyNestedValues(snapshot.times) },
@@ -992,7 +1618,7 @@ export const RallyProvider = ({ children }) => {
       stagePilots: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) },
       retiredStages: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) },
       stageAlerts: { stageAlerts: pruneEmptyNestedValues(snapshot.stageAlerts) },
-      mapPlacemarks: { mapPlacemarks: pruneEmptyNestedValues(snapshot.mapPlacemarks) },
+      mapPlacemarks: { mapPlacemarks: pruneEmptyNestedValues(getStageLinkedMapPlacemarks(snapshot.stages, snapshot.mapPlacemarks)) },
       cameras: { cameras: pruneEmptyNestedValues(snapshot.cameras) },
       externalMedia: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) },
       streamConfigs: { streamConfigs: pruneEmptyNestedValues(snapshot.streamConfigs) }
@@ -1025,6 +1651,7 @@ export const RallyProvider = ({ children }) => {
   const setupBaseSectionKeys = useMemo(() => ([
     'meta',
     'pilots',
+    'pilotTelemetry',
     'categories',
     'stages',
     'mapPlacemarks',
@@ -1041,8 +1668,16 @@ export const RallyProvider = ({ children }) => {
     const messages = buildWebSocketMessages(messageType, allowedSections, extraMeta);
 
     for (const message of messages) {
+      const messageSize = JSON.stringify(message).length;
       const success = await wsProvider.current.publish(message);
       if (!success) {
+        console.error('[WebSocket] Section publish failed', {
+          messageType,
+          section: message.section,
+          partIndex: message.partIndex,
+          totalParts: message.totalParts,
+          messageSize
+        });
         return false;
       }
     }
@@ -1056,6 +1691,7 @@ export const RallyProvider = ({ children }) => {
     }
 
     const payload = buildWebSocketPayload(allowedSections);
+    const debugTimestamp = Date.now();
     const data = {
       messageType,
       section: 'bundle',
@@ -1066,6 +1702,33 @@ export const RallyProvider = ({ children }) => {
 
     const estimatedSize = JSON.stringify(data).length;
     if (estimatedSize > 60000) {
+      let cumulativePayload = {};
+      const breakdown = Object.entries(payload).map(([section, sectionPayload]) => {
+        cumulativePayload = {
+          ...cumulativePayload,
+          [section]: sectionPayload
+        };
+
+        const previewData = {
+          messageType,
+          section: 'bundle',
+          ...extraMeta,
+          payload: cumulativePayload,
+          timestamp: debugTimestamp
+        };
+
+        return {
+          section,
+          cumulativeSize: JSON.stringify(previewData).length
+        };
+      });
+
+      console.debug('[WebSocket] Bundle size breakdown', {
+        messageType,
+        estimatedSize,
+        breakdown
+      });
+
       return publishWebSocketMessages(messageType, allowedSections, extraMeta);
     }
 
@@ -1387,7 +2050,7 @@ export const RallyProvider = ({ children }) => {
             const stageId = payload?.stageId;
             if (!pilotId || !stageId) return;
 
-            const timesStore = loadFromStorage('rally_times', {});
+            const timesStore = loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map;
             const arrivalStore = loadFromStorage('rally_arrival_times', {});
             const startStore = loadFromStorage('rally_start_times', {});
             const realStartStore = loadFromStorage('rally_real_start_times', {});
@@ -1434,7 +2097,7 @@ export const RallyProvider = ({ children }) => {
             const lineData = payload?.data || {};
             if (!pilotId || !stageId) return;
 
-            const timesStore = loadFromStorage('rally_times', {});
+            const timesStore = loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map;
             const arrivalStore = loadFromStorage('rally_arrival_times', {});
             const startStore = loadFromStorage('rally_start_times', {});
             const realStartStore = loadFromStorage('rally_real_start_times', {});
@@ -1732,29 +2395,6 @@ export const RallyProvider = ({ children }) => {
     return generateChannelKey();
   }, []);
 
-  const updateDataVersion = useCallback((domains = []) => {
-    if (!persistenceReadyRef.current || isPublishing.current) {
-      return;
-    }
-
-    const newVersion = Date.now();
-    setDataVersion(newVersion);
-
-    const nextDomains = Array.from(new Set(
-      (Array.isArray(domains) ? domains : [domains]).filter(Boolean)
-    ));
-
-    nextDomains.forEach((domain) => {
-      if (hydratingDomainsRef.current.has(domain)) {
-        return;
-      }
-      const storageKey = STORAGE_DOMAIN_VERSION_KEYS[domain];
-      if (storageKey) {
-        localStorage.setItem(storageKey, JSON.stringify(newVersion));
-      }
-    });
-  }, []);
-
   // Publish to WebSocket when data version changes
   useEffect(() => {
     if (wsEnabled && wsProvider.current?.isConnected) {
@@ -1855,9 +2495,24 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     if (hydratingDomainsRef.current.has('pilots')) return;
     localStorage.setItem('rally_pilots', JSON.stringify(pilots));
+    if (suppressPilotPublishRef.current > 0) {
+      suppressPilotPublishRef.current -= 1;
+      return;
+    }
     updateDataVersion('pilots');
     markSetupSectionDirty('pilots');
   }, [pilots, markSetupSectionDirty, updateDataVersion]);
+
+  useEffect(() => {
+    if (hydratingDomainsRef.current.has('pilotTelemetry')) return;
+    localStorage.setItem('rally_pilot_telemetry', JSON.stringify(pilotTelemetryByPilotId));
+    if (pilotTelemetrySyncSuppressionRef.current > 0) {
+      pilotTelemetrySyncSuppressionRef.current -= 1;
+      return;
+    }
+    updateDataVersion('pilotTelemetry');
+    markSetupSectionDirty('pilotTelemetry');
+  }, [markSetupSectionDirty, pilotTelemetryByPilotId, updateDataVersion]);
 
   useEffect(() => {
     if (hydratingDomainsRef.current.has('categories')) return;
@@ -1875,12 +2530,16 @@ export const RallyProvider = ({ children }) => {
 
   useEffect(() => {
     if (hydratingDomainsRef.current.has('timingCore')) return;
-    localStorage.setItem('rally_times', JSON.stringify(times));
+    scheduleTimesPersistenceFlush();
+  }, [scheduleTimesPersistenceFlush, times]);
+
+  useEffect(() => {
+    if (hydratingDomainsRef.current.has('timingCore')) return;
     localStorage.setItem('rally_arrival_times', JSON.stringify(arrivalTimes));
     localStorage.setItem('rally_start_times', JSON.stringify(startTimes));
     localStorage.setItem('rally_real_start_times', JSON.stringify(realStartTimes));
     updateDataVersion('timingCore');
-  }, [arrivalTimes, realStartTimes, startTimes, times, updateDataVersion]);
+  }, [arrivalTimes, realStartTimes, startTimes, updateDataVersion]);
 
   useEffect(() => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
@@ -2124,16 +2783,12 @@ export const RallyProvider = ({ children }) => {
   }, [setExternalMedia]);
 
   const addPilot = (pilot) => {
-    const normalizedLatLong = normalizeLatLongString(pilot.latLong || '');
-    const hasLatLong = !!parseLatLongString(normalizedLatLong);
     const newPilot = {
       ...pilot,
       id: createEntityId('pilot'),
       name: pilot.name,
       team: pilot.team || '',
       car: pilot.car || '',
-      latLong: hasLatLong ? normalizedLatLong : '',
-      lastLatLongUpdatedAt: hasLatLong ? Date.now() : null,
       picture: pilot.picture || '',
       streamUrl: pilot.streamUrl || '',
       categoryId: pilot.categoryId || null,
@@ -2144,31 +2799,65 @@ export const RallyProvider = ({ children }) => {
     setPilots(prev => [...prev, newPilot]);
   };
 
-  const updatePilot = (id, updates) => {
+  function updatePilot(id, updates) {
     setPilots(prev => prev.map((pilot) => {
       if (pilot.id !== id) {
         return pilot;
       }
 
       const nextUpdates = { ...updates };
-
-      if (Object.prototype.hasOwnProperty.call(updates, 'latLong')) {
-        const normalizedLatLong = normalizeLatLongString(updates.latLong || '');
-        const previousLatLong = normalizeLatLongString(pilot.latLong || '');
-        const hasLatLong = !!parseLatLongString(normalizedLatLong);
-
-        nextUpdates.latLong = hasLatLong ? normalizedLatLong : '';
-
-        if (!hasLatLong) {
-          nextUpdates.lastLatLongUpdatedAt = null;
-        } else if (normalizedLatLong !== previousLatLong) {
-          nextUpdates.lastLatLongUpdatedAt = Date.now();
-        }
-      }
+      delete nextUpdates.latLong;
+      delete nextUpdates.latlongTimestamp;
+      delete nextUpdates.lastLatLongUpdatedAt;
+      delete nextUpdates.lastTelemetryAt;
+      delete nextUpdates.speed;
+      delete nextUpdates.heading;
 
       return { ...pilot, ...nextUpdates };
     }));
-  };
+  }
+
+  const setPilotTelemetry = useCallback((pilotId, telemetry = {}) => {
+    if (!pilotId) {
+      return;
+    }
+
+    const normalizedTelemetry = {};
+
+    if (telemetry.latLong !== undefined) {
+      normalizedTelemetry.latLong = normalizeLatLongString(telemetry.latLong || '');
+    }
+
+    if (telemetry.latlongTimestamp !== undefined) {
+      normalizedTelemetry.latlongTimestamp = telemetry.latlongTimestamp;
+    }
+
+    if (telemetry.lastLatLongUpdatedAt !== undefined) {
+      normalizedTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt;
+    }
+
+    if (telemetry.speed !== undefined) {
+      normalizedTelemetry.speed = telemetry.speed;
+    }
+
+    if (telemetry.heading !== undefined) {
+      normalizedTelemetry.heading = telemetry.heading;
+    }
+
+    if (telemetry.lastTelemetryAt !== undefined) {
+      normalizedTelemetry.lastTelemetryAt = telemetry.lastTelemetryAt;
+    }
+
+    if (telemetry.source !== undefined) {
+      normalizedTelemetry.source = telemetry.source;
+    }
+
+    mergePilotTelemetryEntries([[normalizePilotId(pilotId), normalizedTelemetry]]);
+  }, [mergePilotTelemetryEntries]);
+
+  const getPilotTelemetry = useCallback((pilotId) => (
+    pilotTelemetryByPilotIdRef.current?.[normalizePilotId(pilotId)] || pilotTelemetryByPilotIdRef.current?.[pilotId] || {}
+  ), []);
 
   const deletePilot = (id) => {
     setPilots(prev => prev.filter(p => p.id !== id));
@@ -2750,9 +3439,10 @@ export const RallyProvider = ({ children }) => {
       lapTimes: loadFromStorage('rally_lap_times', {}),
       stagePilots: loadFromStorage('rally_stage_pilots', {}),
       pilots: loadFromStorage('rally_pilots', []),
+      pilotTelemetry: loadFromStorage('rally_pilot_telemetry', {}),
       categories: loadFromStorage('rally_categories', []),
       stages: loadFromStorage('rally_stages', []),
-      times: loadFromStorage('rally_times', {}),
+      times: loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map,
       arrivalTimes: loadFromStorage('rally_arrival_times', {}),
       startTimes: loadFromStorage('rally_start_times', {}),
       realStartTimes: loadFromStorage('rally_real_start_times', {}),
@@ -2778,6 +3468,7 @@ export const RallyProvider = ({ children }) => {
     try {
       const data = JSON.parse(jsonString);
       if (data.pilots) setPilots(data.pilots);
+      if (data.pilotTelemetry) setPilotTelemetryByPilotId(data.pilotTelemetry);
       if (data.categories) setCategories(data.categories);
       if (data.stages) setStages(data.stages);
       if (data.times) setTimes(data.times);
@@ -2808,7 +3499,7 @@ export const RallyProvider = ({ children }) => {
       console.error('Error importing data:', error);
       return false;
     }
-  }, [setCategories, setCameras, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [setCategories, setCameras, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPilotTelemetryByPilotId, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
   const clearAllData = useCallback(() => {
     setEventName('');
@@ -2825,6 +3516,7 @@ export const RallyProvider = ({ children }) => {
     setRetiredStages({});
     setStageAlerts({});
     setMapPlacemarks([]);
+    setPilotTelemetryByPilotId({});
     setDebugDate('');
     setTimeDecimals(3);
     setStreamConfigs({});
@@ -2837,7 +3529,7 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl('');
     setTransitionImageUrl('');
     updateDataVersion(ALL_STORAGE_DOMAINS);
-  }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPilotTelemetryByPilotId, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -2847,6 +3539,7 @@ export const RallyProvider = ({ children }) => {
     stagePilots,
     // Core data
     pilots,
+    pilotTelemetryByPilotId,
     categories,
     stages,
     times,
@@ -2902,6 +3595,8 @@ export const RallyProvider = ({ children }) => {
     // CRUD operations
     addPilot,
     updatePilot,
+    setPilotTelemetry,
+    getPilotTelemetry,
     deletePilot,
     togglePilotActive,
     // Camera operations
@@ -2968,6 +3663,7 @@ export const RallyProvider = ({ children }) => {
 
   const configValue = useMemo(() => ({
     pilots,
+    pilotTelemetryByPilotId,
     categories,
     stages,
     cameras,
@@ -2982,6 +3678,8 @@ export const RallyProvider = ({ children }) => {
     setTransitionImageUrl,
     addPilot,
     updatePilot,
+    setPilotTelemetry,
+    getPilotTelemetry,
     deletePilot,
     togglePilotActive,
     addExternalMedia,
@@ -2992,6 +3690,7 @@ export const RallyProvider = ({ children }) => {
     clearAllData
   }), [
     pilots,
+    pilotTelemetryByPilotId,
     categories,
     stages,
     cameras,
@@ -3006,6 +3705,8 @@ export const RallyProvider = ({ children }) => {
     setTransitionImageUrl,
     addPilot,
     updatePilot,
+    setPilotTelemetry,
+    getPilotTelemetry,
     deletePilot,
     togglePilotActive,
     addExternalMedia,

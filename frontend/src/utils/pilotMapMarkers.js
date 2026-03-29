@@ -1,3 +1,5 @@
+import { getPilotTelemetryForId } from './pilotIdentity.js';
+
 export const parseLatLongString = (value) => {
   const trimmed = String(value || '').trim();
   if (!trimmed) {
@@ -45,12 +47,13 @@ export const getPilotMarkerLabel = (pilot) => {
   return initials || '??';
 };
 
-export const buildPilotMapMarkers = (pilots = [], categories = []) => {
+export const buildPilotMapMarkers = (pilots = [], categories = [], pilotTelemetryByPilotId = {}) => {
   const categoryById = new Map(categories.map((category) => [category.id, category]));
 
   return pilots
     .map((pilot) => {
-      const coordinates = parseLatLongString(pilot.latLong);
+      const telemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id);
+      const coordinates = parseLatLongString(telemetry.latLong || pilot.latLong);
       if (!coordinates) {
         return null;
       }
@@ -65,7 +68,7 @@ export const buildPilotMapMarkers = (pilots = [], categories = []) => {
         lat: coordinates.lat,
         lng: coordinates.lng,
         color: category?.color || '#FF4500',
-        lastUpdatedAt: Number(pilot.lastLatLongUpdatedAt || 0) || 0
+        lastUpdatedAt: Number(telemetry.lastLatLongUpdatedAt || telemetry.latlongTimestamp || pilot.lastLatLongUpdatedAt || 0) || 0
       };
     })
     .filter(Boolean);
