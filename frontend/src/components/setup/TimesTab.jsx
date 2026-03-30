@@ -19,7 +19,6 @@ import LapRaceStageCard from './LapRaceStageCard.jsx';
 import {
   getStageNumberLabel,
   isLapRaceStageType,
-  isManualStartStageType,
   isSpecialStageType,
   isTransitStageType,
   SUPER_PRIME_STAGE_TYPE
@@ -51,6 +50,30 @@ const formatClockInput = (value) => {
 };
 
 const isValidClockTime = (value) => /^\d{2}:\d{2}$/.test(value);
+
+const getEffectiveIdealStartTime = (stage, pilot, storedValue = '') => (
+  storedValue || getPilotScheduledStartTime(stage, pilot)
+);
+
+const stepClockMinutes = (value, step = 1) => {
+  if (!isValidClockTime(value)) {
+    return '';
+  }
+
+  const [hoursText, minutesText] = value.split(':');
+  const hours = Number(hoursText);
+  const minutes = Number(minutesText);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return value;
+  }
+
+  const totalMinutes = (((hours * 60) + minutes + step) % 1440 + 1440) % 1440;
+  const nextHours = Math.floor(totalMinutes / 60);
+  const nextMinutes = totalMinutes % 60;
+
+  return `${String(nextHours).padStart(2, '0')}:${String(nextMinutes).padStart(2, '0')}`;
+};
 
 const parseClockTimeToSeconds = (value) => {
   if (!value) return null;
@@ -200,16 +223,17 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     stageAlerts,
     timeDecimals
   } = useRallyTiming();
-  const { wsConnectionStatus, lineSyncResults, requestTimingLineSync } = useRallyWs();
+  const { clientRole, wsConnectionStatus, lineSyncResults, requestTimingLineSync } = useRallyWs();
+  const statusControlsReadOnly = isReadOnly || clientRole === 'times';
 
   const stagePilotRows = useMemo(() => (
     sortedPilots.map((pilot) => {
       const category = categoryMap.get(pilot.categoryId);
       const totalTime = times[pilot.id]?.[stage.id] || '';
       const arrivalTimeValue = arrivalTimes[pilot.id]?.[stage.id] || '';
-      const manualStartTimeValue = startTimes[pilot.id]?.[stage.id] || '';
+      const storedStartTimeValue = startTimes[pilot.id]?.[stage.id] || '';
       const idealStartTimeValue = manualStartTime
-        ? manualStartTimeValue
+        ? getEffectiveIdealStartTime(stage, pilot, storedStartTimeValue)
         : getPilotScheduledStartTime(stage, pilot);
       const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
       const retired = !!retiredStages[pilot.id]?.[stage.id];
@@ -224,6 +248,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         category,
         totalTime,
         arrivalTimeValue,
+        storedStartTimeValue,
         idealStartTimeValue,
         realStartTimeValue,
         retired,
@@ -322,7 +347,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     setArrivalTime(pilotId, stage.id, value);
     const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime
-      ? (startTimes[pilotId]?.[stage.id] || '')
+      ? getEffectiveIdealStartTime(stage, pilot, startTimes[pilotId]?.[stage.id] || '')
       : getPilotScheduledStartTime(stage, pilot);
     if (isValidClockTime(startTime) && value) {
       const totalTime = arrivalTimeToTotal(value, startTime, timeDecimals);
@@ -340,7 +365,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 
     const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime
-      ? (startTimes[pilotId]?.[stage.id] || '')
+      ? getEffectiveIdealStartTime(stage, pilot, startTimes[pilotId]?.[stage.id] || '')
       : getPilotScheduledStartTime(stage, pilot);
 
     if (isValidClockTime(startTime)) {
@@ -356,7 +381,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     setTime(pilotId, stage.id, value);
     const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime
-      ? (startTimes[pilotId]?.[stage.id] || '')
+      ? getEffectiveIdealStartTime(stage, pilot, startTimes[pilotId]?.[stage.id] || '')
       : getPilotScheduledStartTime(stage, pilot);
     if (isValidClockTime(startTime) && value) {
       const arrivalTime = totalTimeToArrival(value, startTime, timeDecimals);
@@ -369,9 +394,12 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
   const handleStartTimeChange = (pilotId, value) => {
     if (isReadOnly) return;
     const nextStartTime = formatClockInput(value);
-    setStartTime(pilotId, stage.id, nextStartTime);
+    const pilot = pilotById.get(pilotId);
+    const derivedStartTime = getPilotScheduledStartTime(stage, pilot);
+    const effectiveStartTime = nextStartTime || derivedStartTime;
+    setStartTime(pilotId, stage.id, effectiveStartTime);
 
-    if (!isValidClockTime(nextStartTime)) {
+    if (!isValidClockTime(effectiveStartTime)) {
       return;
     }
 
@@ -379,7 +407,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     const currentTotalTime = times[pilotId]?.[stage.id] || '';
 
     if (currentArrivalTime) {
-      const totalTime = arrivalTimeToTotal(currentArrivalTime, nextStartTime, timeDecimals);
+      const totalTime = arrivalTimeToTotal(currentArrivalTime, effectiveStartTime, timeDecimals);
       if (totalTime) {
         setTime(pilotId, stage.id, totalTime);
       }
@@ -387,11 +415,25 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     }
 
     if (currentTotalTime) {
-      const arrivalTime = totalTimeToArrival(currentTotalTime, nextStartTime, timeDecimals);
+      const arrivalTime = totalTimeToArrival(currentTotalTime, effectiveStartTime, timeDecimals);
       if (arrivalTime) {
         setArrivalTime(pilotId, stage.id, arrivalTime);
       }
     }
+  };
+
+  const handleStartTimeKeyDown = (pilotId, currentValue, event) => {
+    if (isReadOnly || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+      return;
+    }
+
+    event.preventDefault();
+    const baseValue = isValidClockTime(currentValue)
+      ? currentValue
+      : '00:00';
+    const step = event.shiftKey ? 5 : 1;
+    const nextValue = stepClockMinutes(baseValue, event.key === 'ArrowUp' ? step : -step);
+    handleStartTimeChange(pilotId, nextValue);
   };
 
   const handleRealStartTimeChange = (pilotId, value) => {
@@ -541,6 +583,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             <Input
                               value={idealStartTimeValue}
                               onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
+                              onKeyDown={(e) => handleStartTimeKeyDown(pilot.id, idealStartTimeValue, e)}
                               placeholder={t('times.placeholder.shortTime')}
                               className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
                               inputMode="numeric"
@@ -652,21 +695,21 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                       />
                     </td>
                     <td className="p-1 sm:p-2">
-                        <label className={`flex items-center gap-2 ${isReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <label className={`flex items-center gap-2 ${statusControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                           <Checkbox
                             checked={retired}
                             onCheckedChange={(checked) => setRetiredFromStage(pilot.id, stage.id, checked === true)}
-                            disabled={isReadOnly}
+                            disabled={statusControlsReadOnly}
                           />
                           <span className="text-[11px] text-zinc-400 uppercase">{t('status.retired')}</span>
                         </label>
                       </td>
                       <td className="p-1 sm:p-2">
-                        <label className={`flex items-center gap-2 ${isReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <label className={`flex items-center gap-2 ${statusControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                           <Checkbox
                             checked={alert}
                             onCheckedChange={(checked) => setStageAlert(pilot.id, stage.id, checked === true)}
-                            disabled={isReadOnly}
+                            disabled={statusControlsReadOnly}
                           />
                           <span className="text-[11px] text-zinc-400 uppercase">{t('status.alert')}</span>
                         </label>
@@ -768,6 +811,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                               <Input
                                 value={idealStartTimeValue}
                                 onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
+                                onKeyDown={(e) => handleStartTimeKeyDown(pilot.id, idealStartTimeValue, e)}
                                 placeholder={t('times.placeholder.shortTime')}
                                 className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                                 inputMode="numeric"
@@ -891,19 +935,19 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   </div>
 
                   <div className="mt-2 flex items-center justify-between gap-2">
-                <label className={`flex items-center gap-2 ${isReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                <label className={`flex items-center gap-2 ${statusControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                   <Checkbox
                     checked={retired}
                     onCheckedChange={(checked) => setRetiredFromStage(pilot.id, stage.id, checked === true)}
-                    disabled={isReadOnly}
+                    disabled={statusControlsReadOnly}
                   />
                   <span className="text-[11px] text-zinc-400 uppercase">{t('status.retired')}</span>
                 </label>
-                <label className={`flex items-center gap-2 ${isReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                <label className={`flex items-center gap-2 ${statusControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                   <Checkbox
                     checked={alert}
                     onCheckedChange={(checked) => setStageAlert(pilot.id, stage.id, checked === true)}
-                    disabled={isReadOnly}
+                    disabled={statusControlsReadOnly}
                   />
                   <span className="text-[11px] text-zinc-400 uppercase">{t('status.alert')}</span>
                 </label>
@@ -1188,7 +1232,7 @@ export default function TimesTab({
                     categoryMap={categoryMap}
                     categoryOrderById={categoryOrderById}
                     pilotById={pilotById}
-                    manualStartTime={isManualStartStageType(stage.type)}
+                    manualStartTime
                     layout={showTimesAsCards ? 'cards' : 'table'}
                     isReadOnly={activeStageId !== undefined ? activeStageId !== stage.id : false}
                   />

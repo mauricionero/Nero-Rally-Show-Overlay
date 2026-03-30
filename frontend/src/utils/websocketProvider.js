@@ -56,6 +56,8 @@ class WebSocketProvider {
     this.onTimesLineResponseCallback = null;
     this.isConnected = false;
     this.connectionState = 'disconnected';
+    this.historyBootstrapLoadedSnapshot = false;
+    this.historyBootstrapNeedsSnapshot = false;
   }
 
   async loadChannelHistory(limit = 50) {
@@ -91,6 +93,8 @@ class WebSocketProvider {
     this.onTimesLineResponseCallback = options.onTimesLineResponse || null;
     this.onTimesSyncAckCallback = options.onTimesSyncAck || null;
     this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
+    this.historyBootstrapLoadedSnapshot = false;
+    this.historyBootstrapNeedsSnapshot = false;
 
     const apiKey = process.env.REACT_APP_ABLY_KEY;
     if (!apiKey) {
@@ -128,18 +132,25 @@ class WebSocketProvider {
       // Subscribe to channel
       this.channel = this.client.channels.get(`rally-${channelId}`);
 
-      // Load the latest published full snapshot so subscriber clients can
-      // start with a coherent state instead of replaying an arbitrary
-      // partial section update from history.
+      const getMessageTimestamp = (message) => {
+        const payloadTimestamp = Number(message?.data?.timestamp || 0);
+        const transportTimestamp = Number(message?.timestamp || 0);
+        return Math.max(payloadTimestamp, transportTimestamp, 0);
+      };
+
+      // Load the latest published full snapshot and then replay newer
+      // incremental updates from history so reconnecting clients can
+      // rebuild the freshest known state before live subscription starts.
       if (options.readHistory !== false) {
-        const historyItems = await this.loadChannelHistory(200);
+        const historyItems = await this.loadChannelHistory(1000);
+        const updateMessages = historyItems.filter((message) => message?.name === 'update');
         const sessionManifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
         const latestSnapshotVersion = Number(sessionManifestMessage?.data?.latestSnapshotVersion || 0);
+        const latestUpdateMessage = updateMessages[0];
 
         if (latestSnapshotVersion > 0) {
-          const snapshotMessages = historyItems
+          const snapshotMessages = updateMessages
             .filter((message) => {
-              if (message?.name !== 'update') return false;
               const messageVersion = Number(message?.data?.snapshotVersion || 0);
               return message?.data?.messageType === 'full-snapshot' && messageVersion === latestSnapshotVersion;
             })
@@ -150,24 +161,48 @@ class WebSocketProvider {
             });
 
           if (snapshotMessages.length > 0) {
+            this.historyBootstrapLoadedSnapshot = true;
             console.log('[WebSocket] Loaded latest full snapshot from history');
             snapshotMessages.forEach((message) => {
               this.onMessageCallback?.(message.data);
             });
-          } else {
-            const latestUpdateMessage = historyItems.find((message) => message?.name === 'update');
 
+            const snapshotTimestamp = Math.max(
+              ...snapshotMessages.map((message) => getMessageTimestamp(message))
+            );
+            const replayMessages = updateMessages
+              .filter((message) => (
+                getMessageTimestamp(message) > snapshotTimestamp
+                && message?.data?.messageType !== 'full-snapshot'
+              ))
+              .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+            if (replayMessages.length > 0) {
+              console.log('[WebSocket] Replayed incremental updates after snapshot', {
+                count: replayMessages.length
+              });
+              replayMessages.forEach((message) => {
+                this.onMessageCallback?.(message.data);
+              });
+            }
+          } else {
             if (latestUpdateMessage?.data) {
               console.log('[WebSocket] Loaded latest update from history');
               this.onMessageCallback?.(latestUpdateMessage.data);
             }
+
+            this.historyBootstrapNeedsSnapshot = true;
           }
         } else {
-          const latestUpdateMessage = historyItems.find((message) => message?.name === 'update');
-
           if (latestUpdateMessage?.data) {
             console.log('[WebSocket] Loaded latest snapshot from history');
             this.onMessageCallback?.(latestUpdateMessage.data);
+          }
+
+          if (latestUpdateMessage?.data?.messageType === 'full-snapshot') {
+            this.historyBootstrapLoadedSnapshot = true;
+          } else {
+            this.historyBootstrapNeedsSnapshot = true;
           }
         }
       }
@@ -365,7 +400,7 @@ class WebSocketProvider {
   }
 
   async loadSessionManifest() {
-    const historyItems = await this.loadChannelHistory(100);
+    const historyItems = await this.loadChannelHistory(500);
     const manifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
     return manifestMessage?.data || null;
   }
