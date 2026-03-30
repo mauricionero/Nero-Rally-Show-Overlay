@@ -57,6 +57,9 @@ export default function ConfigTab() {
     new Map(EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => [option.value, option]))
   ), []);
   const resolvedLogoUrl = useMemo(() => getResolvedBrandingLogoUrl(logoUrl), [logoUrl]);
+  const resolvedTransitionImageUrl = useMemo(() => (
+    (typeof transitionImageUrl === 'string' && transitionImageUrl.trim()) || '/transition-default.png'
+  ), [transitionImageUrl]);
 
   const renderMediaIconValue = (iconValue) => {
     const option = mediaOptionByValue.get(iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
@@ -123,50 +126,54 @@ export default function ConfigTab() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label className="text-white">{t('config.logoUrl')}</Label>
-              <Input
-                value={logoUrl || ''}
-                onChange={(e) => setLogoUrl(e.target.value)}
-                placeholder={t('config.logoUrlPlaceholder')}
-                className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
-                data-testid="input-logo-url"
-              />
-              <p className="text-xs text-zinc-500">
-                Your logo will appear on all overlay scenes. Recommended: PNG with transparent background.
-              </p>
-            </div>
-            <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
-              <span className="text-xs text-zinc-400">Preview:</span>
-              <img
-                src={resolvedLogoUrl}
-                alt="Logo preview"
-                className="h-10 max-w-[180px] object-contain"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+                <div className="flex h-16 w-full items-center justify-center rounded border border-zinc-700 bg-[#09090B] px-3 lg:w-48 lg:shrink-0">
+                  <img
+                    src={resolvedLogoUrl}
+                    alt="Logo preview"
+                    className="max-h-12 max-w-full object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Input
+                    value={logoUrl || ''}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder={t('config.logoUrlPlaceholder')}
+                    className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
+                    data-testid="input-logo-url"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    Your logo will appear on all overlay scenes. Recommended: PNG with transparent background.
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label className="text-white">{t('config.transitionImage')}</Label>
-              <Input
-                value={transitionImageUrl || ''}
-                onChange={(e) => setTransitionImageUrl(e.target.value)}
-                placeholder={t('config.transitionImagePlaceholder')}
-                className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
-                data-testid="input-transition-image-url"
-              />
-              <p className="text-xs text-zinc-500">
-                Used as the background image for overlay scene transitions.
-              </p>
-            </div>
-            {transitionImageUrl && (
-              <div className="flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700">
-                <span className="text-xs text-zinc-400">Preview:</span>
-                <img
-                  src={transitionImageUrl}
-                  alt="Transition preview"
-                  className="h-10 max-w-[150px] object-contain"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+                <div className="flex h-16 w-full items-center justify-center rounded border border-zinc-700 bg-[#09090B] px-3 lg:w-48 lg:shrink-0">
+                  <img
+                    src={resolvedTransitionImageUrl}
+                    alt="Transition preview"
+                    className="max-h-12 max-w-full object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Input
+                    value={transitionImageUrl || ''}
+                    onChange={(e) => setTransitionImageUrl(e.target.value)}
+                    placeholder={t('config.transitionImagePlaceholder')}
+                    className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
+                    data-testid="input-transition-image-url"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    Used as the background image for overlay scene transitions.
+                  </p>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         </CardContent>
       </Card>

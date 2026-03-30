@@ -186,11 +186,18 @@ export default function Setup() {
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
-          <div>
-            <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              {t('header.title')}
-            </h1>
-            <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/images/nrs-control-zone-logo.png"
+              alt="NRS Control Zone"
+              className="h-[72px] w-auto object-contain shrink-0"
+            />
+            <div>
+              <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {t('header.title')}
+              </h1>
+              <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
+            </div>
           </div>
           
           <div className="flex flex-col items-end gap-2">
@@ -219,14 +226,14 @@ export default function Setup() {
                   {t('header.overlay')}
                 </div>
                 <TooltipProvider delayDuration={150}>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <Button
                       size="sm"
                       onClick={() => handleGoLive(getLocalOverlayUrl())}
-                      className="min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
+                      className="h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px]"
                       data-testid="go-to-overlay-button"
                     >
-                      <Play className="w-4 h-4" />
+                      <Play className="w-3.5 h-3.5" />
                       {t('header.local')}
                     </Button>
                     <Tooltip>
@@ -237,12 +244,12 @@ export default function Setup() {
                             onClick={() => handleGoLive(getWebSocketOverlayUrl(wsChannelKey))}
                             disabled={!hasWebSocketOverlay}
                             className={hasWebSocketOverlay
-                              ? 'min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold disabled:opacity-100'
-                              : 'min-w-[108px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
+                              ? 'h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px] disabled:opacity-100'
+                              : 'h-8 min-w-[102px] px-2 bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold text-[11px] disabled:opacity-100'
                             }
                             data-testid="go-to-websocket-overlay-button"
                           >
-                            <Wifi className="w-4 h-4" />
+                            <Wifi className="w-3.5 h-3.5" />
                             {t('header.websocket')}
                           </Button>
                         </div>
@@ -260,14 +267,14 @@ export default function Setup() {
                   {t('header.times')}
                 </div>
                 <TooltipProvider delayDuration={150}>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <Button
                       size="sm"
                       onClick={() => handleGoLive(getLocalTimesUrl())}
-                      className="min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
+                      className="h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px]"
                       data-testid="go-to-times-button"
                     >
-                      <Play className="w-4 h-4" />
+                      <Play className="w-3.5 h-3.5" />
                       {t('header.local')}
                     </Button>
                     <Tooltip>
@@ -278,12 +285,12 @@ export default function Setup() {
                             onClick={() => handleGoLive(getWebSocketTimesUrl(wsChannelKey))}
                             disabled={!hasWebSocketOverlay}
                             className={hasWebSocketOverlay
-                              ? 'min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold disabled:opacity-100'
-                              : 'min-w-[108px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
+                              ? 'h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px] disabled:opacity-100'
+                              : 'h-8 min-w-[102px] px-2 bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold text-[11px] disabled:opacity-100'
                             }
                             data-testid="go-to-websocket-times-button"
                           >
-                            <Wifi className="w-4 h-4" />
+                            <Wifi className="w-3.5 h-3.5" />
                             {t('header.websocket')}
                           </Button>
                         </div>

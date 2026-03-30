@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useRallyMeta, useRallyWs } from '../contexts/RallyContext.jsx';
+import { useRallyMeta, useRallyTiming, useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { useSearchParams } from 'react-router-dom';
 import TimesTab from '../components/setup/TimesTab.jsx';
@@ -45,10 +45,27 @@ const getDisplayedStageSchedule = (stage) => {
   return stageDate || stageTime;
 };
 
+const buildStageSosCountMap = (stageSos = {}) => {
+  const counts = new Map();
+
+  Object.values(stageSos || {}).forEach((pilotStages) => {
+    Object.entries(pilotStages || {}).forEach(([stageId, enabled]) => {
+      if (!enabled) {
+        return;
+      }
+
+      counts.set(stageId, (counts.get(stageId) || 0) + 1);
+    });
+  });
+
+  return counts;
+};
+
 export default function Times() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const { stages } = useRallyMeta();
+  const { stageSos } = useRallyTiming();
   const { wsEnabled, wsConnectionStatus, wsLastMessageAt, connectWebSocket, setClientRole } = useRallyWs();
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [openStageIds, setOpenStageIds] = useState([]);
@@ -66,6 +83,7 @@ export default function Times() {
   }, [t]);
 
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
+  const stageSosCountByStageId = useMemo(() => buildStageSosCountMap(stageSos), [stageSos]);
   const selectedStage = sortedStages.find((stage) => stage.id === selectedStageId) || null;
 
   useEffect(() => {
@@ -159,6 +177,9 @@ export default function Times() {
 
   const headerStage = selectedStage;
   const StageIcon = headerStage ? getStageTypeIcon(headerStage.type) : Flag;
+  const headerStageHasSos = headerStage
+    ? (stageSosCountByStageId.get(headerStage.id) || 0) > 0
+    : false;
   const stageLabel = headerStage
     ? (isSpecialStageType(headerStage.type) ? getStageTitle(headerStage, ' - ') : headerStage.name)
     : t('times.selectStageToEdit');
@@ -216,15 +237,15 @@ export default function Times() {
         </TooltipProvider>
         <PerformanceLed className="w-2.5 h-2.5" />
       </div>
-      <div className="sticky top-0 z-30 bg-black/95 border-b border-[#FF4500] backdrop-blur-sm">
+      <div className={`sticky top-0 z-30 backdrop-blur-sm ${headerStageHasSos ? 'bg-[#2A0B0B]/95 border-b border-red-500/70' : 'bg-black/95 border-b border-[#FF4500]'}`}>
         <div className="max-w-5xl mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-3">
             <div className="flex items-start gap-3 min-w-0 flex-1">
-              <StageIcon className="w-6 h-6 text-[#FF4500] flex-shrink-0" />
+              <StageIcon className={`w-6 h-6 flex-shrink-0 ${headerStageHasSos ? 'text-red-400' : 'text-[#FF4500]'}`} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-xs uppercase text-zinc-400">
                   {selectedStageId ? (
-                    <Unlock className="w-3.5 h-3.5 text-[#22C55E]" />
+                    <Unlock className={`w-3.5 h-3.5 ${headerStageHasSos ? 'text-red-300' : 'text-[#22C55E]'}`} />
                   ) : (
                     <Lock className="w-3.5 h-3.5 text-zinc-500" />
                   )}

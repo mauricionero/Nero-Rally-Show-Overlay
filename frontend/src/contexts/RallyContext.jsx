@@ -125,7 +125,8 @@ const TIMING_PATCH_DEFAULT_VALUES = {
   positions: null,
   stagePilots: [],
   retiredStages: false,
-  stageAlerts: false
+  stageAlerts: false,
+  stageSos: false
 };
 const SETUP_TIMING_SECTION_SET = new Set(Object.keys(TIMING_PATCH_DEFAULT_VALUES));
 const TIMES_ROLE_TIMING_SECTION_KEYS = [
@@ -133,7 +134,8 @@ const TIMES_ROLE_TIMING_SECTION_KEYS = [
   'arrivalTimes',
   'startTimes',
   'realStartTimes',
-  'lapTimes'
+  'lapTimes',
+  'stageSos'
 ];
 const TIMES_ROLE_TIMING_SECTION_SET = new Set(TIMES_ROLE_TIMING_SECTION_KEYS);
 
@@ -605,6 +607,7 @@ export const RallyProvider = ({ children }) => {
   const [realStartTimes, setRealStartTimes] = useState(() => loadFromStorage('rally_real_start_times', {}));
   const [retiredStages, setRetiredStages] = useState(() => loadFromStorage('rally_retired_stages', {}));
   const [stageAlerts, setStageAlerts] = useState(() => loadFromStorage('rally_stage_alerts', {}));
+  const [stageSos, setStageSosState] = useState(() => loadFromStorage('rally_stage_sos', {}));
   const [mapPlacemarks, setMapPlacemarks] = useState(() => loadFromStorage('rally_map_placemarks', []));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
@@ -692,6 +695,7 @@ export const RallyProvider = ({ children }) => {
   const stagePilotsRef = useRef(stagePilots);
   const retiredStagesRef = useRef(retiredStages);
   const stageAlertsRef = useRef(stageAlerts);
+  const stageSosRef = useRef(stageSos);
   const autoDerivedStartTimesRef = useRef({});
   const previousSetupSyncStateRef = useRef({
     meta: {
@@ -718,6 +722,7 @@ export const RallyProvider = ({ children }) => {
     stagePilots,
     retiredStages,
     stageAlerts,
+    stageSos,
     mapPlacemarks,
     cameras,
     externalMedia,
@@ -1068,6 +1073,7 @@ export const RallyProvider = ({ children }) => {
     setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
     setRetiredStages(loadFromStorage('rally_retired_stages', {}));
     setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
+    setStageSosState(loadFromStorage('rally_stage_sos', {}));
     setMapPlacemarks(loadFromStorage('rally_map_placemarks', []));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setDebugDate(loadFromStorage('rally_debug_date', ''));
@@ -1170,6 +1176,7 @@ export const RallyProvider = ({ children }) => {
       setStagePilots(loadFromStorage('rally_stage_pilots', {}));
       setRetiredStages(loadFromStorage('rally_retired_stages', {}));
       setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
+      setStageSosState(loadFromStorage('rally_stage_sos', {}));
     }
 
     if (nextDomains.includes('maps')) {
@@ -1241,6 +1248,10 @@ export const RallyProvider = ({ children }) => {
   }, [stageAlerts]);
 
   useEffect(() => {
+    stageSosRef.current = stageSos;
+  }, [stageSos]);
+
+  useEffect(() => {
     const nextPendingSections = new Set(
       clientRole === 'times'
         ? (Array.isArray(dirtyTimingSections) ? dirtyTimingSections : [])
@@ -1270,6 +1281,8 @@ export const RallyProvider = ({ children }) => {
         return !!retiredStagesRef.current?.[pilotId]?.[stageId];
       case 'stageAlerts':
         return !!stageAlertsRef.current?.[pilotId]?.[stageId];
+      case 'stageSos':
+        return !!stageSosRef.current?.[pilotId]?.[stageId];
       default:
         return null;
     }
@@ -1356,6 +1369,23 @@ export const RallyProvider = ({ children }) => {
         break;
       case 'stageAlerts':
         setStageAlerts((prev) => {
+          const next = { ...prev };
+          const nextPilotStages = { ...(next[pilotId] || {}) };
+          if (value) {
+            nextPilotStages[stageId] = stageId;
+          } else {
+            delete nextPilotStages[stageId];
+          }
+          if (Object.keys(nextPilotStages).length > 0) {
+            next[pilotId] = nextPilotStages;
+          } else {
+            delete next[pilotId];
+          }
+          return next;
+        });
+        break;
+      case 'stageSos':
+        setStageSosState((prev) => {
           const next = { ...prev };
           const nextPilotStages = { ...(next[pilotId] || {}) };
           if (value) {
@@ -1956,6 +1986,7 @@ export const RallyProvider = ({ children }) => {
       || normalizedData.stagePilots !== undefined
       || normalizedData.retiredStages !== undefined
       || normalizedData.stageAlerts !== undefined
+      || normalizedData.stageSos !== undefined
     );
 
     if (wsRoleRef.current === 'setup' && isTimingPayload) {
@@ -1986,6 +2017,7 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.realStartTimes !== undefined && !shouldPreserveLocalTimingSection('realStartTimes')) setRealStartTimes(normalizedData.realStartTimes);
     if (normalizedData.retiredStages !== undefined && !shouldPreserveLocalTimingSection('retiredStages')) setRetiredStages(normalizedData.retiredStages);
     if (normalizedData.stageAlerts !== undefined && !shouldPreserveLocalTimingSection('stageAlerts')) setStageAlerts(normalizedData.stageAlerts);
+    if (normalizedData.stageSos !== undefined && !shouldPreserveLocalTimingSection('stageSos')) setStageSosState(normalizedData.stageSos);
     if (normalizedData.mapPlacemarks !== undefined) setMapPlacemarks(normalizedData.mapPlacemarks);
     if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
     if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
@@ -2083,6 +2115,7 @@ export const RallyProvider = ({ children }) => {
     realStartTimes,
     retiredStages,
     stageAlerts,
+    stageSos,
     mapPlacemarks,
     currentStageId,
     debugDate,
@@ -2111,6 +2144,7 @@ export const RallyProvider = ({ children }) => {
     realStartTimes,
     retiredStages,
     stageAlerts,
+    stageSos,
     mapPlacemarks,
     currentStageId,
     debugDate,
@@ -2249,6 +2283,7 @@ export const RallyProvider = ({ children }) => {
       { section: 'stagePilots', payload: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) } },
       { section: 'retiredStages', payload: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) } },
       { section: 'stageAlerts', payload: { stageAlerts: pruneEmptyNestedValues(snapshot.stageAlerts) } },
+      { section: 'stageSos', payload: { stageSos: pruneEmptyNestedValues(snapshot.stageSos) } },
       ...mapPlacemarkParts,
       { section: 'cameras', payload: { cameras: pruneEmptyNestedValues(snapshot.cameras) } },
       { section: 'externalMedia', payload: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) } },
@@ -2306,6 +2341,7 @@ export const RallyProvider = ({ children }) => {
       stagePilots: { stagePilots: pruneEmptyNestedValues(snapshot.stagePilots) },
       retiredStages: { retiredStages: pruneEmptyNestedValues(snapshot.retiredStages) },
       stageAlerts: { stageAlerts: pruneEmptyNestedValues(snapshot.stageAlerts) },
+      stageSos: { stageSos: pruneEmptyNestedValues(snapshot.stageSos) },
       mapPlacemarks: { mapPlacemarks: pruneEmptyNestedValues(getStageLinkedMapPlacemarks(snapshot.stages, snapshot.mapPlacemarks)) },
       cameras: { cameras: pruneEmptyNestedValues(snapshot.cameras) },
       externalMedia: { externalMedia: pruneEmptyNestedValues(snapshot.externalMedia) },
@@ -2333,7 +2369,8 @@ export const RallyProvider = ({ children }) => {
     'positions',
     'stagePilots',
     'retiredStages',
-    'stageAlerts'
+    'stageAlerts',
+    'stageSos'
   ]), []);
 
   const setupBaseSectionKeys = useMemo(() => ([
@@ -3433,6 +3470,15 @@ export const RallyProvider = ({ children }) => {
   }, [captureSetupPatchEntries, stageAlerts, updateDataVersion]);
 
   useEffect(() => {
+    const previousStageSos = previousSetupSyncStateRef.current.stageSos;
+    previousSetupSyncStateRef.current.stageSos = stageSos;
+    if (hydratingDomainsRef.current.has('timingExtra')) return;
+    localStorage.setItem('rally_stage_sos', JSON.stringify(stageSos));
+    updateDataVersion('timingExtra');
+    captureSetupPatchEntries('stageSos', diffTimingLineEntries('stageSos', previousStageSos, stageSos));
+  }, [captureSetupPatchEntries, stageSos, updateDataVersion]);
+
+  useEffect(() => {
     const previousMapPlacemarks = previousSetupSyncStateRef.current.mapPlacemarks;
     previousSetupSyncStateRef.current.mapPlacemarks = mapPlacemarks;
     if (hydratingDomainsRef.current.has('maps')) return;
@@ -4395,6 +4441,36 @@ export const RallyProvider = ({ children }) => {
     markTimingLineDirty('stageAlerts', pilotId, stageId);
   }, [clientRole, markTimingLineDirty, markTimingSectionDirty, setStageAlerts]);
 
+  const isStageSos = useCallback((pilotId, stageId) => (
+    !!stageSos?.[pilotId]?.[stageId]
+  ), [stageSos]);
+
+  const setStageSos = useCallback((pilotId, stageId, sos) => {
+    if (clientRole === 'times') {
+      return;
+    }
+    setStageSosState((prev) => {
+      const next = { ...prev };
+      const nextPilotStages = { ...(next[pilotId] || {}) };
+
+      if (sos) {
+        nextPilotStages[stageId] = stageId;
+      } else {
+        delete nextPilotStages[stageId];
+      }
+
+      if (Object.keys(nextPilotStages).length > 0) {
+        next[pilotId] = nextPilotStages;
+      } else {
+        delete next[pilotId];
+      }
+
+      return next;
+    });
+    markTimingSectionDirty('stageSos');
+    markTimingLineDirty('stageSos', pilotId, stageId);
+  }, [clientRole, markTimingLineDirty, markTimingSectionDirty]);
+
   // Stream configuration functions
   const getStreamConfig = (pilotId) => {
     return streamConfigs[pilotId] || {
@@ -4453,6 +4529,7 @@ export const RallyProvider = ({ children }) => {
       realStartTimes: loadFromStorage('rally_real_start_times', {}),
       retiredStages: loadFromStorage('rally_retired_stages', {}),
       stageAlerts: loadFromStorage('rally_stage_alerts', {}),
+      stageSos: loadFromStorage('rally_stage_sos', {}),
       timeDecimals: loadFromStorage('rally_time_decimals', 3),
       streamConfigs: loadFromStorage('rally_stream_configs', {}),
       globalAudio: loadFromStorage('rally_global_audio', { volume: 100, muted: false }),
@@ -4482,6 +4559,7 @@ export const RallyProvider = ({ children }) => {
       if (data.realStartTimes) setRealStartTimes(data.realStartTimes);
       if (data.retiredStages) setRetiredStages(data.retiredStages);
       if (data.stageAlerts) setStageAlerts(data.stageAlerts);
+      if (data.stageSos) setStageSosState(data.stageSos);
       if (data.timeDecimals !== undefined) {
         setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(data.timeDecimals) || 0))));
       }
@@ -4504,7 +4582,7 @@ export const RallyProvider = ({ children }) => {
       console.error('Error importing data:', error);
       return false;
     }
-  }, [setCategories, setCameras, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPilotTelemetryByPilotId, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [setCategories, setCameras, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPilotTelemetryByPilotId, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
   const clearAllData = useCallback(() => {
     setEventName('');
@@ -4520,6 +4598,7 @@ export const RallyProvider = ({ children }) => {
     setRealStartTimes({});
     setRetiredStages({});
     setStageAlerts({});
+    setStageSosState({});
     setMapPlacemarks([]);
     setPilotTelemetryByPilotId({});
     setDebugDate('');
@@ -4534,7 +4613,7 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl('');
     setTransitionImageUrl('');
     updateDataVersion(ALL_STORAGE_DOMAINS);
-  }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPilotTelemetryByPilotId, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPilotTelemetryByPilotId, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -4740,6 +4819,7 @@ export const RallyProvider = ({ children }) => {
     stagePilots,
     retiredStages,
     stageAlerts,
+    stageSos,
     timeDecimals,
     setTime,
     getTime,
@@ -4763,7 +4843,9 @@ export const RallyProvider = ({ children }) => {
     setRetiredFromStage,
     isRetiredStage,
     setStageAlert,
-    isStageAlert
+    isStageAlert,
+    setStageSos,
+    isStageSos
   }), [
     arrivalTimes,
     calculatePositions,
@@ -4789,15 +4871,18 @@ export const RallyProvider = ({ children }) => {
     setRealStartTime,
     setRetiredFromStage,
     setStageAlert,
+    setStageSos,
     setStagePilotsForStage,
     setStartTime,
     setTime,
     stageAlerts,
+    stageSos,
     stagePilots,
     startTimes,
     timeDecimals,
     times,
-    togglePilotInStage
+    togglePilotInStage,
+    isStageSos
   ]);
 
   const wsValue = useMemo(() => ({

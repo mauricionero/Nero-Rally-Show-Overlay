@@ -62,16 +62,43 @@ const computeGrade = ({ fpsScore, frameScore, longScore, stallScore }) => {
   return clamp(Math.round(normalized), 0, 10);
 };
 
-const getFpsScore = (fps, targetFps) => {
-  const safeTargetFps = Math.max(30, Number(targetFps) || 60);
-  const ratio = fps / safeTargetFps;
-  return (
-    ratio >= 0.97 ? 0
-      : ratio >= 0.9 ? 2
-      : ratio >= 0.75 ? 5
-      : ratio >= 0.55 ? 8
-      : 10
-  );
+const buildFpsScoreThresholds = (maxFps) => {
+  const safeMaxFps = Math.max(1, Number(maxFps) || 60);
+
+  return {
+    maxFps: safeMaxFps,
+    thresholds: [
+      safeMaxFps,
+      safeMaxFps - 1,
+      safeMaxFps - (safeMaxFps * 0.05),
+      safeMaxFps - (safeMaxFps * 0.1),
+      safeMaxFps - (safeMaxFps * 0.2),
+      safeMaxFps - (safeMaxFps * 0.3),
+      safeMaxFps - (safeMaxFps * 0.4),
+      safeMaxFps - (safeMaxFps * 0.5),
+      safeMaxFps - (safeMaxFps * 0.6),
+      safeMaxFps - (safeMaxFps * 0.8),
+      1
+    ]
+  };
+};
+
+const getFpsScore = (fps, fpsThresholds) => {
+  const currentFps = Math.max(0, Number(fps) || 0);
+  const thresholds = Array.isArray(fpsThresholds) ? fpsThresholds : [];
+
+  if (currentFps <= 1) return 10;
+  if (currentFps >= thresholds[0]) return 0;
+  if (currentFps >= thresholds[1]) return 1;
+  if (currentFps >= thresholds[2]) return 2;
+  if (currentFps >= thresholds[3]) return 3;
+  if (currentFps >= thresholds[4]) return 4;
+  if (currentFps >= thresholds[5]) return 5;
+  if (currentFps >= thresholds[6]) return 6;
+  if (currentFps >= thresholds[7]) return 7;
+  if (currentFps >= thresholds[8]) return 8;
+  if (currentFps >= thresholds[9]) return 9;
+  return 10;
 };
 
 const getFrameScore = (avgFrameMs) => {
@@ -142,6 +169,7 @@ export const usePerformanceHealth = ({ enabled = true } = {}) => {
   const lastTickRef = useRef(typeof performance !== 'undefined' ? performance.now() : Date.now());
   const observerRef = useRef(null);
   const targetFpsRef = useRef(getInitialTargetFps());
+  const fpsThresholdsRef = useRef(buildFpsScoreThresholds(targetFpsRef.current).thresholds);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -150,6 +178,7 @@ export const usePerformanceHealth = ({ enabled = true } = {}) => {
     detectRefreshRate().then((detected) => {
       if (!cancelled && Number.isFinite(detected)) {
         targetFpsRef.current = detected;
+        fpsThresholdsRef.current = buildFpsScoreThresholds(detected).thresholds;
       }
     });
 
@@ -216,7 +245,7 @@ export const usePerformanceHealth = ({ enabled = true } = {}) => {
         };
 
         // Scores always reflect the currently displayed raw values.
-        nextMetrics.fpsScore = getFpsScore(nextMetrics.fps, targetFps);
+        nextMetrics.fpsScore = getFpsScore(nextMetrics.fps, fpsThresholdsRef.current);
         nextMetrics.frameScore = getFrameScore(nextMetrics.avgFrameMs);
         nextMetrics.longScore = getLongScore(nextMetrics.longTaskCount, nextMetrics.longTaskWorst);
         nextMetrics.stallScore = getStallScore(nextMetrics.maxFrameMs);
