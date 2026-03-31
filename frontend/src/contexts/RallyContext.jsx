@@ -5,7 +5,7 @@ import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../utils/stageSchedule.js';
 import { isLapRaceStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
 import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
-import { normalizePilotId } from '../utils/pilotIdentity.js';
+import { getPilotTelemetryForId, normalizePilotId } from '../utils/pilotIdentity.js';
 import { compressMapPlacemarkForTransport } from '../utils/mapPlacemarkCompression.js';
 
 const RallyContext = createContext();
@@ -105,7 +105,7 @@ const loadSplitStageTimingMapFromStorage = (storagePrefix, legacyKey = null) => 
 const STORAGE_DOMAIN_VERSION_KEYS = {
   meta: 'rally_meta_version',
   pilots: 'rally_pilots_version',
-  pilotTelemetry: 'rally_pilot_telemetry_version',
+  pilotTelemetry: 'rally_pilots_telemetry_version',
   categories: 'rally_categories_version',
   stages: 'rally_stages_version',
   timingCore: 'rally_timing_core_version',
@@ -114,6 +114,8 @@ const STORAGE_DOMAIN_VERSION_KEYS = {
   streams: 'rally_streams_version',
   media: 'rally_media_version'
 };
+const PILOT_TELEMETRY_STORAGE_KEY = 'rally_pilots_telemetry';
+const LEGACY_PILOT_TELEMETRY_STORAGE_KEY = 'rally_pilot_telemetry';
 const PERIODIC_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 const SETUP_PATCH_MESSAGE_MAX_BYTES = 45000;
 const TIMING_PATCH_DEFAULT_VALUES = {
@@ -154,7 +156,6 @@ const MOBILE_TIMING_SNAPSHOT_SECTION_KEYS = [
 ];
 const ALL_SNAPSHOT_SECTION_KEYS = [
   ...SNAPSHOT_CORE_SECTION_KEYS,
-  'pilotTelemetry',
   'times',
   'arrivalTimes',
   'startTimes',
@@ -709,19 +710,6 @@ const getDefaultSnapshotSectionsForRequester = (requesterRole = '') => {
   return null;
 };
 
-const buildPilotTelemetryPayload = (telemetry = {}) => {
-  const payload = {};
-
-  if (telemetry.latLong !== undefined) payload.latLong = telemetry.latLong;
-  if (telemetry.latlongTimestamp !== undefined) payload.latlongTimestamp = telemetry.latlongTimestamp;
-  if (telemetry.lastLatLongUpdatedAt !== undefined) payload.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt;
-  if (telemetry.speed !== undefined) payload.speed = telemetry.speed;
-  if (telemetry.heading !== undefined) payload.heading = telemetry.heading;
-  if (telemetry.lastTelemetryAt !== undefined) payload.lastTelemetryAt = telemetry.lastTelemetryAt;
-
-  return payload;
-};
-
 const getStageLinkedMapPlacemarks = (stages = [], mapPlacemarks = []) => {
   const linkedPlacemarkIds = new Set(
     (Array.isArray(stages) ? stages : [])
@@ -740,7 +728,7 @@ export const RallyProvider = ({ children }) => {
   const [stagePilots, setStagePilots] = useState(() => loadFromStorage('rally_stage_pilots', {})); // stageId -> [pilotIds] (for lap race pilot selection)
   
   const [pilots, setPilots] = useState(() => loadFromStorage('rally_pilots', []));
-  const [pilotTelemetryByPilotId, setPilotTelemetryByPilotId] = useState(() => loadFromStorage('rally_pilot_telemetry', {}));
+  const [pilotTelemetryByPilotId, setPilotTelemetryByPilotId] = useState({});
   const [categories, setCategories] = useState(() => loadFromStorage('rally_categories', []));
   const [stages, setStages] = useState(() => loadFromStorage('rally_stages', []));
   const [times, setTimes] = useState(() => loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map);
@@ -830,9 +818,8 @@ export const RallyProvider = ({ children }) => {
   const pilotsRef = useRef(pilots);
   const stagesRef = useRef(stages);
   const pilotTelemetryByPilotIdRef = useRef(pilotTelemetryByPilotId);
-  const pilotTelemetryQueueRef = useRef(new Map());
-  const pilotTelemetryFlushTimerRef = useRef(null);
-  const pilotTelemetrySyncSuppressionRef = useRef(0);
+  const pilotTelemetryStorageCacheRef = useRef(null);
+  const pilotTelemetryStorageLoadedRef = useRef(false);
   const timesPersistedStageIdsRef = useRef(loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').stageIds);
   const timesPersistenceTimerRef = useRef(null);
   const logicalTimestampRef = useRef(loadFromStorage('rally_logical_timestamp', 0));
@@ -861,7 +848,6 @@ export const RallyProvider = ({ children }) => {
       globalAudio
     },
     pilots,
-    pilotTelemetry: pilotTelemetryByPilotId,
     categories,
     stages,
     times,
@@ -892,6 +878,71 @@ export const RallyProvider = ({ children }) => {
     pilotTelemetryByPilotIdRef.current = pilotTelemetryByPilotId;
   }, [pilotTelemetryByPilotId]);
 
+  const readPersistedPilotTelemetry = useCallback(() => {
+    if (pilotTelemetryStorageLoadedRef.current) {
+      return pilotTelemetryStorageCacheRef.current || {};
+    }
+
+    const storedTelemetry = loadFromStorage(PILOT_TELEMETRY_STORAGE_KEY, null);
+    const nextTelemetry = storedTelemetry && typeof storedTelemetry === 'object'
+      ? storedTelemetry
+      : loadFromStorage(LEGACY_PILOT_TELEMETRY_STORAGE_KEY, {});
+
+    pilotTelemetryStorageCacheRef.current = nextTelemetry && typeof nextTelemetry === 'object' ? nextTelemetry : {};
+    pilotTelemetryStorageLoadedRef.current = true;
+    console.info('[read localStorage]', PILOT_TELEMETRY_STORAGE_KEY, {
+      pilotCount: Object.keys(pilotTelemetryStorageCacheRef.current || {}).length
+    });
+
+    return pilotTelemetryStorageCacheRef.current || {};
+  }, []);
+
+  const getPilotTelemetrySnapshot = useCallback((allowStorage = wsConnectionStatus !== 'connected') => {
+    const liveTelemetry = pilotTelemetryByPilotIdRef.current || {};
+
+    if (!allowStorage) {
+      return liveTelemetry;
+    }
+
+    const storedTelemetry = readPersistedPilotTelemetry();
+    return {
+      ...storedTelemetry,
+      ...liveTelemetry
+    };
+  }, [readPersistedPilotTelemetry, wsConnectionStatus]);
+
+  function writePilotTelemetryStorage(snapshot = null) {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    const nextSnapshot = snapshot || getPilotTelemetrySnapshot();
+    pilotTelemetryStorageCacheRef.current = nextSnapshot;
+    pilotTelemetryStorageLoadedRef.current = true;
+    window.localStorage.setItem(PILOT_TELEMETRY_STORAGE_KEY, JSON.stringify(nextSnapshot));
+    window.localStorage.removeItem(LEGACY_PILOT_TELEMETRY_STORAGE_KEY);
+    console.info('[write localStorage]', PILOT_TELEMETRY_STORAGE_KEY, {
+      pilotCount: Object.keys(nextSnapshot || {}).length
+    });
+    updateDataVersion('pilotTelemetry');
+  }
+
+  function publishPilotTelemetryMessage(pilotId, telemetry) {
+    if (!wsEnabled || !wsCanPublish || wsRoleRef.current !== 'setup' || !wsProvider.current?.isConnected) {
+      return;
+    }
+
+    wsProvider.current.publish({
+      messageType: 'pilot-telemetry',
+      source: 'setup-relay',
+      pilotId: normalizePilotId(pilotId),
+      ...telemetry,
+      timestamp: getNextLogicalTimestamp()
+    }).catch((error) => {
+      console.error('[WebSocket] Pilot telemetry publish failed', error);
+    });
+  }
+
   const mergePilotTelemetryEntries = useCallback((entries = [], options = {}) => {
     const safeEntries = Array.isArray(entries)
       ? entries
@@ -900,26 +951,22 @@ export const RallyProvider = ({ children }) => {
       : [];
 
     if (safeEntries.length === 0) {
-      return;
+      return pilotTelemetryByPilotIdRef.current || {};
     }
 
-    if (options.suppressSync) {
-      pilotTelemetrySyncSuppressionRef.current += 1;
-    }
+    const next = options.replace ? {} : { ...(pilotTelemetryByPilotIdRef.current || {}) };
 
-    setPilotTelemetryByPilotId((prev) => {
-      const next = options.replace ? {} : { ...(prev || {}) };
-
-      safeEntries.forEach(([pilotId, telemetry]) => {
-        next[pilotId] = {
-          ...(!options.replace ? (next[pilotId] || {}) : {}),
-          ...telemetry
-        };
-      });
-
-      pilotTelemetryByPilotIdRef.current = next;
-      return next;
+    safeEntries.forEach(([pilotId, telemetry]) => {
+      next[pilotId] = {
+        ...(!options.replace ? (next[pilotId] || {}) : {}),
+        ...telemetry
+      };
     });
+
+    pilotTelemetryByPilotIdRef.current = next;
+    setPilotTelemetryByPilotId(next);
+
+    return next;
   }, []);
 
   const getNextLogicalTimestamp = useCallback(() => {
@@ -1096,118 +1143,6 @@ export const RallyProvider = ({ children }) => {
     }
   }, []);
 
-  const flushPilotTelemetryQueue = useCallback(() => {
-    if (pilotTelemetryQueueRef.current.size === 0) {
-      return;
-    }
-
-    const updatesByPilotId = new Map(pilotTelemetryQueueRef.current);
-    pilotTelemetryQueueRef.current.clear();
-    const nextTelemetryByPilotId = { ...(pilotTelemetryByPilotIdRef.current || {}) };
-    let shouldRelayTelemetry = false;
-
-    updatesByPilotId.forEach((telemetry, pilotId) => {
-      if (!pilotId || !telemetry) {
-        return;
-      }
-
-      const normalizedPilotId = normalizePilotId(pilotId);
-      const currentTelemetry = nextTelemetryByPilotId[normalizedPilotId] || {};
-      const nextTelemetry = { ...currentTelemetry };
-
-      if (Object.prototype.hasOwnProperty.call(telemetry, 'latLong')) {
-        const normalizedLatLong = normalizeLatLongString(telemetry.latLong || '');
-        nextTelemetry.latLong = normalizedLatLong;
-
-        if (!parseLatLongString(normalizedLatLong)) {
-          nextTelemetry.lastLatLongUpdatedAt = null;
-        } else if (normalizedLatLong !== normalizeLatLongString(currentTelemetry.latLong || '')) {
-          nextTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt ?? telemetry.latlongTimestamp ?? Date.now();
-        }
-      }
-
-      if (telemetry.latlongTimestamp !== undefined || telemetry.lastLatLongUpdatedAt !== undefined) {
-        const timestampValue = telemetry.latlongTimestamp ?? telemetry.lastLatLongUpdatedAt;
-        nextTelemetry.latlongTimestamp = timestampValue;
-        nextTelemetry.lastLatLongUpdatedAt = timestampValue;
-      }
-
-      if (telemetry.speed !== undefined) {
-        nextTelemetry.speed = telemetry.speed;
-      }
-
-      if (telemetry.heading !== undefined) {
-        nextTelemetry.heading = telemetry.heading;
-      }
-
-      if (telemetry.lastTelemetryAt !== undefined) {
-        nextTelemetry.lastTelemetryAt = telemetry.lastTelemetryAt;
-      }
-
-      if (telemetry.source) {
-        nextTelemetry.source = telemetry.source;
-      }
-
-      nextTelemetryByPilotId[normalizedPilotId] = nextTelemetry;
-      if (normalizeMessageSource(telemetry.source) === 'android-app') {
-        shouldRelayTelemetry = true;
-      }
-
-      console.debug('[Telemetry] Applied pilot telemetry relation', {
-        pilotId: normalizedPilotId,
-        source: telemetry.source || 'unknown',
-        latLong: nextTelemetry.latLong || '',
-        lastTelemetryAt: nextTelemetry.lastTelemetryAt || null
-      });
-    });
-
-    setPilotTelemetryByPilotId(nextTelemetryByPilotId);
-
-    if (shouldRelayTelemetry && wsEnabled && wsRoleRef.current === 'setup' && wsCanPublish && wsProvider.current?.isConnected) {
-      wsProvider.current.publish({
-        messageType: 'sync-update',
-        section: 'pilotTelemetry',
-        source: 'setup-relay',
-        payload: {
-          pilotTelemetry: updatesByPilotId.size > 0
-            ? Object.fromEntries(Array.from(updatesByPilotId.entries()).map(([pilotId, telemetry]) => ([
-                normalizePilotId(pilotId),
-                buildPilotTelemetryPayload(telemetry)
-              ])))
-            : {}
-        },
-        timestamp: getNextLogicalTimestamp()
-      }).catch((error) => {
-        console.error('[WebSocket] Pilot telemetry relay failed', error);
-      });
-    }
-
-    window.setTimeout(() => {
-      if (suppressPilotPublishRef.current > 0) {
-        suppressPilotPublishRef.current -= 1;
-      }
-    }, 0);
-  }, [getNextLogicalTimestamp, wsCanPublish, wsEnabled]);
-
-  useEffect(() => {
-    return () => {
-      if (pilotTelemetryFlushTimerRef.current) {
-        clearTimeout(pilotTelemetryFlushTimerRef.current);
-      }
-    };
-  }, []);
-
-  const schedulePilotTelemetryFlush = useCallback(() => {
-    if (pilotTelemetryFlushTimerRef.current) {
-      return;
-    }
-
-    pilotTelemetryFlushTimerRef.current = window.setTimeout(() => {
-      pilotTelemetryFlushTimerRef.current = null;
-      flushPilotTelemetryQueue();
-    }, 1000);
-  }, [flushPilotTelemetryQueue]);
-
   const buildTimingLineKey = useCallback((section, pilotId = null, stageId = null) => (
     `${section}:${pilotId ?? '_'}:${stageId ?? '_'}`
   ), []);
@@ -1219,7 +1154,9 @@ export const RallyProvider = ({ children }) => {
     setLapTimes(loadFromStorage('rally_lap_times', {}));
     setStagePilots(loadFromStorage('rally_stage_pilots', {}));
     setPilots(loadFromStorage('rally_pilots', []));
-    setPilotTelemetryByPilotId(loadFromStorage('rally_pilot_telemetry', {}));
+    pilotTelemetryStorageLoadedRef.current = false;
+    pilotTelemetryStorageCacheRef.current = null;
+    setPilotTelemetryByPilotId(wsConnectionStatus === 'connected' ? {} : readPersistedPilotTelemetry());
     setCategories(loadFromStorage('rally_categories', []));
     setStages(loadFromStorage('rally_stages', []));
     setTimes(loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map);
@@ -1246,7 +1183,7 @@ export const RallyProvider = ({ children }) => {
     setGlobalAudio(loadFromStorage('rally_global_audio', { volume: 100, muted: false }));
     setCameras(loadFromStorage('rally_cameras', []));
     setDataVersion(Date.now());
-  }, [wsRole]);
+  }, [readPersistedPilotTelemetry, wsConnectionStatus]);
 
   const wasSetupTimingSectionTouchedRecently = useCallback((sectionKey, now = Date.now()) => {
     if (clientRole !== 'setup') {
@@ -1294,8 +1231,11 @@ export const RallyProvider = ({ children }) => {
     }
 
     if (nextDomains.includes('pilotTelemetry')) {
-      hydratingDomainsRef.current.add('pilotTelemetry');
-      setPilotTelemetryByPilotId(loadFromStorage('rally_pilot_telemetry', {}));
+      pilotTelemetryStorageLoadedRef.current = false;
+      pilotTelemetryStorageCacheRef.current = null;
+      if (wsConnectionStatus !== 'connected') {
+        setPilotTelemetryByPilotId(readPersistedPilotTelemetry());
+      }
     }
 
     if (nextDomains.includes('categories')) {
@@ -1985,108 +1925,6 @@ export const RallyProvider = ({ children }) => {
         }
 
         mergePilotTelemetryEntries([[pilotId, immediateTelemetry]], { suppressSync: true });
-
-        const queuedTelemetry = {
-          ...(pilotTelemetryQueueRef.current.get(pilotId) || {}),
-          lastTelemetryAt: telemetryReceivedAt,
-          source: telemetrySource || (pilotTelemetryQueueRef.current.get(pilotId)?.source || '')
-        };
-
-        if (normalizedData.latLong !== undefined) {
-          queuedTelemetry.latLong = normalizedData.latLong;
-        }
-
-        if (telemetryTimestamp !== undefined) {
-          queuedTelemetry.latlongTimestamp = telemetryTimestamp;
-          queuedTelemetry.lastLatLongUpdatedAt = telemetryTimestamp;
-        }
-
-        if (normalizedData.speed !== undefined) {
-          queuedTelemetry.speed = normalizedData.speed;
-        }
-
-        if (normalizedData.heading !== undefined) {
-          queuedTelemetry.heading = normalizedData.heading;
-        }
-
-        pilotTelemetryQueueRef.current.set(pilotId, queuedTelemetry);
-        schedulePilotTelemetryFlush();
-      }
-
-      setWsLastMessageAt(Date.now());
-      isPublishing.current = true;
-      setTimeout(() => {
-        isPublishing.current = false;
-      }, 0);
-      return;
-    }
-
-    if (data?.section === 'pilotTelemetry' && normalizedData?.pilotTelemetry && typeof normalizedData.pilotTelemetry === 'object') {
-      const pilotTelemetryEntries = Object.entries(normalizedData.pilotTelemetry).map(([pilotId, telemetry]) => [
-        normalizePilotId(pilotId),
-        telemetry
-      ]);
-      const telemetrySource = normalizeMessageSource(
-        normalizedData.source
-        || normalizedData.origin
-        || normalizedData.clientSource
-        || data?.source
-        || data?.origin
-        || data?.clientSource
-      );
-
-      if (telemetrySource && !TRUSTED_PILOT_TELEMETRY_SOURCES.has(telemetrySource)) {
-        console.debug('[Telemetry] Ignoring pilot telemetry relay from untrusted source', {
-          source: telemetrySource
-        });
-        setWsLastMessageAt(Date.now());
-        isPublishing.current = true;
-        setTimeout(() => {
-          isPublishing.current = false;
-        }, 0);
-        return;
-      }
-
-      const nextTelemetryEntries = pilotTelemetryEntries.map(([pilotId, telemetry]) => {
-        if (!pilotId || !telemetry || typeof telemetry !== 'object') {
-          return null;
-        }
-
-        const nextTelemetry = {
-          ...(pilotTelemetryByPilotIdRef.current?.[pilotId] || {}),
-          lastTelemetryAt: Number(telemetry.lastTelemetryAt || Date.now())
-        };
-
-        if (telemetry.latLong !== undefined) {
-          nextTelemetry.latLong = telemetry.latLong;
-        }
-
-        if (telemetry.latlongTimestamp !== undefined) {
-          nextTelemetry.latlongTimestamp = telemetry.latlongTimestamp;
-          nextTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt ?? telemetry.latlongTimestamp;
-        } else if (telemetry.lastLatLongUpdatedAt !== undefined) {
-          nextTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt;
-        }
-
-        if (telemetry.speed !== undefined) {
-          nextTelemetry.speed = telemetry.speed;
-        }
-
-        if (telemetry.heading !== undefined) {
-          nextTelemetry.heading = telemetry.heading;
-        }
-
-        nextTelemetry.source = telemetrySource || 'setup-relay';
-        return [pilotId, nextTelemetry];
-      }).filter(Boolean);
-
-      mergePilotTelemetryEntries(nextTelemetryEntries, { suppressSync: true });
-
-      if (pilotTelemetryEntries.length > 0) {
-        console.debug('[Telemetry] Received pilotTelemetry relay', {
-          count: pilotTelemetryEntries.length,
-          source: telemetrySource || 'unknown'
-        });
       }
 
       setWsLastMessageAt(Date.now());
@@ -2199,12 +2037,6 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.lapTimes !== undefined && !shouldPreserveLocalTimingSection('lapTimes')) setLapTimes(normalizedData.lapTimes);
     if (normalizedData.stagePilots !== undefined && !shouldPreserveLocalTimingSection('stagePilots')) setStagePilots(normalizedData.stagePilots);
     if (normalizedData.pilots !== undefined) setPilots(normalizedData.pilots);
-    if (normalizedData.pilotTelemetry !== undefined) {
-      mergePilotTelemetryEntries(Object.entries(normalizedData.pilotTelemetry || {}), {
-        suppressSync: true,
-        replace: true
-      });
-    }
     if (normalizedData.categories !== undefined) setCategories(normalizedData.categories);
     if (normalizedData.stages !== undefined) setStages(normalizedData.stages);
     if (normalizedData.times !== undefined && !shouldPreserveLocalTimingSection('times')) setTimes(normalizedData.times);
@@ -2245,7 +2077,7 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 0);
-  }, [applySetupPatchEntry, buildTimingLineKey, getNextLogicalTimestamp, mergePilotTelemetryEntries, schedulePilotTelemetryFlush, setTimingLineValue, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
+  }, [applySetupPatchEntry, buildTimingLineKey, getNextLogicalTimestamp, mergePilotTelemetryEntries, setTimingLineValue, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
 
   // Listen for external data updates
   useEffect(() => {
@@ -2314,7 +2146,6 @@ export const RallyProvider = ({ children }) => {
     lapTimes,
     stagePilots,
     pilots,
-    pilotTelemetry: pilotTelemetryByPilotId,
     categories,
     stages,
     times,
@@ -2343,7 +2174,6 @@ export const RallyProvider = ({ children }) => {
     lapTimes,
     stagePilots,
     pilots,
-    pilotTelemetryByPilotId,
     categories,
     stages,
     times,
@@ -2480,7 +2310,6 @@ export const RallyProvider = ({ children }) => {
         globalAudio: snapshot.globalAudio
       } },
       { section: 'pilots', payload: { pilots: pruneEmptyNestedValues(snapshot.pilots) } },
-      { section: 'pilotTelemetry', payload: { pilotTelemetry: pruneEmptyNestedValues(snapshot.pilotTelemetry) } },
       { section: 'categories', payload: { categories: pruneEmptyNestedValues(snapshot.categories) } },
       ...stageParts,
       { section: 'arrivalTimes', payload: { arrivalTimes: pruneEmptyNestedValues(snapshot.arrivalTimes) } },
@@ -2499,9 +2328,9 @@ export const RallyProvider = ({ children }) => {
     ];
 
     const allPartsWithStages = [
-      ...allParts.slice(0, 5),
+      ...allParts.slice(0, 4),
       ...timesStageParts,
-      ...allParts.slice(5)
+      ...allParts.slice(4)
     ];
 
     const parts = Array.isArray(allowedSections) && allowedSections.length > 0
@@ -2537,7 +2366,6 @@ export const RallyProvider = ({ children }) => {
         globalAudio: snapshot.globalAudio
       },
       pilots: { pilots: pruneEmptyNestedValues(snapshot.pilots) },
-      pilotTelemetry: { pilotTelemetry: pruneEmptyNestedValues(snapshot.pilotTelemetry) },
       categories: { categories: pruneEmptyNestedValues(snapshot.categories) },
       stages: { stages: pruneEmptyNestedValues(snapshot.stages) },
       times: { times: pruneEmptyNestedValues(snapshot.times) },
@@ -2584,7 +2412,6 @@ export const RallyProvider = ({ children }) => {
   const setupBaseSectionKeys = useMemo(() => ([
     'meta',
     'pilots',
-    'pilotTelemetry',
     'categories',
     'stages',
     'mapPlacemarks',
@@ -3653,19 +3480,6 @@ export const RallyProvider = ({ children }) => {
   }, [captureSetupPatchEntries, pilots, updateDataVersion]);
 
   useEffect(() => {
-    const previousPilotTelemetry = previousSetupSyncStateRef.current.pilotTelemetry;
-    previousSetupSyncStateRef.current.pilotTelemetry = pilotTelemetryByPilotId;
-    if (hydratingDomainsRef.current.has('pilotTelemetry')) return;
-    localStorage.setItem('rally_pilot_telemetry', JSON.stringify(pilotTelemetryByPilotId));
-    if (pilotTelemetrySyncSuppressionRef.current > 0) {
-      pilotTelemetrySyncSuppressionRef.current -= 1;
-      return;
-    }
-    updateDataVersion('pilotTelemetry');
-    captureSetupPatchEntries('pilotTelemetry', diffKeyedEntityEntries('pilotTelemetry', previousPilotTelemetry, pilotTelemetryByPilotId));
-  }, [captureSetupPatchEntries, pilotTelemetryByPilotId, updateDataVersion]);
-
-  useEffect(() => {
     const previousCategories = previousSetupSyncStateRef.current.categories;
     previousSetupSyncStateRef.current.categories = categories;
     if (hydratingDomainsRef.current.has('categories')) return;
@@ -4152,12 +3966,20 @@ export const RallyProvider = ({ children }) => {
       normalizedTelemetry.source = telemetry.source;
     }
 
-    mergePilotTelemetryEntries([[normalizePilotId(pilotId), normalizedTelemetry]]);
-  }, [mergePilotTelemetryEntries]);
+    const nextTelemetry = mergePilotTelemetryEntries([[normalizePilotId(pilotId), normalizedTelemetry]]);
+    writePilotTelemetryStorage(nextTelemetry);
+    publishPilotTelemetryMessage(pilotId, normalizedTelemetry);
+
+    return nextTelemetry;
+  }, [mergePilotTelemetryEntries, publishPilotTelemetryMessage]);
 
   const getPilotTelemetry = useCallback((pilotId) => (
-    pilotTelemetryByPilotIdRef.current?.[normalizePilotId(pilotId)] || pilotTelemetryByPilotIdRef.current?.[pilotId] || {}
+    getPilotTelemetryForId(pilotTelemetryByPilotIdRef.current || {}, pilotId)
   ), []);
+
+  const getPersistedPilotTelemetry = useCallback((pilotId, allowStorage = wsConnectionStatus !== 'connected') => (
+    getPilotTelemetryForId(getPilotTelemetrySnapshot(allowStorage), pilotId)
+  ), [getPilotTelemetrySnapshot, wsConnectionStatus]);
 
   const deletePilot = (id) => {
     setPilots(prev => prev.filter(p => p.id !== id));
@@ -4787,7 +4609,7 @@ export const RallyProvider = ({ children }) => {
       lapTimes: loadFromStorage('rally_lap_times', {}),
       stagePilots: loadFromStorage('rally_stage_pilots', {}),
       pilots: loadFromStorage('rally_pilots', []),
-      pilotTelemetry: loadFromStorage('rally_pilot_telemetry', {}),
+      pilotsTelemetry: getPilotTelemetrySnapshot(),
       categories: loadFromStorage('rally_categories', []),
       stages: loadFromStorage('rally_stages', []),
       times: loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map,
@@ -4811,13 +4633,21 @@ export const RallyProvider = ({ children }) => {
       exportDate: new Date().toISOString()
     };
     return JSON.stringify(data, null, 2);
-  }, [dataVersion]);
+  }, [dataVersion, getPilotTelemetrySnapshot]);
 
   const importData = useCallback((jsonString) => {
     try {
       const data = JSON.parse(jsonString);
       if (data.pilots) setPilots(data.pilots);
-      if (data.pilotTelemetry) setPilotTelemetryByPilotId(data.pilotTelemetry);
+      const importedPilotTelemetry = data.pilotsTelemetry || data.pilotTelemetry;
+      if (importedPilotTelemetry) {
+        setPilotTelemetryByPilotId(importedPilotTelemetry);
+        writePilotTelemetryStorage(importedPilotTelemetry);
+      } else {
+        setPilotTelemetryByPilotId({});
+        pilotTelemetryStorageCacheRef.current = {};
+        pilotTelemetryStorageLoadedRef.current = false;
+      }
       if (data.categories) setCategories(data.categories);
       if (data.stages) setStages(data.stages);
       if (data.times) setTimes(data.times);
@@ -4868,6 +4698,8 @@ export const RallyProvider = ({ children }) => {
     setStageSosState({});
     setMapPlacemarks([]);
     setPilotTelemetryByPilotId({});
+    pilotTelemetryStorageCacheRef.current = {};
+    pilotTelemetryStorageLoadedRef.current = false;
     setDebugDate('');
     setTimeDecimals(3);
     setStreamConfigs({});
@@ -4879,6 +4711,11 @@ export const RallyProvider = ({ children }) => {
     setMapUrl('');
     setLogoUrl('');
     setTransitionImageUrl('');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(PILOT_TELEMETRY_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_PILOT_TELEMETRY_STORAGE_KEY);
+    }
+    updateDataVersion('pilotTelemetry');
     updateDataVersion(ALL_STORAGE_DOMAINS);
   }, [setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPilotTelemetryByPilotId, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
 
@@ -4952,6 +4789,7 @@ export const RallyProvider = ({ children }) => {
     updatePilot,
     setPilotTelemetry,
     getPilotTelemetry,
+    getPersistedPilotTelemetry,
     deletePilot,
     togglePilotActive,
     // Camera operations
@@ -5035,6 +4873,7 @@ export const RallyProvider = ({ children }) => {
     updatePilot,
     setPilotTelemetry,
     getPilotTelemetry,
+    getPersistedPilotTelemetry,
     deletePilot,
     togglePilotActive,
     addExternalMedia,
@@ -5062,6 +4901,7 @@ export const RallyProvider = ({ children }) => {
     updatePilot,
     setPilotTelemetry,
     getPilotTelemetry,
+    getPersistedPilotTelemetry,
     deletePilot,
     togglePilotActive,
     addExternalMedia,

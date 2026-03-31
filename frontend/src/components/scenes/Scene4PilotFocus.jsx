@@ -143,7 +143,7 @@ function Scene4StageTimeValue({
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId
+    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, getPersistedPilotTelemetry
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -154,7 +154,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const [selectedMainFeedValue, setSelectedMainFeedValue] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedMainFeedValue: 'none' }).selectedMainFeedValue);
   const currentTime = useSecondAlignedClock();
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
-  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, getPersistedPilotTelemetry), [pilots, categories, getPersistedPilotTelemetry]);
 
   useEffect(() => {
     if (!selectedPilotId && pilots.length > 0) {

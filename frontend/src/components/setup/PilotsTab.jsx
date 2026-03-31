@@ -14,7 +14,7 @@ import { CategoryBar } from '../CategoryBadge.jsx';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2 } from 'lucide-react';
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
-import { getPilotTelemetryForId, normalizePilotId } from '../../utils/pilotIdentity.js';
+import { normalizePilotId } from '../../utils/pilotIdentity.js';
 
 const escapeCsvValue = (value) => {
   const stringValue = String(value ?? '');
@@ -44,7 +44,7 @@ export default function PilotsTab({ hideStreams = false }) {
     updatePilot,
     setPilotTelemetry,
     getPilotTelemetry,
-    pilotTelemetryByPilotId,
+    getPersistedPilotTelemetry,
     deletePilot,
     togglePilotActive
   } = useRallyConfig();
@@ -74,7 +74,7 @@ export default function PilotsTab({ hideStreams = false }) {
     if (!livePilot) {
       return;
     }
-    const liveTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, livePilot.id);
+    const liveTelemetry = getPersistedPilotTelemetry(livePilot.id);
 
     setEditingPilot((prev) => {
       if (!prev || prev.id !== livePilot.id) {
@@ -91,7 +91,7 @@ export default function PilotsTab({ hideStreams = false }) {
         lastTelemetryAt: liveTelemetry.lastTelemetryAt ?? prev.lastTelemetryAt ?? ''
       };
     });
-  }, [editingPilot?.id, pilotDialogOpen, pilotTelemetryByPilotId, pilots]);
+  }, [editingPilot?.id, pilotDialogOpen, getPersistedPilotTelemetry, pilots]);
 
   const handleAddPilot = () => {
     if (!newPilot.name.trim()) {
@@ -157,21 +157,20 @@ export default function PilotsTab({ hideStreams = false }) {
     () => new Map(categories.map((category) => [category.id, category])),
     [categories]
   );
-  const getPilotTelemetryDisplay = (pilotId) => getPilotTelemetryForId(pilotTelemetryByPilotId, pilotId);
   const exportColumns = useMemo(() => ([
     { id: 'name', label: t('pilots.pilotName'), getValue: (pilot) => pilot.name || '' },
     { id: 'team', label: t('pilots.team'), getValue: (pilot) => pilot.team || '' },
     { id: 'car', label: t('pilots.car'), getValue: (pilot) => pilot.car || '' },
     { id: 'carNumber', label: t('pilots.carNumber'), getValue: (pilot) => pilot.carNumber || '' },
-    { id: 'latLong', label: t('pilots.latLong'), getValue: (pilot) => (getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id)?.latLong || pilot.latLong || '') },
-    { id: 'lastLatLongUpdatedAt', label: t('pilots.lastLatLongUpdatedAt'), getValue: (pilot) => (getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id)?.lastLatLongUpdatedAt || getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id)?.latlongTimestamp || pilot.lastLatLongUpdatedAt || '') },
+    { id: 'latLong', label: t('pilots.latLong'), getValue: (pilot) => (getPilotTelemetry(pilot.id)?.latLong || pilot.latLong || '') },
+    { id: 'lastLatLongUpdatedAt', label: t('pilots.lastLatLongUpdatedAt'), getValue: (pilot) => (getPilotTelemetry(pilot.id)?.lastLatLongUpdatedAt || getPilotTelemetry(pilot.id)?.latlongTimestamp || pilot.lastLatLongUpdatedAt || '') },
     { id: 'category', label: t('pilots.category'), getValue: (pilot) => categoryById.get(pilot.categoryId)?.name || '' },
     { id: 'startOrder', label: t('pilots.startOrder'), getValue: (pilot) => pilot.startOrder ?? '' },
     { id: 'timeOffsetMinutes', label: t('pilots.timeOffsetMinutes'), getValue: (pilot) => pilot.timeOffsetMinutes ?? '' },
     { id: 'picture', label: t('pilots.pictureUrl'), getValue: (pilot) => pilot.picture || '' },
     { id: 'streamUrl', label: t('pilots.streamUrl'), getValue: (pilot) => pilot.streamUrl || '' },
     { id: 'isActive', label: t('pilots.activeStatus'), getValue: (pilot) => (pilot.isActive ? t('status.active') : t('status.inactive')) }
-  ]), [categoryById, pilotTelemetryByPilotId, t]);
+  ]), [categoryById, getPilotTelemetry, t]);
 
   const toggleExportColumn = (columnId) => {
     setSelectedExportColumns((prev) => (
@@ -384,7 +383,7 @@ export default function PilotsTab({ hideStreams = false }) {
                     </div>
                   )}
                   {(() => {
-                    const telemetry = getPilotTelemetryDisplay(pilot.id);
+                    const telemetry = getPersistedPilotTelemetry(pilot.id);
                     const displayLatLong = telemetry.latLong || pilot.latLong || '';
                     const displayLatLongTimestamp = telemetry.latlongTimestamp ?? telemetry.lastLatLongUpdatedAt ?? pilot.latlongTimestamp ?? pilot.lastLatLongUpdatedAt ?? '';
                     return displayLatLong ? (
@@ -400,9 +399,9 @@ export default function PilotsTab({ hideStreams = false }) {
                     </div>
                     ) : null;
                   })()}
-                  {getPilotTelemetryDisplay(pilot.id)?.lastTelemetryAt && (
+                  {getPersistedPilotTelemetry(pilot.id)?.lastTelemetryAt && (
                     <p className="mt-1 text-[10px] text-zinc-500 truncate font-mono">
-                      <span className="text-zinc-600">{t('pilots.telemetry')}:</span> {new Date(getPilotTelemetryDisplay(pilot.id).lastTelemetryAt).toLocaleTimeString()}
+                      <span className="text-zinc-600">{t('pilots.telemetry')}:</span> {new Date(getPersistedPilotTelemetry(pilot.id).lastTelemetryAt).toLocaleTimeString()}
                     </p>
                   )}
                   <div className="flex items-center gap-2 mt-2">

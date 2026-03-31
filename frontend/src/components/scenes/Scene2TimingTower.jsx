@@ -96,11 +96,11 @@ const calculateLapRaceData = (pilots, stageId, lapTimes, stagePilots, numberOfLa
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate, pilotTelemetryByPilotId
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate, getPersistedPilotTelemetry
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
-  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, getPersistedPilotTelemetry), [pilots, categories, getPersistedPilotTelemetry]);
   
   const [selectedFeedValue, setSelectedFeedValue] = useState(() => (
     loadSceneConfig(SCENE_2_CONFIG_KEY, { selectedFeedValue: null }).selectedFeedValue

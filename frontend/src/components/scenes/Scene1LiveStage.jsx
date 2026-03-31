@@ -102,7 +102,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
-    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, pilotTelemetryByPilotId
+    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, getPersistedPilotTelemetry
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -131,7 +131,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const currentStage = stages.find(s => s.id === currentStageId);
   const activeMedia = externalMedia.filter(m => m.url);
   const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [stages, mapPlacemarks]);
-  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, getPersistedPilotTelemetry), [pilots, categories, getPersistedPilotTelemetry]);
   const isLapRace = isLapRaceStageType(currentStage?.type);
   const isSSStage = isSpecialStageType(currentStage?.type);
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
