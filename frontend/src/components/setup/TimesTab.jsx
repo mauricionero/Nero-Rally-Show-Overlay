@@ -244,6 +244,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
   } = useRallyTiming();
   const { clientRole, wsConnectionStatus, lineSyncResults, requestTimingLineSync } = useRallyWs();
   const statusControlsReadOnly = isReadOnly || clientRole === 'times';
+  const sosControlsReadOnly = isReadOnly;
   const [pendingSosToggle, setPendingSosToggle] = useState(null);
 
   const stagePilotRows = useMemo(() => (
@@ -465,7 +466,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
   };
 
   const requestSosToggle = (pilotId, nextValue) => {
-    if (isReadOnly || statusControlsReadOnly) return;
+    if (sosControlsReadOnly) return;
 
     if (nextValue) {
       setPendingSosToggle({ pilotId, stageId: stage.id, nextValue: true });
@@ -793,14 +794,14 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         </label>
                       </td>
                     <td className="p-1 sm:p-2">
-                      <label className={`flex items-center gap-2 ${statusControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
-                        <Checkbox
-                          checked={sos}
-                          onCheckedChange={(checked) => requestSosToggle(pilot.id, checked === true)}
-                          disabled={statusControlsReadOnly}
-                        />
-                        <span className="text-[11px] text-zinc-400 uppercase">🆘</span>
-                      </label>
+                        <label className={`flex items-center gap-2 ${sosControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                          <Checkbox
+                            checked={sos}
+                            onCheckedChange={(checked) => requestSosToggle(pilot.id, checked === true)}
+                            disabled={sosControlsReadOnly}
+                          />
+                          <span className="text-[11px] text-zinc-400 uppercase">🆘</span>
+                        </label>
                     </td>
                   </tr>
                 );
@@ -1049,11 +1050,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   />
                   <span className="text-[11px] text-zinc-400 uppercase">⚠️</span>
                 </label>
-                <label className={`flex items-center gap-2 ${statusControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                <label className={`flex items-center gap-2 ${sosControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                   <Checkbox
                     checked={sos}
                     onCheckedChange={(checked) => requestSosToggle(pilot.id, checked === true)}
-                    disabled={statusControlsReadOnly}
+                    disabled={sosControlsReadOnly}
                   />
                   <span className="text-[11px] text-zinc-400 uppercase">🆘</span>
                 </label>

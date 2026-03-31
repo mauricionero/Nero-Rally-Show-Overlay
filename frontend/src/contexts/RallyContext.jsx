@@ -138,6 +138,39 @@ const TIMES_ROLE_TIMING_SECTION_KEYS = [
   'stageSos'
 ];
 const TIMES_ROLE_TIMING_SECTION_SET = new Set(TIMES_ROLE_TIMING_SECTION_KEYS);
+const SNAPSHOT_CORE_SECTION_KEYS = ['meta', 'pilots', 'categories', 'stages'];
+const MOBILE_TIMING_SNAPSHOT_SECTION_KEYS = [
+  ...SNAPSHOT_CORE_SECTION_KEYS,
+  'times',
+  'arrivalTimes',
+  'startTimes',
+  'realStartTimes',
+  'lapTimes',
+  'positions',
+  'stagePilots',
+  'retiredStages',
+  'stageAlerts',
+  'stageSos'
+];
+const ALL_SNAPSHOT_SECTION_KEYS = [
+  ...SNAPSHOT_CORE_SECTION_KEYS,
+  'pilotTelemetry',
+  'times',
+  'arrivalTimes',
+  'startTimes',
+  'realStartTimes',
+  'lapTimes',
+  'positions',
+  'stagePilots',
+  'retiredStages',
+  'stageAlerts',
+  'stageSos',
+  'mapPlacemarks',
+  'cameras',
+  'externalMedia',
+  'streamConfigs'
+];
+const SNAPSHOT_SECTION_SET = new Set(ALL_SNAPSHOT_SECTION_KEYS);
 
 const ALL_STORAGE_DOMAINS = Object.keys(STORAGE_DOMAIN_VERSION_KEYS);
 
@@ -271,6 +304,79 @@ const mergeEntityArrayItemById = (currentItems = [], id, changes = {}) => {
     ...changes
   });
   return nextItems;
+};
+
+const stripEntityIdPrefix = (value, prefix = '') => {
+  const trimmedValue = String(value ?? '').trim();
+  if (!trimmedValue) {
+    return '';
+  }
+
+  const expectedPrefix = prefix ? `${prefix}_` : '';
+  return expectedPrefix && trimmedValue.startsWith(expectedPrefix)
+    ? trimmedValue.slice(expectedPrefix.length)
+    : trimmedValue;
+};
+
+const resolveKnownEntityId = (value, entities = [], prefix = '') => {
+  const trimmedValue = String(value ?? '').trim();
+  if (!trimmedValue) {
+    return '';
+  }
+
+  const entityList = Array.isArray(entities) ? entities : [];
+  const exactMatch = entityList.find((entity) => String(entity?.id ?? '').trim() === trimmedValue);
+  if (exactMatch?.id) {
+    return exactMatch.id;
+  }
+
+  const comparableIncomingId = stripEntityIdPrefix(trimmedValue, prefix);
+  const aliasMatch = entityList.find((entity) => (
+    stripEntityIdPrefix(entity?.id, prefix) === comparableIncomingId
+  ));
+
+  return aliasMatch?.id || trimmedValue;
+};
+
+const mergePilotStageFlagMap = (currentValue = {}, incomingValue = {}, options = {}) => {
+  const nextValue = isPlainObject(currentValue) ? { ...currentValue } : {};
+  const incomingMap = isPlainObject(incomingValue) ? incomingValue : {};
+  const resolvePilotId = typeof options.resolvePilotId === 'function'
+    ? options.resolvePilotId
+    : normalizePilotId;
+  const resolveStageId = typeof options.resolveStageId === 'function'
+    ? options.resolveStageId
+    : ((stageId) => String(stageId ?? '').trim());
+
+  Object.entries(incomingMap).forEach(([pilotId, stageFlags]) => {
+    const normalizedPilotId = resolvePilotId(normalizePilotId(pilotId));
+    if (!normalizedPilotId || !isPlainObject(stageFlags)) {
+      return;
+    }
+
+    const nextPilotStages = { ...(nextValue[normalizedPilotId] || {}) };
+
+    Object.entries(stageFlags).forEach(([stageId, enabled]) => {
+      const normalizedStageId = resolveStageId(stageId);
+      if (!normalizedStageId) {
+        return;
+      }
+
+      if (enabled) {
+        nextPilotStages[normalizedStageId] = normalizedStageId;
+      } else {
+        delete nextPilotStages[normalizedStageId];
+      }
+    });
+
+    if (Object.keys(nextPilotStages).length > 0) {
+      nextValue[normalizedPilotId] = nextPilotStages;
+    } else {
+      delete nextValue[normalizedPilotId];
+    }
+  });
+
+  return nextValue;
 };
 
 const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -566,6 +672,42 @@ const mergeSetupPatchEntries = (existingEntry = null, incomingEntry = null) => {
 
 const normalizeMessageSource = (source) => String(source || '').trim().toLowerCase();
 const TRUSTED_PILOT_TELEMETRY_SOURCES = new Set(['android-app', 'setup-relay']);
+const sanitizeSnapshotSections = (sections = [], fallbackSections = null) => {
+  const requestedSections = Array.isArray(sections)
+    ? sections
+    : [sections];
+  const normalizedSections = Array.from(new Set(
+    requestedSections
+      .map((section) => String(section || '').trim())
+      .filter((section) => SNAPSHOT_SECTION_SET.has(section))
+  ));
+
+  if (normalizedSections.length > 0) {
+    return normalizedSections;
+  }
+
+  return Array.isArray(fallbackSections) && fallbackSections.length > 0
+    ? [...fallbackSections]
+    : null;
+};
+
+const getDefaultSnapshotSectionsForRequester = (requesterRole = '') => {
+  const normalizedRole = normalizeMessageSource(requesterRole);
+  const compactRole = normalizedRole.replace(/[^a-z0-9]/g, '');
+
+  if (
+    normalizedRole === 'times'
+    || normalizedRole === 'mobile'
+    || normalizedRole === 'android-app'
+    || compactRole === 'times'
+    || compactRole.includes('mobile')
+    || compactRole.includes('android')
+  ) {
+    return MOBILE_TIMING_SNAPSHOT_SECTION_KEYS;
+  }
+
+  return null;
+};
 
 const buildPilotTelemetryPayload = (telemetry = {}) => {
   const payload = {};
@@ -637,6 +779,10 @@ export const RallyProvider = ({ children }) => {
   const [wsConnectionStatus, setWsConnectionStatus] = useState('disconnected'); // disconnected, connecting, connected, error
   const [wsError, setWsError] = useState(null);
   const [wsLastMessageAt, setWsLastMessageAt] = useState(null);
+  const [wsLastReceivedAt, setWsLastReceivedAt] = useState(null);
+  const [wsLastSentAt, setWsLastSentAt] = useState(null);
+  const [wsReceivedPulse, setWsReceivedPulse] = useState(0);
+  const [wsSentPulse, setWsSentPulse] = useState(0);
   const [wsRole, setWsRole] = useState('client');
   const [wsPublishSections, setWsPublishSections] = useState(null);
   const [clientRole, setClientRole] = useState('client');
@@ -674,10 +820,15 @@ export const RallyProvider = ({ children }) => {
   const publishDirtyTimingDeltasRef = useRef(null);
   const publishSetupSnapshotRef = useRef(null);
   const publishSessionManifestUpdateRef = useRef(null);
+  const snapshotRequestInFlightRef = useRef(false);
+  const snapshotPublishInFlightRef = useRef(false);
+  const lastSnapshotRequestHandledAtRef = useRef(0);
+  const incomingSetupTimingCaptureSuppressionRef = useRef(new Set());
   const persistenceReadyRef = useRef(false);
   const hydratingDomainsRef = useRef(new Set());
   const suppressPilotPublishRef = useRef(0);
   const pilotsRef = useRef(pilots);
+  const stagesRef = useRef(stages);
   const pilotTelemetryByPilotIdRef = useRef(pilotTelemetryByPilotId);
   const pilotTelemetryQueueRef = useRef(new Map());
   const pilotTelemetryFlushTimerRef = useRef(null);
@@ -732,6 +883,10 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     pilotsRef.current = pilots;
   }, [pilots]);
+
+  useEffect(() => {
+    stagesRef.current = stages;
+  }, [stages]);
 
   useEffect(() => {
     pilotTelemetryByPilotIdRef.current = pilotTelemetryByPilotId;
@@ -1609,6 +1764,23 @@ export const RallyProvider = ({ children }) => {
     });
   }, [buildTimingLineKey, clientRole, getNextLogicalTimestamp]);
 
+  const suppressNextSetupTimingCapture = useCallback((section) => {
+    if (!SETUP_TIMING_SECTION_SET.has(section)) {
+      return;
+    }
+
+    incomingSetupTimingCaptureSuppressionRef.current.add(section);
+  }, []);
+
+  const consumeSetupTimingCaptureSuppression = useCallback((section) => {
+    if (!incomingSetupTimingCaptureSuppressionRef.current.has(section)) {
+      return false;
+    }
+
+    incomingSetupTimingCaptureSuppressionRef.current.delete(section);
+    return true;
+  }, []);
+
   const applyWebSocketData = useCallback((data) => {
     if (!data) return;
 
@@ -1640,6 +1812,9 @@ export const RallyProvider = ({ children }) => {
           return;
         }
 
+        if (wsRoleRef.current === 'setup') {
+          suppressNextSetupTimingCapture(entry.section);
+        }
         setTimingLineValue(entry.section, entry.pilotId ?? null, entry.stageId ?? null, entry.value);
         acceptedEntries.push({
           key,
@@ -1686,7 +1861,7 @@ export const RallyProvider = ({ children }) => {
 
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1695,6 +1870,9 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
 
       data.entries.forEach((entry) => {
+        if (wsRoleRef.current === 'setup' && SETUP_TIMING_SECTION_SET.has(entry?.section)) {
+          suppressNextSetupTimingCapture(entry.section);
+        }
         applySetupPatchEntry(entry);
       });
 
@@ -1712,7 +1890,7 @@ export const RallyProvider = ({ children }) => {
 
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1728,7 +1906,12 @@ export const RallyProvider = ({ children }) => {
       || data?.origin
       || data?.clientSource
     );
-    if (messageSource === 'android-app' && normalizedData?.messageType !== 'pilot-telemetry' && data?.section !== 'pilotTelemetry') {
+    if (
+      messageSource === 'android-app'
+      && normalizedData?.messageType !== 'pilot-telemetry'
+      && data?.section !== 'pilotTelemetry'
+      && data?.section !== 'stageSos'
+    ) {
       console.debug('[Telemetry] Ignoring non-telemetry payload from android-app', {
         messageType: normalizedData?.messageType || null,
         section: data?.section || null
@@ -1737,7 +1920,7 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1754,7 +1937,7 @@ export const RallyProvider = ({ children }) => {
         isPublishing.current = true;
         setTimeout(() => {
           isPublishing.current = false;
-        }, 100);
+        }, 0);
         return;
       }
 
@@ -1834,7 +2017,7 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1860,7 +2043,7 @@ export const RallyProvider = ({ children }) => {
         isPublishing.current = true;
         setTimeout(() => {
           isPublishing.current = false;
-        }, 100);
+        }, 0);
         return;
       }
 
@@ -1910,7 +2093,7 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1925,7 +2108,7 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1935,7 +2118,7 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1945,7 +2128,7 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1955,7 +2138,7 @@ export const RallyProvider = ({ children }) => {
       isPublishing.current = true;
       setTimeout(() => {
         isPublishing.current = false;
-      }, 100);
+      }, 0);
       return;
     }
 
@@ -1998,6 +2181,19 @@ export const RallyProvider = ({ children }) => {
       });
     }
 
+    if (wsRoleRef.current === 'setup') {
+      if (normalizedData.positions !== undefined) suppressNextSetupTimingCapture('positions');
+      if (normalizedData.lapTimes !== undefined) suppressNextSetupTimingCapture('lapTimes');
+      if (normalizedData.stagePilots !== undefined) suppressNextSetupTimingCapture('stagePilots');
+      if (normalizedData.times !== undefined) suppressNextSetupTimingCapture('times');
+      if (normalizedData.arrivalTimes !== undefined) suppressNextSetupTimingCapture('arrivalTimes');
+      if (normalizedData.startTimes !== undefined) suppressNextSetupTimingCapture('startTimes');
+      if (normalizedData.realStartTimes !== undefined) suppressNextSetupTimingCapture('realStartTimes');
+      if (normalizedData.retiredStages !== undefined) suppressNextSetupTimingCapture('retiredStages');
+      if (normalizedData.stageAlerts !== undefined) suppressNextSetupTimingCapture('stageAlerts');
+      if (normalizedData.stageSos !== undefined) suppressNextSetupTimingCapture('stageSos');
+    }
+
     if (normalizedData.eventName !== undefined) setEventName(normalizedData.eventName);
     if (normalizedData.positions !== undefined && !shouldPreserveLocalTimingSection('positions')) setPositions(normalizedData.positions);
     if (normalizedData.lapTimes !== undefined && !shouldPreserveLocalTimingSection('lapTimes')) setLapTimes(normalizedData.lapTimes);
@@ -2017,7 +2213,19 @@ export const RallyProvider = ({ children }) => {
     if (normalizedData.realStartTimes !== undefined && !shouldPreserveLocalTimingSection('realStartTimes')) setRealStartTimes(normalizedData.realStartTimes);
     if (normalizedData.retiredStages !== undefined && !shouldPreserveLocalTimingSection('retiredStages')) setRetiredStages(normalizedData.retiredStages);
     if (normalizedData.stageAlerts !== undefined && !shouldPreserveLocalTimingSection('stageAlerts')) setStageAlerts(normalizedData.stageAlerts);
-    if (normalizedData.stageSos !== undefined && !shouldPreserveLocalTimingSection('stageSos')) setStageSosState(normalizedData.stageSos);
+    if (normalizedData.stageSos !== undefined) {
+      if (wsRoleRef.current === 'setup') {
+        suppressNextSetupTimingCapture('stageSos');
+      }
+      if (messageSource === 'android-app' || data?.section === 'stageSos') {
+        setStageSosState((prev) => mergePilotStageFlagMap(prev, normalizedData.stageSos, {
+          resolvePilotId: (pilotId) => resolveKnownEntityId(pilotId, pilotsRef.current, 'pilot'),
+          resolveStageId: (stageId) => resolveKnownEntityId(stageId, stagesRef.current, 'stage')
+        }));
+      } else if (!shouldPreserveLocalTimingSection('stageSos')) {
+        setStageSosState(normalizedData.stageSos);
+      }
+    }
     if (normalizedData.mapPlacemarks !== undefined) setMapPlacemarks(normalizedData.mapPlacemarks);
     if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
     if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
@@ -2036,8 +2244,8 @@ export const RallyProvider = ({ children }) => {
     // Re-enable publishing after a short delay
     setTimeout(() => {
       isPublishing.current = false;
-    }, 100);
-  }, [applySetupPatchEntry, buildTimingLineKey, getNextLogicalTimestamp, mergePilotTelemetryEntries, schedulePilotTelemetryFlush, setTimingLineValue, shouldPreserveLocalTimingSection]);
+    }, 0);
+  }, [applySetupPatchEntry, buildTimingLineKey, getNextLogicalTimestamp, mergePilotTelemetryEntries, schedulePilotTelemetryFlush, setTimingLineValue, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
 
   // Listen for external data updates
   useEffect(() => {
@@ -2494,33 +2702,42 @@ export const RallyProvider = ({ children }) => {
   }, [publishSessionManifestUpdate]);
 
   const publishSetupSnapshot = useCallback(async (channelKey, allowedSections = null, baseManifest = null) => {
-    const previousManifest = baseManifest || sessionManifest || {};
-    const nextSnapshotVersion = Math.max(
-      Number(previousManifest.latestSnapshotVersion || 0),
-      Number(latestSnapshotVersion || 0)
-    ) + 1;
-    const snapshotTimestamp = Date.now();
-
-    const published = await publishWebSocketBundle('full-snapshot', allowedSections, {
-      snapshotVersion: nextSnapshotVersion
-    });
-
-    if (!published) {
+    if (snapshotPublishInFlightRef.current) {
       return null;
     }
 
-    if (!Array.isArray(allowedSections) || allowedSections.includes('stages')) {
-      dirtyStageSyncChangesRef.current.clear();
-    }
-    setLatestSnapshotVersion(nextSnapshotVersion);
+    snapshotPublishInFlightRef.current = true;
+    try {
+      const previousManifest = baseManifest || sessionManifest || {};
+      const nextSnapshotVersion = Math.max(
+        Number(previousManifest.latestSnapshotVersion || 0),
+        Number(latestSnapshotVersion || 0)
+      ) + 1;
+      const snapshotTimestamp = Date.now();
 
-    return publishSessionManifestUpdate({
-      channelKey: channelKey || previousManifest.channelKey || wsChannelKey || '',
-      sessionId: previousManifest.sessionId || createEntityId('session'),
-      initializedAt: previousManifest.initializedAt || snapshotTimestamp,
-      latestSnapshotVersion: nextSnapshotVersion,
-      lastSnapshotAt: snapshotTimestamp
-    }, previousManifest);
+      const published = await publishWebSocketBundle('full-snapshot', allowedSections, {
+        snapshotVersion: nextSnapshotVersion
+      });
+
+      if (!published) {
+        return null;
+      }
+
+      if (!Array.isArray(allowedSections) || allowedSections.includes('stages')) {
+        dirtyStageSyncChangesRef.current.clear();
+      }
+      setLatestSnapshotVersion(nextSnapshotVersion);
+
+      return publishSessionManifestUpdate({
+        channelKey: channelKey || previousManifest.channelKey || wsChannelKey || '',
+        sessionId: previousManifest.sessionId || createEntityId('session'),
+        initializedAt: previousManifest.initializedAt || snapshotTimestamp,
+        latestSnapshotVersion: nextSnapshotVersion,
+        lastSnapshotAt: snapshotTimestamp
+      }, previousManifest);
+    } finally {
+      snapshotPublishInFlightRef.current = false;
+    }
   }, [latestSnapshotVersion, publishSessionManifestUpdate, publishWebSocketBundle, sessionManifest, wsChannelKey]);
 
   useEffect(() => {
@@ -2782,6 +2999,10 @@ export const RallyProvider = ({ children }) => {
         ? TIMES_ROLE_TIMING_SECTION_KEYS
         : null
     );
+    const requestedSnapshotSections = sanitizeSnapshotSections(
+      options.snapshotSections,
+      getDefaultSnapshotSectionsForRequester(role)
+    );
 
     try {
       setWsConnectionStatus('connecting');
@@ -2806,9 +3027,44 @@ export const RallyProvider = ({ children }) => {
         },
         {
           readHistory: shouldReadHistory,
+          onReceiveActivity: ({ timestamp } = {}) => {
+            const activityAt = Number(timestamp || Date.now());
+            setWsLastReceivedAt(activityAt);
+            setWsLastMessageAt(activityAt);
+            setWsReceivedPulse((prev) => prev + 1);
+          },
+          onSendActivity: ({ timestamp } = {}) => {
+            const activityAt = Number(timestamp || Date.now());
+            setWsLastSentAt(activityAt);
+            setWsLastMessageAt(activityAt);
+            setWsSentPulse((prev) => prev + 1);
+          },
           onSnapshotRequest: canPublish && role === 'setup'
-            ? () => {
-                publishSetupSnapshot(channelKey, allowedSections);
+            ? async (payload = {}) => {
+                const requestedSections = sanitizeSnapshotSections(
+                  payload?.sections
+                    ?? payload?.allowedSections
+                    ?? payload?.snapshotSections
+                    ?? payload?.section,
+                  getDefaultSnapshotSectionsForRequester(
+                    payload?.requesterRole
+                    || payload?.role
+                    || payload?.source
+                    || payload?.clientRole
+                  ) || allowedSections
+                );
+                const now = Date.now();
+                if (snapshotRequestInFlightRef.current || (now - lastSnapshotRequestHandledAtRef.current) < 4000) {
+                  return;
+                }
+
+                snapshotRequestInFlightRef.current = true;
+                lastSnapshotRequestHandledAtRef.current = now;
+                try {
+                  await publishSetupSnapshot(channelKey, requestedSections, payload?.manifest || null);
+                } finally {
+                  snapshotRequestInFlightRef.current = false;
+                }
               }
             : null
           ,
@@ -3140,14 +3396,10 @@ export const RallyProvider = ({ children }) => {
           await publishWebSocketMessages('full-snapshot', allowedSections);
         }
       } else if (shouldRequestSnapshot || (!canPublish && wsProvider.current?.historyBootstrapNeedsSnapshot)) {
-        await wsProvider.current.requestSnapshot();
-
-        [1000, 3000, 5000].forEach((delay) => {
-          window.setTimeout(() => {
-            if (wsProvider.current?.isConnected) {
-              wsProvider.current.requestSnapshot();
-            }
-          }, delay);
+        await wsProvider.current.requestSnapshot({
+          requesterRole: role,
+          ...(requestedSnapshotSections ? { sections: requestedSnapshotSections } : {}),
+          timestamp: Date.now()
         });
       }
 
@@ -3209,6 +3461,8 @@ export const RallyProvider = ({ children }) => {
     setWsEnabled(false);
     setWsCanPublish(false);
     setWsLastMessageAt(null);
+    setWsLastReceivedAt(null);
+    setWsLastSentAt(null);
     setWsRole('client');
     setWsPublishSections(null);
     localStorage.setItem('rally_ws_enabled', JSON.stringify(false));
@@ -3361,8 +3615,9 @@ export const RallyProvider = ({ children }) => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_positions', JSON.stringify(positions));
     updateDataVersion('timingExtra');
+    if (consumeSetupTimingCaptureSuppression('positions')) return;
     captureSetupPatchEntries('positions', diffTimingLineEntries('positions', previousPositions, positions));
-  }, [captureSetupPatchEntries, positions, updateDataVersion]);
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, positions, updateDataVersion]);
 
   useEffect(() => {
     const previousLapTimes = previousSetupSyncStateRef.current.lapTimes;
@@ -3370,8 +3625,9 @@ export const RallyProvider = ({ children }) => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_lap_times', JSON.stringify(lapTimes));
     updateDataVersion('timingExtra');
+    if (consumeSetupTimingCaptureSuppression('lapTimes')) return;
     captureSetupPatchEntries('lapTimes', diffTimingLineEntries('lapTimes', previousLapTimes, lapTimes));
-  }, [captureSetupPatchEntries, lapTimes, updateDataVersion]);
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, lapTimes, updateDataVersion]);
 
   useEffect(() => {
     const previousStagePilots = previousSetupSyncStateRef.current.stagePilots;
@@ -3379,8 +3635,9 @@ export const RallyProvider = ({ children }) => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_stage_pilots', JSON.stringify(stagePilots));
     updateDataVersion('timingExtra');
+    if (consumeSetupTimingCaptureSuppression('stagePilots')) return;
     captureSetupPatchEntries('stagePilots', diffTimingLineEntries('stagePilots', previousStagePilots, stagePilots));
-  }, [captureSetupPatchEntries, stagePilots, updateDataVersion]);
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, stagePilots, updateDataVersion]);
 
   useEffect(() => {
     const previousPilots = previousSetupSyncStateRef.current.pilots;
@@ -3431,8 +3688,9 @@ export const RallyProvider = ({ children }) => {
     previousSetupSyncStateRef.current.times = times;
     if (hydratingDomainsRef.current.has('timingCore')) return;
     scheduleTimesPersistenceFlush();
+    if (consumeSetupTimingCaptureSuppression('times')) return;
     captureSetupPatchEntries('times', diffTimingLineEntries('times', previousTimes, times));
-  }, [captureSetupPatchEntries, scheduleTimesPersistenceFlush, times]);
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, scheduleTimesPersistenceFlush, times]);
 
   useEffect(() => {
     const previousArrivalTimes = previousSetupSyncStateRef.current.arrivalTimes;
@@ -3446,10 +3704,19 @@ export const RallyProvider = ({ children }) => {
     localStorage.setItem('rally_start_times', JSON.stringify(startTimes));
     localStorage.setItem('rally_real_start_times', JSON.stringify(realStartTimes));
     updateDataVersion('timingCore');
+    const suppressArrivalCapture = consumeSetupTimingCaptureSuppression('arrivalTimes');
+    const suppressStartCapture = consumeSetupTimingCaptureSuppression('startTimes');
+    const suppressRealStartCapture = consumeSetupTimingCaptureSuppression('realStartTimes');
+    if (!suppressArrivalCapture) {
     captureSetupPatchEntries('arrivalTimes', diffTimingLineEntries('arrivalTimes', previousArrivalTimes, arrivalTimes));
+    }
+    if (!suppressStartCapture) {
     captureSetupPatchEntries('startTimes', diffTimingLineEntries('startTimes', previousStartTimes, startTimes));
+    }
+    if (!suppressRealStartCapture) {
     captureSetupPatchEntries('realStartTimes', diffTimingLineEntries('realStartTimes', previousRealStartTimes, realStartTimes));
-  }, [arrivalTimes, captureSetupPatchEntries, realStartTimes, startTimes, updateDataVersion]);
+    }
+  }, [arrivalTimes, captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, realStartTimes, startTimes, updateDataVersion]);
 
   useEffect(() => {
     const previousRetiredStages = previousSetupSyncStateRef.current.retiredStages;
@@ -3457,8 +3724,9 @@ export const RallyProvider = ({ children }) => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_retired_stages', JSON.stringify(retiredStages));
     updateDataVersion('timingExtra');
+    if (consumeSetupTimingCaptureSuppression('retiredStages')) return;
     captureSetupPatchEntries('retiredStages', diffTimingLineEntries('retiredStages', previousRetiredStages, retiredStages));
-  }, [captureSetupPatchEntries, retiredStages, updateDataVersion]);
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, retiredStages, updateDataVersion]);
 
   useEffect(() => {
     const previousStageAlerts = previousSetupSyncStateRef.current.stageAlerts;
@@ -3466,8 +3734,9 @@ export const RallyProvider = ({ children }) => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_stage_alerts', JSON.stringify(stageAlerts));
     updateDataVersion('timingExtra');
+    if (consumeSetupTimingCaptureSuppression('stageAlerts')) return;
     captureSetupPatchEntries('stageAlerts', diffTimingLineEntries('stageAlerts', previousStageAlerts, stageAlerts));
-  }, [captureSetupPatchEntries, stageAlerts, updateDataVersion]);
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, stageAlerts, updateDataVersion]);
 
   useEffect(() => {
     const previousStageSos = previousSetupSyncStateRef.current.stageSos;
@@ -3475,8 +3744,9 @@ export const RallyProvider = ({ children }) => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_stage_sos', JSON.stringify(stageSos));
     updateDataVersion('timingExtra');
+    if (consumeSetupTimingCaptureSuppression('stageSos')) return;
     captureSetupPatchEntries('stageSos', diffTimingLineEntries('stageSos', previousStageSos, stageSos));
-  }, [captureSetupPatchEntries, stageSos, updateDataVersion]);
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, stageSos, updateDataVersion]);
 
   useEffect(() => {
     const previousMapPlacemarks = previousSetupSyncStateRef.current.mapPlacemarks;
@@ -4446,9 +4716,6 @@ export const RallyProvider = ({ children }) => {
   ), [stageSos]);
 
   const setStageSos = useCallback((pilotId, stageId, sos) => {
-    if (clientRole === 'times') {
-      return;
-    }
     setStageSosState((prev) => {
       const next = { ...prev };
       const nextPilotStages = { ...(next[pilotId] || {}) };
@@ -4651,6 +4918,10 @@ export const RallyProvider = ({ children }) => {
     wsConnectionStatus,
     wsError,
     wsLastMessageAt,
+    wsLastReceivedAt,
+    wsLastSentAt,
+    wsReceivedPulse,
+    wsSentPulse,
     wsRole,
     wsPublishSections,
     clientRole,
@@ -4891,6 +5162,10 @@ export const RallyProvider = ({ children }) => {
     wsConnectionStatus,
     wsError,
     wsLastMessageAt,
+    wsLastReceivedAt,
+    wsLastSentAt,
+    wsReceivedPulse,
+    wsSentPulse,
     wsRole,
     wsPublishSections,
     clientRole,
@@ -4933,6 +5208,10 @@ export const RallyProvider = ({ children }) => {
     wsEnabled,
     wsError,
     wsLastMessageAt,
+    wsLastReceivedAt,
+    wsLastSentAt,
+    wsReceivedPulse,
+    wsSentPulse,
     wsPublishSections,
     wsRole
   ]);
