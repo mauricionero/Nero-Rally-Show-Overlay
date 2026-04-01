@@ -6,7 +6,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { Cpu, Mail, Play, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
+import { ArrowDown, ArrowUp, Cpu, Mail, Play, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
@@ -28,17 +28,58 @@ import LiveSyncTab from '../components/setup/LiveSyncTab.jsx';
 
 export default function Setup() {
   const { t } = useTranslation();
-  const { wsChannelKey, wsEnabled, wsConnectionStatus, wsLastMessageAt, setClientRole } = useRallyWs();
+  const {
+    wsChannelKey,
+    wsEnabled,
+    wsConnectionStatus,
+    wsLastMessageAt,
+    wsLastReceivedAt,
+    wsLastSentAt,
+    wsReceivedPulse,
+    wsSentPulse,
+    setClientRole
+  } = useRallyWs();
   const [hideStreams, setHideStreams] = useState(false);
   const [activeTab, setActiveTab] = useState('pilots');
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
   const [messagesLastMinute, setMessagesLastMinute] = useState(0);
   const [messagesThisSecond, setMessagesThisSecond] = useState(0);
-  const messageBucketsRef = React.useRef(new Array(60).fill(0));
+  const [receivedMessagesLastMinute, setReceivedMessagesLastMinute] = useState(0);
+  const [receivedMessagesThisSecond, setReceivedMessagesThisSecond] = useState(0);
+  const [sentMessagesLastMinute, setSentMessagesLastMinute] = useState(0);
+  const [sentMessagesThisSecond, setSentMessagesThisSecond] = useState(0);
+  const receivedMessageBucketsRef = React.useRef(new Array(60).fill(0));
+  const sentMessageBucketsRef = React.useRef(new Array(60).fill(0));
   const messageBucketIndexRef = React.useRef(0);
-  const messageBucketTotalRef = React.useRef(0);
+  const receivedMessageBucketTotalRef = React.useRef(0);
+  const sentMessageBucketTotalRef = React.useRef(0);
   const messageSecondAlertRef = React.useRef(false);
   const hasWebSocketOverlay = wsConnectionStatus === 'connected' && Boolean(wsChannelKey);
+
+  const syncMessageCounters = React.useCallback(() => {
+    const bucketIndex = messageBucketIndexRef.current;
+    const receivedThisSecondValue = receivedMessageBucketsRef.current[bucketIndex] || 0;
+    const sentThisSecondValue = sentMessageBucketsRef.current[bucketIndex] || 0;
+    const totalLastMinuteValue = receivedMessageBucketTotalRef.current + sentMessageBucketTotalRef.current;
+    const totalThisSecondValue = receivedThisSecondValue + sentThisSecondValue;
+
+    setReceivedMessagesLastMinute(receivedMessageBucketTotalRef.current);
+    setReceivedMessagesThisSecond(receivedThisSecondValue);
+    setSentMessagesLastMinute(sentMessageBucketTotalRef.current);
+    setSentMessagesThisSecond(sentThisSecondValue);
+    setMessagesLastMinute(totalLastMinuteValue);
+    setMessagesThisSecond(totalThisSecondValue);
+
+    if (!messageSecondAlertRef.current && totalThisSecondValue >= 100) {
+      messageSecondAlertRef.current = true;
+      toast.error(
+        <span className="text-white">
+          Too many messages in 1 second:{' '}
+          <strong className="text-red-400">{totalThisSecondValue}</strong>
+        </span>
+      );
+    }
+  }, []);
 
   useEffect(() => {
     document.title = `${t('header.title')} - ${t('header.subtitle')}`;
@@ -61,45 +102,53 @@ export default function Setup() {
     }
 
     const tick = () => {
-      const buckets = messageBucketsRef.current;
-      const len = buckets.length;
+      const len = receivedMessageBucketsRef.current.length;
       const currentIndex = messageBucketIndexRef.current;
       const nextIndex = (currentIndex + 1) % len;
-      const removed = buckets[nextIndex];
-      if (removed) {
-        messageBucketTotalRef.current -= removed;
+      const removedReceived = receivedMessageBucketsRef.current[nextIndex];
+      const removedSent = sentMessageBucketsRef.current[nextIndex];
+
+      if (removedReceived) {
+        receivedMessageBucketTotalRef.current -= removedReceived;
       }
-      buckets[nextIndex] = 0;
+
+      if (removedSent) {
+        sentMessageBucketTotalRef.current -= removedSent;
+      }
+
+      receivedMessageBucketsRef.current[nextIndex] = 0;
+      sentMessageBucketsRef.current[nextIndex] = 0;
       messageBucketIndexRef.current = nextIndex;
-      setMessagesLastMinute(messageBucketTotalRef.current);
-      setMessagesThisSecond(buckets[nextIndex]);
       messageSecondAlertRef.current = false;
+      syncMessageCounters();
     };
 
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [wsEnabled]);
+  }, [syncMessageCounters, wsEnabled]);
 
   useEffect(() => {
-    if (!wsLastMessageAt) return;
-    const buckets = messageBucketsRef.current;
+    if (!wsReceivedPulse) return;
     const index = messageBucketIndexRef.current;
-    buckets[index] += 1;
-    messageBucketTotalRef.current += 1;
-    setMessagesLastMinute(messageBucketTotalRef.current);
-    setMessagesThisSecond(buckets[index]);
-    if (!messageSecondAlertRef.current && buckets[index] >= 100) {
-      messageSecondAlertRef.current = true;
-      toast.error(
-        <span className="text-white">
-          Too many messages in 1 second:{' '}
-          <strong className="text-red-400">{buckets[index]}</strong>
-        </span>
-      );
-    }
-  }, [wsLastMessageAt]);
+    receivedMessageBucketsRef.current[index] += 1;
+    receivedMessageBucketTotalRef.current += 1;
+    syncMessageCounters();
+  }, [syncMessageCounters, wsReceivedPulse]);
 
-  const wsMessageAgeMs = wsLastMessageAt ? Math.max(0, connectionNow - wsLastMessageAt) : null;
+  useEffect(() => {
+    if (!wsSentPulse) return;
+    const index = messageBucketIndexRef.current;
+    sentMessageBucketsRef.current[index] += 1;
+    sentMessageBucketTotalRef.current += 1;
+    syncMessageCounters();
+  }, [syncMessageCounters, wsSentPulse]);
+
+  const latestActivityAt = Math.max(
+    Number(wsLastReceivedAt || 0),
+    Number(wsLastSentAt || 0),
+    Number(wsLastMessageAt || 0)
+  ) || null;
+  const wsMessageAgeMs = latestActivityAt ? Math.max(0, connectionNow - latestActivityAt) : null;
   const connectionBadge = (() => {
     if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: WifiOff };
     if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', Icon: WifiLow };
@@ -165,8 +214,12 @@ export default function Setup() {
                   {wsMessageAgeMs !== null ? (
                     <>
                       <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
-                      <div>Messages last minute: {messagesLastMinute}</div>
-                      <div>Messages this second: {messagesThisSecond}</div>
+                      <div className="flex items-center gap-1"><Mail className="w-3 h-3" /> Messages last minute: {messagesLastMinute}</div>
+                      <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3" /> Received last minute: {receivedMessagesLastMinute}</div>
+                      <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3" /> Sent last minute: {sentMessagesLastMinute}</div>
+                      <div className="flex items-center gap-1"><Mail className="w-3 h-3" /> Messages this second: {messagesThisSecond}</div>
+                      <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3" /> Received this second: {receivedMessagesThisSecond}</div>
+                      <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3" /> Sent this second: {sentMessagesThisSecond}</div>
                       <div>LED fades from full brightness to off over 30 seconds.</div>
                     </>
                   ) : (
@@ -186,11 +239,18 @@ export default function Setup() {
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
-          <div>
-            <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              {t('header.title')}
-            </h1>
-            <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/images/nrs-control-zone-logo.png"
+              alt="NRS Control Zone"
+              className="h-[72px] w-auto object-contain shrink-0"
+            />
+            <div>
+              <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {t('header.title')}
+              </h1>
+              <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
+            </div>
           </div>
           
           <div className="flex flex-col items-end gap-2">
@@ -219,14 +279,14 @@ export default function Setup() {
                   {t('header.overlay')}
                 </div>
                 <TooltipProvider delayDuration={150}>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <Button
                       size="sm"
                       onClick={() => handleGoLive(getLocalOverlayUrl())}
-                      className="min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
+                      className="h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px]"
                       data-testid="go-to-overlay-button"
                     >
-                      <Play className="w-4 h-4" />
+                      <Play className="w-3.5 h-3.5" />
                       {t('header.local')}
                     </Button>
                     <Tooltip>
@@ -237,12 +297,12 @@ export default function Setup() {
                             onClick={() => handleGoLive(getWebSocketOverlayUrl(wsChannelKey))}
                             disabled={!hasWebSocketOverlay}
                             className={hasWebSocketOverlay
-                              ? 'min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold disabled:opacity-100'
-                              : 'min-w-[108px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
+                              ? 'h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px] disabled:opacity-100'
+                              : 'h-8 min-w-[102px] px-2 bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold text-[11px] disabled:opacity-100'
                             }
                             data-testid="go-to-websocket-overlay-button"
                           >
-                            <Wifi className="w-4 h-4" />
+                            <Wifi className="w-3.5 h-3.5" />
                             {t('header.websocket')}
                           </Button>
                         </div>
@@ -260,14 +320,14 @@ export default function Setup() {
                   {t('header.times')}
                 </div>
                 <TooltipProvider delayDuration={150}>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <Button
                       size="sm"
                       onClick={() => handleGoLive(getLocalTimesUrl())}
-                      className="min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold"
+                      className="h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px]"
                       data-testid="go-to-times-button"
                     >
-                      <Play className="w-4 h-4" />
+                      <Play className="w-3.5 h-3.5" />
                       {t('header.local')}
                     </Button>
                     <Tooltip>
@@ -278,12 +338,12 @@ export default function Setup() {
                             onClick={() => handleGoLive(getWebSocketTimesUrl(wsChannelKey))}
                             disabled={!hasWebSocketOverlay}
                             className={hasWebSocketOverlay
-                              ? 'min-w-[108px] bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold disabled:opacity-100'
-                              : 'min-w-[108px] bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold disabled:opacity-100'
+                              ? 'h-8 min-w-[102px] px-2 bg-[#FF4500] hover:bg-[#FF4500]/90 text-white uppercase font-bold text-[11px] disabled:opacity-100'
+                              : 'h-8 min-w-[102px] px-2 bg-zinc-800 hover:bg-zinc-800 text-zinc-400 uppercase font-bold text-[11px] disabled:opacity-100'
                             }
                             data-testid="go-to-websocket-times-button"
                           >
-                            <Wifi className="w-4 h-4" />
+                            <Wifi className="w-3.5 h-3.5" />
                             {t('header.websocket')}
                           </Button>
                         </div>

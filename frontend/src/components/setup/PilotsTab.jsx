@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRallyConfig } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { StreamThumbnail } from '../StreamThumbnail.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { toast } from 'sonner';
-import { Trash2, Plus, Edit, Download } from 'lucide-react';
+import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2 } from 'lucide-react';
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { normalizePilotId } from '../../utils/pilotIdentity.js';
 
 const escapeCsvValue = (value) => {
   const stringValue = String(value ?? '');
@@ -24,6 +25,16 @@ const escapeCsvValue = (value) => {
   return `"${stringValue.replace(/"/g, '""')}"`;
 };
 
+const normalizeOptionalNumberInput = (value) => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const numericValue = Number(trimmed);
+  return Number.isFinite(numericValue) ? numericValue : '';
+};
+
 export default function PilotsTab({ hideStreams = false }) {
   const { t } = useTranslation();
   const {
@@ -31,6 +42,9 @@ export default function PilotsTab({ hideStreams = false }) {
     categories,
     addPilot,
     updatePilot,
+    setPilotTelemetry,
+    getPilotTelemetry,
+    getPersistedPilotTelemetry,
     deletePilot,
     togglePilotActive
   } = useRallyConfig();
@@ -40,7 +54,6 @@ export default function PilotsTab({ hideStreams = false }) {
     team: '',
     car: '',
     carNumber: '',
-    latLong: '',
     picture: '',
     streamUrl: '',
     categoryId: null,
@@ -50,6 +63,35 @@ export default function PilotsTab({ hideStreams = false }) {
   const [editingPilot, setEditingPilot] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
   const [selectedExportColumns, setSelectedExportColumns] = useState([]);
+
+  useEffect(() => {
+    if (!pilotDialogOpen || !editingPilot?.id) {
+      return;
+    }
+
+    const editingPilotId = normalizePilotId(editingPilot.id);
+    const livePilot = pilots.find((pilot) => normalizePilotId(pilot.id) === editingPilotId);
+    if (!livePilot) {
+      return;
+    }
+    const liveTelemetry = getPersistedPilotTelemetry(livePilot.id);
+
+    setEditingPilot((prev) => {
+      if (!prev || prev.id !== livePilot.id) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        latLong: liveTelemetry.latLong ?? livePilot.latLong ?? prev.latLong ?? '',
+        latlongTimestamp: liveTelemetry.latlongTimestamp ?? liveTelemetry.lastLatLongUpdatedAt ?? prev.latlongTimestamp ?? prev.lastLatLongUpdatedAt ?? '',
+        lastLatLongUpdatedAt: liveTelemetry.lastLatLongUpdatedAt ?? prev.lastLatLongUpdatedAt ?? '',
+        speed: liveTelemetry.speed ?? prev.speed ?? '',
+        heading: liveTelemetry.heading ?? prev.heading ?? '',
+        lastTelemetryAt: liveTelemetry.lastTelemetryAt ?? prev.lastTelemetryAt ?? ''
+      };
+    });
+  }, [editingPilot?.id, pilotDialogOpen, getPersistedPilotTelemetry, pilots]);
 
   const handleAddPilot = () => {
     if (!newPilot.name.trim()) {
@@ -67,7 +109,6 @@ export default function PilotsTab({ hideStreams = false }) {
       team: '',
       car: '',
       carNumber: '',
-      latLong: '',
       picture: '',
       streamUrl: '',
       categoryId: null,
@@ -82,12 +123,29 @@ export default function PilotsTab({ hideStreams = false }) {
       toast.error(t('pilots.pilotName') + ' is required');
       return;
     }
+    const nextLatLong = (editingPilot.latLong || '').trim();
+    const telemetryTimestampInput = normalizeOptionalNumberInput(
+      editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''
+    );
     const pilotData = {
       ...editingPilot,
       startOrder: parseInt(editingPilot.startOrder) || 999,
       timeOffsetMinutes: parseInt(editingPilot.timeOffsetMinutes) || 0
     };
+    delete pilotData.latLong;
+    delete pilotData.latlongTimestamp;
+    delete pilotData.lastLatLongUpdatedAt;
+    delete pilotData.lastTelemetryAt;
+    delete pilotData.speed;
+    delete pilotData.heading;
     updatePilot(editingPilot.id, pilotData);
+    setPilotTelemetry(editingPilot.id, {
+      latLong: nextLatLong,
+      latlongTimestamp: telemetryTimestampInput,
+      lastLatLongUpdatedAt: telemetryTimestampInput,
+      speed: normalizeOptionalNumberInput(editingPilot.speed),
+      heading: normalizeOptionalNumberInput(editingPilot.heading)
+    });
     setEditingPilot(null);
     setPilotDialogOpen(false);
     toast.success('Pilot updated successfully');
@@ -104,15 +162,15 @@ export default function PilotsTab({ hideStreams = false }) {
     { id: 'team', label: t('pilots.team'), getValue: (pilot) => pilot.team || '' },
     { id: 'car', label: t('pilots.car'), getValue: (pilot) => pilot.car || '' },
     { id: 'carNumber', label: t('pilots.carNumber'), getValue: (pilot) => pilot.carNumber || '' },
-    { id: 'latLong', label: t('pilots.latLong'), getValue: (pilot) => pilot.latLong || '' },
-    { id: 'lastLatLongUpdatedAt', label: t('pilots.lastLatLongUpdatedAt'), getValue: (pilot) => pilot.lastLatLongUpdatedAt || '' },
+    { id: 'latLong', label: t('pilots.latLong'), getValue: (pilot) => (getPilotTelemetry(pilot.id)?.latLong || pilot.latLong || '') },
+    { id: 'lastLatLongUpdatedAt', label: t('pilots.lastLatLongUpdatedAt'), getValue: (pilot) => (getPilotTelemetry(pilot.id)?.lastLatLongUpdatedAt || getPilotTelemetry(pilot.id)?.latlongTimestamp || pilot.lastLatLongUpdatedAt || '') },
     { id: 'category', label: t('pilots.category'), getValue: (pilot) => categoryById.get(pilot.categoryId)?.name || '' },
     { id: 'startOrder', label: t('pilots.startOrder'), getValue: (pilot) => pilot.startOrder ?? '' },
     { id: 'timeOffsetMinutes', label: t('pilots.timeOffsetMinutes'), getValue: (pilot) => pilot.timeOffsetMinutes ?? '' },
     { id: 'picture', label: t('pilots.pictureUrl'), getValue: (pilot) => pilot.picture || '' },
     { id: 'streamUrl', label: t('pilots.streamUrl'), getValue: (pilot) => pilot.streamUrl || '' },
     { id: 'isActive', label: t('pilots.activeStatus'), getValue: (pilot) => (pilot.isActive ? t('status.active') : t('status.inactive')) }
-  ]), [categoryById, t]);
+  ]), [categoryById, getPilotTelemetry, t]);
 
   const toggleExportColumn = (columnId) => {
     setSelectedExportColumns((prev) => (
@@ -245,17 +303,6 @@ export default function PilotsTab({ hideStreams = false }) {
                 />
               </div>
               <div>
-                <Label htmlFor="pilot-lat-long" className="text-white">{t('pilots.latLong')}</Label>
-                <Input
-                  id="pilot-lat-long"
-                  value={newPilot.latLong}
-                  onChange={(e) => setNewPilot({ ...newPilot, latLong: e.target.value })}
-                  placeholder={t('pilots.placeholder.latLong')}
-                  className="bg-[#09090B] border-zinc-700 text-white"
-                  data-testid="input-pilot-lat-long"
-                />
-              </div>
-              <div>
                 <Label htmlFor="pilot-picture" className="text-white">{t('pilots.pictureUrl')}</Label>
                 <Input
                   id="pilot-picture"
@@ -335,17 +382,27 @@ export default function PilotsTab({ hideStreams = false }) {
                       )}
                     </div>
                   )}
-                  {pilot.latLong && (
+                  {(() => {
+                    const telemetry = getPersistedPilotTelemetry(pilot.id);
+                    const displayLatLong = telemetry.latLong || pilot.latLong || '';
+                    const displayLatLongTimestamp = telemetry.latlongTimestamp ?? telemetry.lastLatLongUpdatedAt ?? pilot.latlongTimestamp ?? pilot.lastLatLongUpdatedAt ?? '';
+                    return displayLatLong ? (
                     <div className="mt-2 space-y-1">
                       <p className="text-xs text-zinc-400 truncate">
-                        <span className="text-zinc-500">{t('pilots.latLong')}:</span> {pilot.latLong}
+                        <span className="text-zinc-500">{t('pilots.latLong')}:</span> {displayLatLong}
                       </p>
-                      {pilot.lastLatLongUpdatedAt && (
+                      {displayLatLongTimestamp && (
                         <p className="text-xs text-zinc-500 truncate">
-                          <span>{t('pilots.lastLatLongUpdatedAt')}:</span> {new Date(pilot.lastLatLongUpdatedAt).toLocaleString()}
+                          <span>{t('pilots.lastLatLongUpdatedAt')}:</span> {new Date(displayLatLongTimestamp).toLocaleString()}
                         </p>
                       )}
                     </div>
+                    ) : null;
+                  })()}
+                  {getPersistedPilotTelemetry(pilot.id)?.lastTelemetryAt && (
+                    <p className="mt-1 text-[10px] text-zinc-500 truncate font-mono">
+                      <span className="text-zinc-600">{t('pilots.telemetry')}:</span> {new Date(getPersistedPilotTelemetry(pilot.id).lastTelemetryAt).toLocaleTimeString()}
+                    </p>
                   )}
                   <div className="flex items-center gap-2 mt-2">
                     <Switch
@@ -373,110 +430,192 @@ export default function PilotsTab({ hideStreams = false }) {
                         <Edit className="w-4 h-4" />
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
+                    <DialogContent className="bg-[#18181B] border-zinc-800 text-white max-w-5xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle className="text-white">{t('common.edit')} {t('tabs.pilots')}</DialogTitle>
                       </DialogHeader>
                       {editingPilot && (
-                        <div className="space-y-4">
-                          <div>
-                            <Label className="text-white">{t('pilots.pilotName')} *</Label>
-                            <Input
-                              value={editingPilot.name}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, name: e.target.value })}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
+                        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-white">{t('pilots.pilotName')} *</Label>
+                              <Input
+                                value={editingPilot.name}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, name: e.target.value })}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('pilots.team')}</Label>
+                              <Input
+                                value={editingPilot.team || ''}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, team: e.target.value })}
+                                placeholder={t('pilots.placeholder.team')}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('pilots.car')}</Label>
+                              <Input
+                                value={editingPilot.car || ''}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, car: e.target.value })}
+                                placeholder={t('pilots.placeholder.car')}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('pilots.carNumber')}</Label>
+                              <Input
+                                value={editingPilot.carNumber || ''}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, carNumber: e.target.value })}
+                                placeholder={t('pilots.placeholder.carNumber')}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('pilots.startOrder')}</Label>
+                              <Input
+                                type="number"
+                                value={editingPilot.startOrder || ''}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, startOrder: e.target.value })}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
+                              <Input
+                                type="number"
+                                value={editingPilot.timeOffsetMinutes ?? ''}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value })}
+                                placeholder={t('pilots.placeholder.timeOffsetMinutes')}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-white">{t('pilots.category')}</Label>
+                              <Select value={editingPilot.categoryId || 'none'} onValueChange={(val) => setEditingPilot({ ...editingPilot, categoryId: val === 'none' ? null : val })}>
+                                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                  <SelectValue placeholder={t('common.select')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">{t('common.none')}</SelectItem>
+                                  {sortedCategories.map((cat) => (
+                                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('pilots.pictureUrl')}</Label>
+                              <Input
+                                value={editingPilot.picture || ''}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, picture: e.target.value })}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('pilots.streamUrl')}</Label>
+                              <Input
+                                value={editingPilot.streamUrl || ''}
+                                onChange={(e) => setEditingPilot({ ...editingPilot, streamUrl: e.target.value })}
+                                className="bg-[#09090B] border-zinc-700 text-white"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.team')}</Label>
-                            <Input
-                              value={editingPilot.team || ''}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, team: e.target.value })}
-                              placeholder={t('pilots.placeholder.team')}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.car')}</Label>
-                            <Input
-                              value={editingPilot.car || ''}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, car: e.target.value })}
-                              placeholder={t('pilots.placeholder.car')}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.carNumber')}</Label>
-                            <Input
-                              value={editingPilot.carNumber || ''}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, carNumber: e.target.value })}
-                              placeholder={t('pilots.placeholder.carNumber')}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.startOrder')}</Label>
-                            <Input
-                              type="number"
-                              value={editingPilot.startOrder || ''}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, startOrder: e.target.value })}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
-                            <Input
-                              type="number"
-                              value={editingPilot.timeOffsetMinutes ?? ''}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value })}
-                              placeholder={t('pilots.placeholder.timeOffsetMinutes')}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.category')}</Label>
-                            <Select value={editingPilot.categoryId || 'none'} onValueChange={(val) => setEditingPilot({ ...editingPilot, categoryId: val === 'none' ? null : val })}>
-                              <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                                <SelectValue placeholder={t('common.select')} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('common.none')}</SelectItem>
-                                {sortedCategories.map((cat) => (
-                                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.latLong')}</Label>
-                            <Input
-                              value={editingPilot.latLong || ''}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, latLong: e.target.value })}
-                              placeholder={t('pilots.placeholder.latLong')}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                            {editingPilot.lastLatLongUpdatedAt && (
-                              <p className="mt-2 text-xs text-zinc-500">
-                                {t('pilots.lastLatLongUpdatedAt')}: {new Date(editingPilot.lastLatLongUpdatedAt).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.pictureUrl')}</Label>
-                            <Input
-                              value={editingPilot.picture}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, picture: e.target.value })}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-white">{t('pilots.streamUrl')}</Label>
-                            <Input
-                              value={editingPilot.streamUrl}
-                              onChange={(e) => setEditingPilot({ ...editingPilot, streamUrl: e.target.value })}
-                              className="bg-[#09090B] border-zinc-700 text-white"
-                            />
-                          </div>
+
+                          <Card className="bg-[#09090B] border-zinc-700 h-fit">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                                <MapPin className="w-4 h-4 text-[#FF4500]" />
+                                {t('pilots.telemetry')}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-[10px] font-mono text-zinc-500">
+                                {t('pilots.pilotId')}: {editingPilot.id}
+                              </div>
+                              {editingPilot.lastTelemetryAt && (
+                                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-[10px] font-mono text-zinc-500">
+                                  <span className="text-zinc-600">{t('pilots.telemetry')}:</span> {new Date(editingPilot.lastTelemetryAt).toLocaleTimeString()}
+                                </div>
+                              )}
+                              <div>
+                                <Label className="text-white">{t('pilots.latLong')}</Label>
+                                <Input
+                                  value={editingPilot.latLong || ''}
+                                  onChange={(e) => setEditingPilot({ ...editingPilot, latLong: e.target.value })}
+                                  placeholder={t('pilots.placeholder.latLong')}
+                                  className="bg-[#18181B] border-zinc-700 text-white"
+                                />
+                              </div>
+
+                              <div>
+                                <Label className="text-white">{t('pilots.latLongTimestamp')}</Label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    value={editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''}
+                                    onChange={(e) => setEditingPilot({
+                                      ...editingPilot,
+                                      latlongTimestamp: e.target.value,
+                                      lastLatLongUpdatedAt: e.target.value
+                                    })}
+                                    placeholder="1715678901234"
+                                    className="bg-[#18181B] border-zinc-700 text-white"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                                    onClick={() => setEditingPilot({
+                                      ...editingPilot,
+                                      latlongTimestamp: Date.now(),
+                                      lastLatLongUpdatedAt: Date.now()
+                                    })}
+                                  >
+                                    <Clock3 className="w-4 h-4 mr-1" />
+                                    {t('pilots.now')}
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="flex items-center gap-1 text-white">
+                                    <Gauge className="w-3 h-3 text-[#FF4500]" />
+                                    {t('pilots.speed')}
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={editingPilot.speed ?? ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, speed: e.target.value })}
+                                    placeholder="85.5"
+                                    className="bg-[#18181B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="flex items-center gap-1 text-white">
+                                    <Navigation2 className="w-3 h-3 text-[#FF4500]" />
+                                    {t('pilots.heading')}
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={editingPilot.heading ?? ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, heading: e.target.value })}
+                                    placeholder="180"
+                                    className="bg-[#18181B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">
+                                {t('pilots.telemetryHint')}
+                              </div>
+                            </CardContent>
+                          </Card>
                         </div>
                       )}
                       <DialogFooter>

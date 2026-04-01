@@ -33,6 +33,17 @@ export const getLedLoadRgba = (level, alpha = 1) => `rgba(${getLedLoadRgb(level)
 
 export const getMessagesPerMinuteLoadLevel = (messagesPerMinute) => {
   if (!Number.isFinite(messagesPerMinute) || messagesPerMinute <= 0) return 0;
-  return clampLevel(messagesPerMinute / 50);
-};
+  const count = Math.trunc(messagesPerMinute);
 
+  if (count <= 20) return 1;
+  if (count <= 60) return 2;
+  if (count <= 100) return 3;
+  if (count <= 150) return 4;
+  if (count <= 200) return 5;
+  if (count <= 250) return 6;
+  if (count <= 300) return 7;
+  if (count <= 350) return 8;
+  if (count <= 400) return 9;
+  if (count >= 500) return 10;
+  return 9;
+};

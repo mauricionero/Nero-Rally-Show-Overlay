@@ -19,7 +19,7 @@ import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage
 import { getPilotScheduledEndTime } from '../../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
-import { formatDurationMs } from '../../utils/timeFormat.js';
+import { formatClockFromDate, formatDurationMs } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import {
   getStageNumberLabel,
@@ -29,6 +29,16 @@ import {
   SUPER_PRIME_STAGE_TYPE
 } from '../../utils/stageTypes.js';
 const SCENE_4_CONFIG_KEY = 'scene4Config';
+
+const getScene4StatusClassName = (status) => (
+  status === 'racing'
+    ? 'text-[#FACC15]'
+    : status === 'finished'
+      ? 'text-[#22C55E]'
+      : status === 'retired'
+        ? 'text-red-400'
+        : 'text-zinc-500'
+);
 
 // Helper to get stage type icon
 const getStageIcon = (type) => {
@@ -78,10 +88,62 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime) => {
   return diffMs;
 };
 
+const getScene4SpecialStageDisplay = (timeInfo, now, decimals) => {
+  if (!timeInfo) {
+    return '-';
+  }
+
+  if (timeInfo.status === 'racing' && timeInfo.startTime) {
+    return `${timeInfo.startTime} -> ${formatClockFromDate(now, decimals)}`;
+  }
+
+  if (timeInfo.status === 'finished' && timeInfo.startTime && timeInfo.finishTime) {
+    return `${timeInfo.startTime} -> ${timeInfo.finishTime}`;
+  }
+
+  return timeInfo.text || '-';
+};
+
+function Scene4StageTimeValue({
+  info,
+  fallback = '',
+  status = 'not_started',
+  finishedClassName = 'text-[#22C55E]',
+  className = '',
+  style,
+  as: Component = 'span'
+}) {
+  const displayText = fallback || info?.text || '';
+  const statusClassName = status === 'finished'
+    ? finishedClassName
+    : getScene4StatusClassName(status);
+
+  if (status === 'racing' && displayText.includes(' -> ')) {
+    const [left, right] = displayText.split(' -> ', 2);
+
+    return (
+      <Component className={`${className} text-white`} style={style}>
+        <span>{left} -&gt; </span>
+        <span className={statusClassName}>{right}</span>
+      </Component>
+    );
+  }
+
+  return (
+    <StartInformationValue
+      as={Component}
+      info={info}
+      fallback={fallback}
+      className={`${className} ${statusClassName}`.trim()}
+      style={style}
+    />
+  );
+}
+
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals
+    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -92,7 +154,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const [selectedMainFeedValue, setSelectedMainFeedValue] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedMainFeedValue: 'none' }).selectedMainFeedValue);
   const currentTime = useSecondAlignedClock();
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
-  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories), [pilots, categories]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
 
   useEffect(() => {
     if (!selectedPilotId && pilots.length > 0) {
@@ -212,16 +274,20 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           startLabel: t('status.start'),
           retiredLabel: t('status.retired')
         });
-        
-        let displayTime = '-';
-        if (timeInfo.text) {
-          displayTime = timeInfo.text;
-        }
+        const displayTime = getScene4SpecialStageDisplay(timeInfo, sceneNow, timeDecimals);
+        const displayInfo = displayTime !== (timeInfo.text || '')
+          ? {
+              ...timeInfo,
+              label: '',
+              signal: null,
+              text: displayTime
+            }
+          : timeInfo;
 
         return {
           stage,
           time: displayTime,
-          timeInfo,
+          timeInfo: displayInfo,
           status: timeInfo.status,
           isLapRace: false
         };
@@ -251,7 +317,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         };
       }
     });
-  }, [sortedStages, focusPilot, lapTimes, startTimes, times, retiredStages, sceneNow, t]);
+  }, [sortedStages, focusPilot, lapTimes, startTimes, times, retiredStages, sceneNow, t, timeDecimals]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
   const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia, stages, mapPlacemarks }), [pilots, cameras, externalMedia, stages, mapPlacemarks]);
@@ -477,16 +543,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                         {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                       </p>
                     </div>
-                    <StartInformationValue
+                    <Scene4StageTimeValue
                       as="p"
                       info={selectedStageData.timeInfo}
                       fallback={selectedStageData.time}
-                      className={`text-2xl font-mono font-bold ${
-                        selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                        selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                        selectedStageData.status === 'retired' ? 'text-red-400' :
-                        'text-zinc-500'
-                      }`}
+                      status={selectedStageData.status}
+                      className="text-2xl font-mono font-bold"
                       style={{ fontFamily: 'JetBrains Mono, monospace' }}
                     />
                   </div>
@@ -538,16 +600,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                         {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                       </p>
                     </div>
-                    <StartInformationValue
+                    <Scene4StageTimeValue
                       as="p"
                       info={selectedStageData.timeInfo}
                       fallback={selectedStageData.time}
-                      className={`text-2xl font-mono font-bold ${
-                        selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                        selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                        selectedStageData.status === 'retired' ? 'text-red-400' :
-                        'text-zinc-500'
-                      }`}
+                      status={selectedStageData.status}
+                      className="text-2xl font-mono font-bold"
                       style={{ fontFamily: 'JetBrains Mono, monospace' }}
                     />
                   </div>
@@ -599,16 +657,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                         {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                       </p>
                     </div>
-                    <StartInformationValue
+                    <Scene4StageTimeValue
                       as="p"
                       info={selectedStageData.timeInfo}
                       fallback={selectedStageData.time}
-                      className={`text-2xl font-mono font-bold ${
-                        selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                        selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                        selectedStageData.status === 'retired' ? 'text-red-400' :
-                        'text-zinc-500'
-                      }`}
+                      status={selectedStageData.status}
+                      className="text-2xl font-mono font-bold"
                       style={{ fontFamily: 'JetBrains Mono, monospace' }}
                     />
                   </div>
@@ -650,16 +704,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                         {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                       </p>
                     </div>
-                    <StartInformationValue
+                    <Scene4StageTimeValue
                       as="p"
                       info={selectedStageData.timeInfo}
                       fallback={selectedStageData.time}
-                      className={`text-2xl font-mono font-bold ${
-                        selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                        selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                        selectedStageData.status === 'retired' ? 'text-red-400' :
-                        'text-zinc-500'
-                      }`}
+                      status={selectedStageData.status}
+                      className="text-2xl font-mono font-bold"
                       style={{ fontFamily: 'JetBrains Mono, monospace' }}
                     />
                   </div>
@@ -678,16 +728,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                         {isSpecialStageType(selectedStage?.type) && selectedStage?.ssNumber ? getStageNumberLabel(selectedStage) : selectedStage?.name}
                       </p>
                     </div>
-                    <StartInformationValue
+                    <Scene4StageTimeValue
                       as="p"
                       info={selectedStageData.timeInfo}
                       fallback={selectedStageData.time}
-                      className={`text-2xl font-mono font-bold ${
-                        selectedStageData.status === 'racing' ? 'text-[#FACC15]' :
-                        selectedStageData.status === 'finished' ? 'text-[#22C55E]' :
-                        selectedStageData.status === 'retired' ? 'text-red-400' :
-                        'text-zinc-500'
-                      }`}
+                      status={selectedStageData.status}
+                      className="text-2xl font-mono font-bold"
                       style={{ fontFamily: 'JetBrains Mono, monospace' }}
                     />
                   </div>
@@ -792,14 +838,14 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                                 />
                               )}
                             </div>
-                          <span className={`text-lg font-mono ${
-                            item.status === 'racing' ? 'text-[#FACC15]' :
-                            item.status === 'finished' ? 'text-white' :
-                            item.status === 'retired' ? 'text-red-400' :
-                            'text-zinc-500'
-                          }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {item.time}
-                          </span>
+                          <Scene4StageTimeValue
+                            info={item.timeInfo}
+                            fallback={item.time}
+                            status={item.status}
+                            finishedClassName="text-white"
+                            className="text-lg font-mono"
+                            style={{ fontFamily: 'JetBrains Mono, monospace' }}
+                          />
                         </div>
                       </div>
                     );

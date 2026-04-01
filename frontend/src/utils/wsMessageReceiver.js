@@ -7,12 +7,35 @@ export default class WsMessageReceiver {
   handleMessage(data) {
     if (!data) return;
 
-    if (data.snapshotId && data.section !== 'bundle') {
+    let normalizedData = data;
+
+    if (typeof normalizedData === 'string') {
+      try {
+        normalizedData = JSON.parse(normalizedData);
+      } catch (error) {
+        console.warn('[WebSocket] Failed to parse string message payload', error);
+        return;
+      }
+    }
+
+    if (normalizedData?.payload && typeof normalizedData.payload === 'string') {
+      try {
+        normalizedData = {
+          ...normalizedData,
+          payload: JSON.parse(normalizedData.payload)
+        };
+      } catch (error) {
+        console.warn('[WebSocket] Failed to parse nested string payload', error);
+        return;
+      }
+    }
+
+    if (normalizedData.snapshotId && normalizedData.section !== 'bundle') {
       const key = [
-        data.messageType || 'update',
-        data.snapshotId,
-        data.section || 'unknown',
-        Number.isFinite(data.partIndex) ? data.partIndex : 0
+        normalizedData.messageType || 'update',
+        normalizedData.snapshotId,
+        normalizedData.section || 'unknown',
+        Number.isFinite(normalizedData.partIndex) ? normalizedData.partIndex : 0
       ].join(':');
       const now = Date.now();
       const lastSeenAt = this.recentSnapshotParts.get(key) || 0;
@@ -32,6 +55,6 @@ export default class WsMessageReceiver {
       }
     }
 
-    this.onMessage?.(data);
+    this.onMessage?.(normalizedData);
   }
 }

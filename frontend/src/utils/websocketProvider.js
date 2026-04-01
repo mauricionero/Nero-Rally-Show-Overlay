@@ -54,8 +54,12 @@ class WebSocketProvider {
     this.onTimesSyncRequestCallback = null;
     this.onTimesLineRequestCallback = null;
     this.onTimesLineResponseCallback = null;
+    this.onReceiveActivityCallback = null;
+    this.onSendActivityCallback = null;
     this.isConnected = false;
     this.connectionState = 'disconnected';
+    this.historyBootstrapLoadedSnapshot = false;
+    this.historyBootstrapNeedsSnapshot = false;
   }
 
   async loadChannelHistory(limit = 50) {
@@ -91,6 +95,10 @@ class WebSocketProvider {
     this.onTimesLineResponseCallback = options.onTimesLineResponse || null;
     this.onTimesSyncAckCallback = options.onTimesSyncAck || null;
     this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
+    this.onReceiveActivityCallback = options.onReceiveActivity || null;
+    this.onSendActivityCallback = options.onSendActivity || null;
+    this.historyBootstrapLoadedSnapshot = false;
+    this.historyBootstrapNeedsSnapshot = false;
 
     const apiKey = process.env.REACT_APP_ABLY_KEY;
     if (!apiKey) {
@@ -128,18 +136,31 @@ class WebSocketProvider {
       // Subscribe to channel
       this.channel = this.client.channels.get(`rally-${channelId}`);
 
-      // Load the latest published full snapshot so subscriber clients can
-      // start with a coherent state instead of replaying an arbitrary
-      // partial section update from history.
+      const getMessageTimestamp = (message) => {
+        const payloadTimestamp = Number(message?.data?.timestamp || 0);
+        const transportTimestamp = Number(message?.timestamp || 0);
+        return Math.max(payloadTimestamp, transportTimestamp, 0);
+      };
+
+      const isOwnMessage = (message) => {
+        const messageConnectionId = String(message?.connectionId || '').trim();
+        const localConnectionId = String(this.client?.connection?.id || '').trim();
+        return !!messageConnectionId && !!localConnectionId && messageConnectionId === localConnectionId;
+      };
+
+      // Load the latest published full snapshot and then replay newer
+      // incremental updates from history so reconnecting clients can
+      // rebuild the freshest known state before live subscription starts.
       if (options.readHistory !== false) {
-        const historyItems = await this.loadChannelHistory(200);
+        const historyItems = await this.loadChannelHistory(1000);
+        const updateMessages = historyItems.filter((message) => message?.name === 'update');
         const sessionManifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
         const latestSnapshotVersion = Number(sessionManifestMessage?.data?.latestSnapshotVersion || 0);
+        const latestUpdateMessage = updateMessages[0];
 
         if (latestSnapshotVersion > 0) {
-          const snapshotMessages = historyItems
+          const snapshotMessages = updateMessages
             .filter((message) => {
-              if (message?.name !== 'update') return false;
               const messageVersion = Number(message?.data?.snapshotVersion || 0);
               return message?.data?.messageType === 'full-snapshot' && messageVersion === latestSnapshotVersion;
             })
@@ -150,51 +171,116 @@ class WebSocketProvider {
             });
 
           if (snapshotMessages.length > 0) {
-            console.log('[WebSocket] Loaded latest full snapshot from history');
+            this.historyBootstrapLoadedSnapshot = true;
+            console.log('[WebSocket][RX][history] Loaded latest full snapshot from history');
             snapshotMessages.forEach((message) => {
+              this.notifyReceive('update', getMessageTimestamp(message), 'history');
               this.onMessageCallback?.(message.data);
             });
-          } else {
-            const latestUpdateMessage = historyItems.find((message) => message?.name === 'update');
 
+            const snapshotTimestamp = Math.max(
+              ...snapshotMessages.map((message) => getMessageTimestamp(message))
+            );
+            const replayMessages = updateMessages
+              .filter((message) => (
+                getMessageTimestamp(message) > snapshotTimestamp
+                && message?.data?.messageType !== 'full-snapshot'
+              ))
+              .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+            if (replayMessages.length > 0) {
+              console.log('[WebSocket][RX][history] Replayed incremental updates after snapshot', {
+                count: replayMessages.length
+              });
+              replayMessages.forEach((message) => {
+                this.notifyReceive('update', getMessageTimestamp(message), 'history');
+                this.onMessageCallback?.(message.data);
+              });
+            }
+          } else {
             if (latestUpdateMessage?.data) {
-              console.log('[WebSocket] Loaded latest update from history');
+              console.log('[WebSocket][RX][history] Loaded latest update from history');
+              this.notifyReceive('update', getMessageTimestamp(latestUpdateMessage), 'history');
               this.onMessageCallback?.(latestUpdateMessage.data);
             }
+
+            this.historyBootstrapNeedsSnapshot = true;
           }
         } else {
-          const latestUpdateMessage = historyItems.find((message) => message?.name === 'update');
-
           if (latestUpdateMessage?.data) {
-            console.log('[WebSocket] Loaded latest snapshot from history');
+            console.log('[WebSocket][RX][history] Loaded latest snapshot from history');
+            this.notifyReceive('update', getMessageTimestamp(latestUpdateMessage), 'history');
             this.onMessageCallback?.(latestUpdateMessage.data);
+          }
+
+          if (latestUpdateMessage?.data?.messageType === 'full-snapshot') {
+            this.historyBootstrapLoadedSnapshot = true;
+          } else {
+            this.historyBootstrapNeedsSnapshot = true;
           }
         }
       }
       
       // Subscribe to updates
       await this.channel.subscribe('update', (message) => {
-        console.log('[WebSocket] Received update:', message.data);
+        if (isOwnMessage(message)) {
+          console.log('[WebSocket][ECHO][update]', message.data);
+          return;
+        }
+
+        console.log('[WebSocket][RX][update]', message.data);
+        this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'live');
         this.onMessageCallback?.(message.data);
       });
 
-      await this.channel.subscribe('snapshot-request', () => {
-        this.onSnapshotRequestCallback?.();
+      await this.channel.subscribe('snapshot-request', (message) => {
+        if (isOwnMessage(message)) {
+          console.log('[WebSocket][ECHO][snapshot-request]');
+          return;
+        }
+
+        console.log('[WebSocket][RX][snapshot-request]', message?.data || {});
+        this.notifyReceive('snapshot-request');
+        this.onSnapshotRequestCallback?.(message?.data || {});
       });
 
       await this.channel.subscribe('times-sync-request', (message) => {
+        if (isOwnMessage(message)) {
+          console.log('[WebSocket][ECHO][times-sync-request]', message?.data);
+          return;
+        }
+
+        this.notifyReceive('times-sync-request', Number(message?.timestamp || Date.now()), 'live');
         this.onTimesSyncRequestCallback?.(message?.data);
       });
 
       await this.channel.subscribe('times-line-request', (message) => {
+        if (isOwnMessage(message)) {
+          console.log('[WebSocket][ECHO][times-line-request]', message?.data);
+          return;
+        }
+
+        this.notifyReceive('times-line-request', Number(message?.timestamp || Date.now()), 'live');
         this.onTimesLineRequestCallback?.(message?.data);
       });
 
       await this.channel.subscribe('times-line-response', (message) => {
+        if (isOwnMessage(message)) {
+          console.log('[WebSocket][ECHO][times-line-response]', message?.data);
+          return;
+        }
+
+        this.notifyReceive('times-line-response', Number(message?.timestamp || Date.now()), 'live');
         this.onTimesLineResponseCallback?.(message?.data);
       });
 
       await this.channel.subscribe('times-sync-ack', (message) => {
+        if (isOwnMessage(message)) {
+          console.log('[WebSocket][ECHO][times-sync-ack]', message?.data);
+          return;
+        }
+
+        this.notifyReceive('times-sync-ack', Number(message?.timestamp || Date.now()), 'live');
         this.onTimesSyncAckCallback?.(message?.data);
       });
 
@@ -233,6 +319,21 @@ class WebSocketProvider {
     this.onStatusCallback?.(state, PROVIDER_NAME, error);
   }
 
+  notifyReceive(name = 'update', timestamp = Date.now(), source = 'live') {
+    this.onReceiveActivityCallback?.({
+      name,
+      timestamp,
+      source
+    });
+  }
+
+  notifySend(name = 'update', timestamp = Date.now()) {
+    this.onSendActivityCallback?.({
+      name,
+      timestamp
+    });
+  }
+
   /**
    * Publish data to the channel
    */
@@ -244,7 +345,8 @@ class WebSocketProvider {
 
     try {
       await this.channel.publish('update', data);
-      console.log('[WebSocket] Published update');
+      console.log('[WebSocket][TX][update]', data);
+      this.notifySend('update');
       return true;
     } catch (error) {
       console.error('[WebSocket] Publish error:', error);
@@ -252,15 +354,20 @@ class WebSocketProvider {
     }
   }
 
-  async requestSnapshot() {
+  async requestSnapshot(data = {}) {
     if (!this.isConnected || !this.channel) {
       console.warn('[WebSocket] Not connected, cannot request snapshot');
       return false;
     }
 
     try {
-      await this.channel.publish('snapshot-request', { timestamp: Date.now() });
-      console.log('[WebSocket] Requested snapshot');
+      const payload = {
+        ...(data && typeof data === 'object' ? data : {}),
+        timestamp: Number(data?.timestamp || Date.now())
+      };
+      await this.channel.publish('snapshot-request', payload);
+      console.log('[WebSocket][TX][snapshot-request]', payload);
+      this.notifySend('snapshot-request');
       return true;
     } catch (error) {
       console.error('[WebSocket] Snapshot request error:', error);
@@ -276,6 +383,8 @@ class WebSocketProvider {
 
     try {
       await this.channel.publish('times-sync-request', data);
+      console.log('[WebSocket][TX][times-sync-request]', data);
+      this.notifySend('times-sync-request');
       return true;
     } catch (error) {
       console.error('[WebSocket] Times sync request error:', error);
@@ -291,6 +400,8 @@ class WebSocketProvider {
 
     try {
       await this.channel.publish('times-line-request', data);
+      console.log('[WebSocket][TX][times-line-request]', data);
+      this.notifySend('times-line-request');
       return true;
     } catch (error) {
       console.error('[WebSocket] Times line request error:', error);
@@ -306,6 +417,8 @@ class WebSocketProvider {
 
     try {
       await this.channel.publish('times-line-response', data);
+      console.log('[WebSocket][TX][times-line-response]', data);
+      this.notifySend('times-line-response');
       return true;
     } catch (error) {
       console.error('[WebSocket] Times line response error:', error);
@@ -321,6 +434,8 @@ class WebSocketProvider {
 
     try {
       await this.channel.publish('times-sync-ack', data);
+      console.log('[WebSocket][TX][times-sync-ack]', data);
+      this.notifySend('times-sync-ack');
       return true;
     } catch (error) {
       console.error('[WebSocket] Times sync ack error:', error);
@@ -336,6 +451,8 @@ class WebSocketProvider {
 
     try {
       await this.channel.publish('bootstrap-marker', data);
+      console.log('[WebSocket][TX][bootstrap-marker]', data);
+      this.notifySend('bootstrap-marker');
       return true;
     } catch (error) {
       console.error('[WebSocket] Bootstrap marker error:', error);
@@ -357,6 +474,8 @@ class WebSocketProvider {
 
     try {
       await this.channel.publish('session-manifest', data);
+      console.log('[WebSocket][TX][session-manifest]', data);
+      this.notifySend('session-manifest');
       return true;
     } catch (error) {
       console.error('[WebSocket] Session manifest error:', error);
@@ -365,7 +484,7 @@ class WebSocketProvider {
   }
 
   async loadSessionManifest() {
-    const historyItems = await this.loadChannelHistory(100);
+    const historyItems = await this.loadChannelHistory(500);
     const manifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
     return manifestMessage?.data || null;
   }

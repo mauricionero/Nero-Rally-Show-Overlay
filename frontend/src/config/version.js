@@ -3,4 +3,4 @@
 // This file is imported by both the Setup and Overlay pages to display the
 // version number in the UI.
 
-export const VERSION = '1.9.3';
+export const VERSION = '1.9.4';
