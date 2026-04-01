@@ -47,6 +47,13 @@ header:
   websocket: "Websocket"
   websocketSetupHint: "Conecte na aba Live sync > Live sync (websocket): gere uma chave, conecte e então este botão será habilitado."
   websocketReadyHint: "Abre o overlay com a chave ativa da conexão websocket."
+  ownershipTitle: "Propriedade da Setup"
+  ownershipStatus: "Status"
+  ownershipDescription: "A setup primária publica snapshots e controla o lease do heartbeat."
+  ownershipOwnerId: "ID do dono"
+  ownershipOffline: "Offline"
+  ownershipPrimary: "Primária"
+  ownershipReplica: "Réplica"
 
 # ===========================================
 # PÁGINA SETUP - ABAS

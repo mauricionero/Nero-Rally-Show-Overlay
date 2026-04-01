@@ -74,7 +74,7 @@ export default function Times() {
     wsLastSentAt,
     wsReceivedPulse,
     wsSentPulse,
-    connectWebSocket,
+    connectSyncChannel,
     setClientRole
   } = useRallyWs();
   const [selectedStageId, setSelectedStageId] = useState(null);
@@ -144,9 +144,9 @@ export default function Times() {
     const wsKey = searchParams.get('ws');
     if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
       setAutoConnectAttempted(true);
-      connectWebSocket(wsKey, { readOnly: false, readHistory: true, requestSnapshot: false, publishSnapshot: false, role: 'times' });
+      connectSyncChannel(wsKey, { readOnly: false, readHistory: true, requestSnapshot: false, publishSnapshot: false, role: 'times' });
     }
-  }, [searchParams, wsConnectionStatus, connectWebSocket, autoConnectAttempted]);
+  }, [searchParams, wsConnectionStatus, connectSyncChannel, autoConnectAttempted]);
 
   useEffect(() => {
     if (!wsEnabled) return undefined;

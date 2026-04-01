@@ -55,8 +55,8 @@ export default function Overlay() {
     wsLastSentAt,
     wsReceivedPulse,
     wsSentPulse,
-    connectWebSocket,
-    disconnectWebSocket
+    connectSyncChannel,
+    disconnectSyncChannel
   } = useRally();
   const [heartbeatStatus, setHeartbeatStatus] = useState('normal');
   const [leftZoneWidth, setLeftZoneWidth] = useState(256);
@@ -154,9 +154,9 @@ export default function Overlay() {
     if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
       setAutoConnectAttempted(true);
       console.log('[Overlay] Auto-connecting with URL key:', wsKey);
-      connectWebSocket(wsKey, { readOnly: true, role: 'overlay' });
+      connectSyncChannel(wsKey, { readOnly: true, role: 'overlay' });
     }
-  }, [searchParams, wsConnectionStatus, connectWebSocket, autoConnectAttempted]);
+  }, [searchParams, wsConnectionStatus, connectSyncChannel, autoConnectAttempted]);
 
   const clearTransitionTimers = useCallback(() => {
     transitionTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -357,7 +357,7 @@ export default function Overlay() {
 
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
-    const success = await connectWebSocket(wsKeyInput.trim(), { readOnly: true, role: 'overlay' });
+    const success = await connectSyncChannel(wsKeyInput.trim(), { readOnly: true, role: 'overlay' });
     if (success) {
       setShowWsPanel(false);
       setWsKeyInput('');
@@ -567,7 +567,7 @@ export default function Overlay() {
                   size="sm"
                   className="w-full"
                   onClick={() => {
-                    disconnectWebSocket();
+                    disconnectSyncChannel();
                     setShowWsPanel(false);
                   }}
                 >

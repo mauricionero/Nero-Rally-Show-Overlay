@@ -16,8 +16,8 @@ export default function LiveSyncTab() {
     wsConnectionStatus,
     wsError,
     lastTimesSyncAt,
-    connectWebSocket,
-    disconnectWebSocket,
+    connectSyncChannel,
+    disconnectSyncChannel,
     generateNewChannelKey
   } = useRallyWs();
 
@@ -35,7 +35,7 @@ export default function LiveSyncTab() {
       toast.error('Please generate or enter a channel key');
       return;
     }
-    const success = await connectWebSocket(newKey, { role: 'setup' });
+    const success = await connectSyncChannel(newKey, { role: 'setup' });
     if (success) {
       toast.success('Connected to WebSocket channel');
     } else {
@@ -125,7 +125,7 @@ export default function LiveSyncTab() {
                 Last times sync: {lastTimesSyncAt ? new Date(lastTimesSyncAt).toLocaleTimeString() : '--'}
               </div>
               <Button
-                onClick={disconnectWebSocket}
+                onClick={disconnectSyncChannel}
                 variant="destructive"
                 className="w-full"
               >

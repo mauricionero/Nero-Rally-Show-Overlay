@@ -6,7 +6,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Cpu, Mail, Play, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
+import { ArrowDown, ArrowUp, Cpu, Crown, GitBranch, Mail, Play, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
@@ -37,6 +37,9 @@ export default function Setup() {
     wsLastSentAt,
     wsReceivedPulse,
     wsSentPulse,
+    wsInstanceId,
+    wsOwnership,
+    wsRole,
     setClientRole
   } = useRallyWs();
   const [hideStreams, setHideStreams] = useState(false);
@@ -169,6 +172,19 @@ export default function Setup() {
     : 'rgba(63, 63, 70, 0.45)';
   const statusBadgeClassName = 'flex items-center justify-center gap-1 px-1 py-0 rounded text-[10px] font-bold uppercase tracking-wide border min-w-[20px] h-[16px]';
   const ConnectionIcon = connectionBadge.Icon;
+  const ownershipState = wsOwnership || {};
+  const isPrimaryOwnership = !!ownershipState?.ownerId
+    && !!wsInstanceId
+    && ownershipState.ownerId === wsInstanceId;
+  const ownershipLabel = wsConnectionStatus !== 'connected'
+    ? t('header.ownershipOffline')
+    : isPrimaryOwnership || ownershipState?.hasOwnership
+      ? t('header.ownershipPrimary')
+      : t('header.ownershipReplica');
+  const OwnershipIcon = isPrimaryOwnership || ownershipState?.hasOwnership ? Crown : GitBranch;
+  const ownershipBadgeClassName = isPrimaryOwnership || ownershipState?.hasOwnership
+    ? 'bg-[#FACC15] text-black border-transparent'
+    : 'bg-zinc-800 text-zinc-400 border-zinc-700';
 
   const handleGoLive = (url) => {
     window.open(url, '_blank');
@@ -179,6 +195,23 @@ export default function Setup() {
     <div className="min-h-screen bg-[#09090B] text-white p-6">
       <div className="fixed top-0.5 right-0.5 z-50">
         <div className="flex items-center gap-2 rounded-md border border-zinc-800/80 bg-[#111113]/88 backdrop-blur px-1.5 py-1 shadow-lg shadow-black/35">
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className={`${statusBadgeClassName} ${ownershipBadgeClassName}`}>
+                  <OwnershipIcon className="w-3 h-3" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                <div className="text-xs">
+                  <div className="font-semibold">{t('header.ownershipTitle')}</div>
+                  <div>{t('header.ownershipStatus')}: {ownershipLabel}</div>
+                  <div>{t('header.ownershipDescription')}</div>
+                  <div className="text-zinc-400">{t('header.ownershipOwnerId')}: {ownershipState?.ownerId || 'none'}</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TooltipProvider delayDuration={150}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -249,8 +282,8 @@ export default function Setup() {
               <h1 className="text-5xl font-bold uppercase tracking-tighter text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                 {t('header.title')}
               </h1>
-              <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
-            </div>
+            <p className="text-zinc-400 mt-2">{t('header.subtitle')}</p>
+          </div>
           </div>
           
           <div className="flex flex-col items-end gap-2">
