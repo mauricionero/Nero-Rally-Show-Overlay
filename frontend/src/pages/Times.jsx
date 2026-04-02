@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import { toast } from 'sonner';
 import { ArrowDown, ArrowUp, Flag, RotateCcw, Car, Timer, Lock, Unlock, Mail } from 'lucide-react';
 import PerformanceLed from '../components/PerformanceLed.jsx';
+import SosAlertStack from '../components/SosAlertStack.jsx';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../utils/stageSchedule.js';
 import { getLedLoadRgba, getMessagesPerMinuteLoadLevel } from '../utils/ledLoadColors.js';
 import {
@@ -49,8 +50,8 @@ const buildStageSosCountMap = (stageSos = {}) => {
   const counts = new Map();
 
   Object.values(stageSos || {}).forEach((pilotStages) => {
-    Object.entries(pilotStages || {}).forEach(([stageId, enabled]) => {
-      if (!enabled) {
+    Object.entries(pilotStages || {}).forEach(([stageId, level]) => {
+      if (Number(level || 0) <= 0) {
         return;
       }
 
@@ -239,6 +240,7 @@ export default function Times() {
 
   return (
     <div className="min-h-screen bg-[#09090B] text-white">
+      <SosAlertStack offsetClassName="top-12" />
       <div className="fixed top-1 left-2 right-2 sm:left-auto sm:right-4 z-50 flex items-center justify-end gap-2">
         <TooltipProvider>
           <Tooltip>

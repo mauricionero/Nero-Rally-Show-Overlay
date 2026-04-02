@@ -11,6 +11,7 @@ import { ArrowDown, ArrowUp, Cpu, Crown, GitBranch, Mail, Play, VideoOff, Wifi, 
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
+import SosAlertStack from '../components/SosAlertStack.jsx';
 import { getLedLoadRgba, getMessagesPerMinuteLoadLevel } from '../utils/ledLoadColors.js';
 
 // app version constant
@@ -228,6 +229,7 @@ export default function Setup() {
 
   return (
     <div className="min-h-screen bg-[#09090B] text-white p-6">
+      <SosAlertStack offsetClassName="top-14" />
       <div className="fixed top-0.5 right-0.5 z-50">
         <div className="flex items-center gap-2 rounded-md border border-zinc-800/80 bg-[#111113]/88 backdrop-blur px-1.5 py-1 shadow-lg shadow-black/35">
           <TooltipProvider delayDuration={150}>

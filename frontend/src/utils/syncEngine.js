@@ -250,7 +250,7 @@ const convertMessageToChanges = (message = {}) => {
     }
 
     if (isPlainObject(message?.payload)) {
-      return convertPayloadMessageToChanges(message);
+      return message.payload;
     }
 
     return isPlainObject(message?.changes) ? message.changes : {};
@@ -395,12 +395,28 @@ export default class SyncEngine {
     }
 
     return new Promise((resolve) => {
-      this.queue.push({
+      const queueEntry = {
         message: normalizedMessage,
         resolve,
         onSuccess: typeof options.onSuccess === 'function' ? options.onSuccess : null,
         queuedAt: Date.now()
-      });
+      };
+
+      if (options.priority === true) {
+        this.queue.unshift(queueEntry);
+      } else {
+        this.queue.push(queueEntry);
+      }
+
+      if (options.immediate === true) {
+        if (this.flushTimer) {
+          window.clearTimeout(this.flushTimer);
+          this.flushTimer = null;
+        }
+        void this.flush();
+        return;
+      }
+
       this.scheduleFlush();
     });
   }
@@ -764,6 +780,33 @@ export default class SyncEngine {
       return null;
     }
 
+    if (messageType === SYNC_MESSAGE_TYPES.DELTA_BATCH && normalized.packageType === 'control') {
+      return {
+        messageType: SYNC_MESSAGE_TYPES.DELTA_BATCH,
+        source: sourceRole,
+        sourceRole,
+        sourceInstanceId,
+        instanceId: normalized.instanceId || sourceInstanceId || null,
+        channelType: normalized.channelType || null,
+        channelName: normalized.channelName || null,
+        ownerId: normalized.ownerId || null,
+        ownerEpoch: Number(normalized.ownerEpoch || 0),
+        packageType: 'control',
+        originalMessageType: normalized.originalMessageType || messageType || SYNC_MESSAGE_TYPES.DELTA_BATCH,
+        controlType: normalized.controlType || null,
+        notificationId: normalized.notificationId || null,
+        batchId: normalized.batchId || null,
+        snapshotId: normalized.snapshotId || null,
+        partIndex: Number.isFinite(normalized.partIndex) ? Number(normalized.partIndex) : 0,
+        totalParts: Number.isFinite(normalized.totalParts) ? Number(normalized.totalParts) : 1,
+        highPriority: normalized.highPriority === true,
+        priority: normalized.priority === true,
+        timestamp: Number(normalized.timestamp || Date.now()),
+        payload: isPlainObject(normalized.payload) ? normalized.payload : {},
+        changes: isPlainObject(normalized.payload) ? normalized.payload : {}
+      };
+    }
+
     let changes = convertMessageToChanges(normalized);
     if (Object.keys(changes).length === 0) {
       console.log('[SyncEngine] Incoming message ignored after normalization', {
@@ -806,11 +849,20 @@ export default class SyncEngine {
       sourceRole,
       sourceInstanceId,
       instanceId: normalized.instanceId || sourceInstanceId || null,
+      channelType: normalized.channelType || null,
+      channelName: normalized.channelName || null,
       ownerId: normalized.ownerId || null,
       ownerEpoch: Number(normalized.ownerEpoch || 0),
       packageType: normalized.packageType || 'delta',
       originalMessageType: normalized.originalMessageType || messageType || SYNC_MESSAGE_TYPES.DELTA_BATCH,
       controlType: normalized.controlType || null,
+      notificationId: normalized.notificationId || null,
+      batchId: normalized.batchId || null,
+      snapshotId: normalized.snapshotId || null,
+      partIndex: Number.isFinite(normalized.partIndex) ? Number(normalized.partIndex) : 0,
+      totalParts: Number.isFinite(normalized.totalParts) ? Number(normalized.totalParts) : 1,
+      highPriority: normalized.highPriority === true,
+      priority: normalized.priority === true,
       timestamp: Number(normalized.timestamp || Date.now()),
       payload: normalized.payload || changes,
       changes

@@ -15,7 +15,7 @@ import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/s
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
 import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
-import { TriangleAlert, X, Clock, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw } from 'lucide-react';
+import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw, Check, CheckCheck, CircleX } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
 import {
   getStageNumberLabel,
@@ -51,6 +51,119 @@ const formatClockInput = (value) => {
 };
 
 const isValidClockTime = (value) => /^\d{2}:\d{2}$/.test(value);
+
+const SosDeliveryIndicator = ({ status, tooltipText }) => {
+  if (!status) {
+    return null;
+  }
+
+  if (status === 'sending') {
+    return <Clock3 className="w-3.5 h-3.5 text-zinc-400" aria-label={tooltipText} />;
+  }
+
+  if (status === 'sent') {
+    return <Check className="w-3.5 h-3.5 text-zinc-300" aria-label={tooltipText} />;
+  }
+
+  if (status === 'acked') {
+    return <CheckCheck className="w-3.5 h-3.5 text-[#22C55E]" aria-label={tooltipText} />;
+  }
+
+  if (status === 'error') {
+    return <CircleX className="w-3.5 h-3.5 text-red-500" aria-label={tooltipText} />;
+  }
+
+  return null;
+};
+
+const getEffectiveSosStatus = (sosLevel, sosDelivery) => {
+  const normalizedLevel = Number(sosLevel || 0);
+  const deliveryStatus = String(sosDelivery?.status || '').trim();
+
+  if (deliveryStatus === 'error') {
+    return 'error';
+  }
+
+  if (deliveryStatus === 'acked' || normalizedLevel >= 3) {
+    return 'acked';
+  }
+
+  if (deliveryStatus === 'sent' || normalizedLevel >= 2) {
+    return 'sent';
+  }
+
+  if (deliveryStatus === 'sending' || normalizedLevel >= 1) {
+    return 'sending';
+  }
+
+  return '';
+};
+
+const PilotStatusBadges = ({ pilotId, stageId, compact = false }) => {
+  const { t } = useTranslation();
+  const { retiredStages, stageAlerts, stageSos } = useRallyTiming();
+  const { getSosDeliveryStatus } = useRallyWs();
+  const retired = !!retiredStages?.[pilotId]?.[stageId];
+  const alert = !!stageAlerts?.[pilotId]?.[stageId];
+  const sosLevel = Number(stageSos?.[pilotId]?.[stageId] || 0);
+  const sos = sosLevel > 0;
+  const sosDelivery = getSosDeliveryStatus(pilotId, stageId);
+
+  if (!retired && !alert && !sos) {
+    return null;
+  }
+
+  const badgeClassName = compact
+    ? 'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold'
+    : 'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold';
+
+  const effectiveSosStatus = getEffectiveSosStatus(sosLevel, sosDelivery);
+
+  const sosTooltipText = effectiveSosStatus === 'sending'
+    ? t('status.sosDeliverySending')
+    : effectiveSosStatus === 'sent'
+      ? t('status.sosDeliverySent')
+      : effectiveSosStatus === 'acked'
+        ? t('status.sosDeliveryAcked')
+        : effectiveSosStatus === 'error'
+          ? (sosDelivery?.errorMessage || t('status.sosDeliveryError'))
+          : t('status.sosTooltip');
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 max-w-full min-w-0">
+      {retired && (
+        <span className={`${badgeClassName} bg-red-500/20 text-red-400`}>
+          RET
+        </span>
+      )}
+      {alert && (
+        <span className={`${badgeClassName} bg-amber-500/20 text-amber-300`}>
+          <span aria-hidden="true">⚠️</span>
+        </span>
+      )}
+      {sos && (
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className={`${badgeClassName} bg-red-500/20 text-red-300`}>
+                <span aria-hidden="true">🆘</span>
+                {effectiveSosStatus && (
+                  <SosDeliveryIndicator
+                    status={effectiveSosStatus}
+                    tooltipText={sosTooltipText}
+                  />
+                )}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="bg-[#111827] text-white border border-[#374151]">
+              <div className="text-xs">{sosTooltipText}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
+  );
+};
 
 const getEffectiveIdealStartTime = (stage, pilot, storedValue = '') => (
   storedValue || getPilotScheduledStartTime(stage, pilot)
@@ -185,8 +298,8 @@ const buildStageSosCountMap = (stageSos = {}) => {
   const counts = new Map();
 
   Object.values(stageSos || {}).forEach((pilotStages) => {
-    Object.entries(pilotStages || {}).forEach(([stageId, enabled]) => {
-      if (!enabled) {
+    Object.entries(pilotStages || {}).forEach(([stageId, level]) => {
+      if (Number(level || 0) <= 0) {
         return;
       }
 
@@ -242,10 +355,33 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     stageSos,
     timeDecimals
   } = useRallyTiming();
-  const { clientRole, wsConnectionStatus, lineSyncResults, requestTimingLineSync } = useRallyWs();
+  const { clientRole, wsConnectionStatus, lineSyncResults, requestTimingLineSync, getSosDeliveryStatus } = useRallyWs();
   const statusControlsReadOnly = isReadOnly || clientRole === 'times';
   const sosControlsReadOnly = isReadOnly;
   const [pendingSosToggle, setPendingSosToggle] = useState(null);
+  const getSosDeliveryTooltip = (delivery) => {
+    if (!delivery?.status) {
+      return '';
+    }
+
+    if (delivery.status === 'sending') {
+      return t('status.sosDeliverySending');
+    }
+
+    if (delivery.status === 'sent') {
+      return t('status.sosDeliverySent');
+    }
+
+    if (delivery.status === 'acked') {
+      return t('status.sosDeliveryAcked');
+    }
+
+    if (delivery.status === 'error') {
+      return delivery.errorMessage || t('status.sosDeliveryError');
+    }
+
+    return '';
+  };
 
   const stagePilotRows = useMemo(() => (
     sortedPilots.map((pilot) => {
@@ -259,7 +395,10 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
       const retired = !!retiredStages[pilot.id]?.[stage.id];
       const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
-      const sos = !!stageSos?.[pilot.id]?.[stage.id];
+      const sosLevel = Number(stageSos?.[pilot.id]?.[stage.id] || 0);
+      const sos = sosLevel > 0;
+      const sosDelivery = getSosDeliveryStatus(pilot.id, stage.id);
+      const effectiveSosStatus = getEffectiveSosStatus(sosLevel, sosDelivery);
       const totalMs = parseTotalTimeToMs(totalTime);
       const idealSeconds = parseClockTimeToSeconds(idealStartTimeValue);
       const realSeconds = parseClockTimeToSeconds(realStartTimeValue);
@@ -276,6 +415,9 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         retired,
         alert,
         sos,
+        sosLevel,
+        sosDelivery,
+        effectiveSosStatus,
         totalMs,
         hasRecordedTime: Boolean(totalTime),
         hasTimingData: Boolean(totalTime || arrivalTimeValue),
@@ -297,7 +439,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     retiredStages,
     stageAlerts,
     stageSos,
-    lineSyncResults
+    lineSyncResults,
+    getSosDeliveryStatus
   ]);
 
   const categoryStats = useMemo(() => {
@@ -478,7 +621,12 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 
   const confirmSosToggle = () => {
     if (!pendingSosToggle) return;
-    setStageSos(pendingSosToggle.pilotId, pendingSosToggle.stageId, pendingSosToggle.nextValue);
+    setStageSos(
+      pendingSosToggle.pilotId,
+      pendingSosToggle.stageId,
+      pendingSosToggle.nextValue,
+      { highPriority: pendingSosToggle.nextValue === true }
+    );
     setPendingSosToggle(null);
   };
 
@@ -534,7 +682,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-zinc-700">
-                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[90px] sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[224px] sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   #
                 </th>
                 <th className="text-left text-white uppercase font-bold p-1 sm:p-2 min-w-[200px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -573,6 +721,9 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   retired,
                   alert,
                   sos,
+                  sosLevel,
+                  sosDelivery,
+                  effectiveSosStatus,
                   hasRecordedTime,
                   totalTime,
                   avgMs,
@@ -585,17 +736,26 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 
                 return (
                   <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
-                    <td className="p-1 sm:p-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800">
+                    <td className="pl-0 pr-1 py-1 sm:pl-0.5 sm:pr-2 sm:py-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800">
                       <div
-                        className="flex items-center gap-1.5 px-1.5 py-0.5"
+                        className="flex flex-wrap items-center gap-1.5 pl-0 pr-1 py-0.5"
                         style={{ borderLeft: `2px solid ${category?.color || 'transparent'}` }}
                       >
-                        <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                        {pilot.carNumber && (
-                          <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
-                            {pilot.carNumber}
-                          </span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                          <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                          {pilot.carNumber && (
+                            <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
+                              {pilot.carNumber}
+                            </span>
+                          )}
+                        </div>
+                        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+                          <PilotStatusBadges
+                            pilotId={pilot.id}
+                            stageId={stage.id}
+                            compact
+                          />
+                        </div>
                       </div>
                     </td>
                     <td className="p-1 sm:p-2">
@@ -633,25 +793,6 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             tooltipTitle={t('times.jumpStart')}
                             tooltipText={t('times.jumpStartTooltip')}
                           />
-                        )}
-                        {alert && (
-                          <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                            {t('status.alert')}
-                          </span>
-                        )}
-                        {sos && (
-                          <StatusPill
-                            variant="alert"
-                            icon="🆘"
-                            className="text-[10px]"
-                            tooltipTitle={t('status.sosLabel')}
-                            tooltipText={t('status.sosTooltip')}
-                          />
-                        )}
-                        {retired && (
-                          <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                            RET
-                          </span>
                         )}
                       </div>
                     </td>
@@ -800,7 +941,36 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             onCheckedChange={(checked) => requestSosToggle(pilot.id, checked === true)}
                             disabled={sosControlsReadOnly}
                           />
-                          <span className="text-[11px] text-zinc-400 uppercase">🆘</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 uppercase">
+                            <span>🆘</span>
+                            {effectiveSosStatus && (
+                              <TooltipProvider delayDuration={150}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center">
+                                      <SosDeliveryIndicator
+                                        status={effectiveSosStatus}
+                                        tooltipText={getSosDeliveryTooltip(
+                                          effectiveSosStatus === 'error'
+                                            ? sosDelivery
+                                            : { status: effectiveSosStatus }
+                                        )}
+                                      />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="bg-[#111827] text-white border border-[#374151]">
+                                    <div className="text-xs">
+                                      {getSosDeliveryTooltip(
+                                        effectiveSosStatus === 'error'
+                                          ? sosDelivery
+                                          : { status: effectiveSosStatus }
+                                      )}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </span>
                         </label>
                     </td>
                   </tr>
@@ -820,6 +990,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
               retired,
               alert,
               sos,
+              sosLevel,
+              sosDelivery,
               hasRecordedTime,
               totalTime,
               avgMs,
@@ -837,14 +1009,25 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                 )}
                 <CardContent className="p-2 pl-3">
                   {/* Pilot Header */}
-                  <div className="flex flex-wrap items-center gap-1.5 mb-2.5 min-w-0">
-                    <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                    {pilot.carNumber && (
-                      <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
-                        {pilot.carNumber}
-                      </span>
-                    )}
-                    <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  <div className="flex flex-wrap items-start gap-2 mb-2.5 min-w-0">
+                    <div className="flex min-w-[132px] max-w-[176px] flex-wrap items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                        {pilot.carNumber && (
+                          <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
+                            {pilot.carNumber}
+                          </span>
+                        )}
+                      </div>
+                      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+                        <PilotStatusBadges
+                          pilotId={pilot.id}
+                          stageId={stage.id}
+                          compact
+                        />
+                      </div>
+                    </div>
+                    <span className="flex-1 min-w-[140px] text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                       {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
                     </span>
                     {showLineSyncRequest && (
@@ -877,25 +1060,6 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         tooltipTitle={t('times.jumpStart')}
                         tooltipText={t('times.jumpStartTooltip')}
                       />
-                    )}
-                    {alert && (
-                      <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                        {t('status.alert')}
-                      </span>
-                    )}
-                    {sos && (
-                      <StatusPill
-                        variant="alert"
-                        icon="🆘"
-                        className="text-[10px]"
-                        tooltipTitle={t('status.sosLabel')}
-                        tooltipText={t('status.sosTooltip')}
-                      />
-                    )}
-                    {retired && (
-                      <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                        RET
-                      </span>
                     )}
                   </div>
                   
@@ -1056,7 +1220,26 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     onCheckedChange={(checked) => requestSosToggle(pilot.id, checked === true)}
                     disabled={sosControlsReadOnly}
                   />
-                  <span className="text-[11px] text-zinc-400 uppercase">🆘</span>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 uppercase">
+                    <span>🆘</span>
+                    {sosDelivery?.status && (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center">
+                              <SosDeliveryIndicator
+                                status={sosDelivery.status}
+                                tooltipText={getSosDeliveryTooltip(sosDelivery)}
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="bg-[#111827] text-white border border-[#374151]">
+                            <div className="text-xs">{getSosDeliveryTooltip(sosDelivery)}</div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </span>
                 </label>
                     {retired && (
                       <span className={`text-[11px] font-bold uppercase ${hasRecordedTime ? 'text-amber-400' : 'text-red-400'}`}>

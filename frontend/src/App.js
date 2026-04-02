@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { RallyProvider } from './contexts/RallyContext.jsx';
 import { TranslationProvider } from './contexts/TranslationContext.jsx';
@@ -12,6 +12,28 @@ import './App.css';
 const basename = process.env.PUBLIC_URL || '';
 
 function App() {
+  useEffect(() => {
+    const ignoredResizeObserverMessages = new Set([
+      'ResizeObserver loop completed with undelivered notifications.',
+      'ResizeObserver loop limit exceeded'
+    ]);
+
+    const handleWindowError = (event) => {
+      const message = String(event?.message || '').trim();
+      if (!ignoredResizeObserverMessages.has(message)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+    };
+
+    window.addEventListener('error', handleWindowError);
+    return () => {
+      window.removeEventListener('error', handleWindowError);
+    };
+  }, []);
+
   return (
     <TranslationProvider>
       <RallyProvider>

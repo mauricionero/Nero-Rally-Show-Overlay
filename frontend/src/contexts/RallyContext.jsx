@@ -159,6 +159,46 @@ const normalizeCurrentSessionMeta = (value) => {
   };
 };
 
+const extractStageFlagEntries = (flagMap = {}) => (
+  Object.entries(flagMap || {}).flatMap(([pilotId, stageMap]) => (
+    Object.entries(stageMap || {}).map(([stageId, value]) => ({
+      pilotId: normalizePilotId(pilotId),
+      stageId: String(stageId || '').trim(),
+      value,
+      enabled: normalizeStageSosLevel(value) > 0
+    }))
+  )).filter((entry) => entry.pilotId && entry.stageId)
+);
+
+const buildSosNotificationId = ({ pilotId, stageId, timestamp }) => (
+  `sos:${normalizePilotId(pilotId)}:${String(stageId || '').trim()}:${Number(timestamp || 0)}`
+);
+
+const buildSosDeliveryKey = (pilotId, stageId) => (
+  `${normalizePilotId(pilotId)}:${String(stageId || '').trim()}`
+);
+
+const normalizeStageSosLevel = (value) => {
+  if (value === true) {
+    return 1;
+  }
+
+  if (value === false || value === null || value === undefined || value === '') {
+    return 0;
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return value ? 1 : 0;
+  }
+
+  if (numericValue <= 0) {
+    return 0;
+  }
+
+  return Math.min(3, Math.max(1, Math.trunc(numericValue)));
+};
+
 const writeCurrentSessionMetaToStorage = (nextMeta = null) => {
   if (typeof window === 'undefined' || !window.localStorage) {
     return;
@@ -198,7 +238,7 @@ const TIMING_PATCH_DEFAULT_VALUES = {
   stagePilots: [],
   retiredStages: false,
   stageAlerts: false,
-  stageSos: false
+  stageSos: 0
 };
 const SETUP_TIMING_SECTION_SET = new Set(Object.keys(TIMING_PATCH_DEFAULT_VALUES));
 const TIMES_ROLE_TIMING_SECTION_KEYS = [
@@ -441,6 +481,9 @@ const mergePilotStageFlagMap = (currentValue = {}, incomingValue = {}, options =
   const resolveStageId = typeof options.resolveStageId === 'function'
     ? options.resolveStageId
     : ((stageId) => String(stageId ?? '').trim());
+  const normalizeValue = typeof options.normalizeValue === 'function'
+    ? options.normalizeValue
+    : ((enabled, normalizedStageId) => (enabled ? normalizedStageId : null));
 
   Object.entries(incomingMap).forEach(([pilotId, stageFlags]) => {
     const normalizedPilotId = resolvePilotId(normalizePilotId(pilotId));
@@ -456,10 +499,12 @@ const mergePilotStageFlagMap = (currentValue = {}, incomingValue = {}, options =
         return;
       }
 
-      if (enabled) {
-        nextPilotStages[normalizedStageId] = normalizedStageId;
-      } else {
+      const nextValueForStage = normalizeValue(enabled, normalizedStageId, normalizedPilotId);
+
+      if (nextValueForStage === null || nextValueForStage === undefined || nextValueForStage === false || nextValueForStage === 0 || nextValueForStage === '') {
         delete nextPilotStages[normalizedStageId];
+      } else {
+        nextPilotStages[normalizedStageId] = nextValueForStage;
       }
     });
 
@@ -903,8 +948,9 @@ const buildTimingByStageSnapshot = (snapshot = {}, selectedTimingSections = []) 
       if (sections.has('stageAlerts') && snapshot.stageAlerts?.[pilotId]?.[stageId]) {
         pilotStageFields.stageAlerts = true;
       }
-      if (sections.has('stageSos') && snapshot.stageSos?.[pilotId]?.[stageId]) {
-        pilotStageFields.stageSos = true;
+      const stageSosLevel = normalizeStageSosLevel(snapshot.stageSos?.[pilotId]?.[stageId]);
+      if (sections.has('stageSos') && stageSosLevel > 0) {
+        pilotStageFields.stageSos = stageSosLevel;
       }
       if (sections.has('stagePilots') && stagePilotsForStage.has(pilotId)) {
         pilotStageFields.stagePilots = true;
@@ -959,8 +1005,8 @@ const expandTimingByStageSnapshot = (timingByStage = {}) => {
       if (pilotFields.stageAlerts) {
         assignPilotStageValue('stageAlerts', true);
       }
-      if (pilotFields.stageSos) {
-        assignPilotStageValue('stageSos', true);
+      if (normalizeStageSosLevel(pilotFields.stageSos) > 0) {
+        assignPilotStageValue('stageSos', normalizeStageSosLevel(pilotFields.stageSos));
       }
       if (pilotFields.stagePilots) {
         if (!isPlainObject(expanded.stagePilots)) {
@@ -1178,10 +1224,11 @@ export const RallyProvider = ({ children }) => {
     hasOwnership: false,
     reason: null
   });
+  const [pendingSosAlerts, setPendingSosAlerts] = useState([]);
+  const [sosDeliveryByLine, setSosDeliveryByLine] = useState({});
   const [metaCurrentSession, setMetaCurrentSession] = useState(() => normalizeCurrentSessionMeta(
     loadFromStorage(CURRENT_SESSION_META_STORAGE_KEY, null)
   ));
-  const [sessionManifest, setSessionManifest] = useState(() => loadFromStorage('rally_ws_session_manifest', null));
   const [latestSnapshotVersion, setLatestSnapshotVersion] = useState(() => loadFromStorage('rally_ws_snapshot_version', 0));
   const [dirtySetupSections, setDirtySetupSections] = useState(() => loadFromStorage('rally_dirty_setup_sections', []));
   const [lastSetupEditAt, setLastSetupEditAt] = useState(() => loadFromStorage('rally_setup_last_edit_at', 0));
@@ -1204,14 +1251,19 @@ export const RallyProvider = ({ children }) => {
   const wsProvider = useRef(null);
   const wsMessageReceiver = useRef(null);
   const syncEngineRef = useRef(null);
+  const wsConnectInFlightRef = useRef(null);
   const setupInstanceIdRef = useRef(createSyncInstanceId());
   const [wsInstanceId, setWsInstanceId] = useState(() => setupInstanceIdRef.current);
   const metaCurrentSessionRef = useRef(metaCurrentSession);
+  const pendingSosAlertsRef = useRef(pendingSosAlerts);
+  const sosDeliveryByLineRef = useRef(sosDeliveryByLine);
+  const localSetupTimingCaptureSuppressionRef = useRef(new Set());
   const wsLastReceivedMarkerRef = useRef(null);
   const isPublishing = useRef(false);
   const storageReloadTimeout = useRef(null);
   const pendingStorageDomainsRef = useRef(new Set());
   const wsRoleRef = useRef(wsRole);
+  const wsConnectionStatusRef = useRef(wsConnectionStatus);
   const pendingLocalTimingSectionsRef = useRef(new Set());
   const timingLineVersionsRef = useRef(timingLineVersions);
   const publishDirtyTimingSectionsRef = useRef(null);
@@ -1292,6 +1344,18 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     metaCurrentSessionRef.current = metaCurrentSession;
   }, [metaCurrentSession]);
+
+  useEffect(() => {
+    pendingSosAlertsRef.current = pendingSosAlerts;
+  }, [pendingSosAlerts]);
+
+  useEffect(() => {
+    sosDeliveryByLineRef.current = sosDeliveryByLine;
+  }, [sosDeliveryByLine]);
+
+  useEffect(() => {
+    wsConnectionStatusRef.current = wsConnectionStatus;
+  }, [wsConnectionStatus]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.localStorage) {
@@ -1417,8 +1481,8 @@ export const RallyProvider = ({ children }) => {
       return false;
     }
 
-    if (packageType === 'control' && controlType === 'session-manifest') {
-      return true;
+    if (packageType === 'control' && controlType === 'sos-ack') {
+      return false;
     }
 
     return (
@@ -1482,6 +1546,189 @@ export const RallyProvider = ({ children }) => {
 
     return current.lastProjectMessage;
   }, [wsChannelKey]);
+
+  const removePendingSosAlert = useCallback((notificationId, fallback = {}) => {
+    const normalizedNotificationId = String(notificationId || '').trim();
+    const normalizedPilotId = normalizePilotId(fallback?.pilotId);
+    const normalizedStageId = String(fallback?.stageId || '').trim();
+
+    setPendingSosAlerts((prev) => prev.filter((alert) => {
+      if (normalizedNotificationId && alert.notificationId === normalizedNotificationId) {
+        return false;
+      }
+
+      if (normalizedPilotId && normalizedStageId) {
+        return !(alert.pilotId === normalizedPilotId && alert.stageId === normalizedStageId);
+      }
+
+      return true;
+    }));
+  }, []);
+
+  const registerIncomingSosAlerts = useCallback((stageSosChanges = {}, metadata = {}) => {
+    const incomingEntries = extractStageFlagEntries(stageSosChanges)
+      .filter((entry) => normalizeStageSosLevel(entry.value) > 0 && normalizeStageSosLevel(entry.value) < 3);
+    if (incomingEntries.length === 0) {
+      return;
+    }
+
+    const messageTimestamp = Number(metadata?.timestamp || Date.now());
+
+    setPendingSosAlerts((prev) => {
+      let next = [...prev];
+
+      incomingEntries.forEach(({ pilotId, stageId, enabled }) => {
+        if (!enabled) {
+          next = next.filter((alert) => !(alert.pilotId === pilotId && alert.stageId === stageId));
+          return;
+        }
+
+        const existingIndex = next.findIndex((alert) => alert.pilotId === pilotId && alert.stageId === stageId);
+        const notificationId = String(metadata?.notificationId || '').trim() || buildSosNotificationId({
+          pilotId,
+          stageId,
+          timestamp: messageTimestamp
+        });
+        const nextAlert = {
+          notificationId,
+          pilotId,
+          stageId,
+          timestamp: messageTimestamp,
+          sourceRole: String(metadata?.sourceRole || metadata?.source || '').trim() || null,
+          sourceInstanceId: String(metadata?.sourceInstanceId || metadata?.instanceId || '').trim() || null,
+          channelType: String(metadata?.channelType || '').trim() || 'priority'
+        };
+
+        if (existingIndex >= 0) {
+          if (Number(next[existingIndex]?.timestamp || 0) <= messageTimestamp) {
+            next[existingIndex] = nextAlert;
+          }
+          return;
+        }
+
+        next.unshift(nextAlert);
+      });
+
+      return next;
+    });
+  }, []);
+
+  const setSosDeliveryStatus = useCallback((pilotId, stageId, nextStatus = {}) => {
+    const deliveryKey = buildSosDeliveryKey(pilotId, stageId);
+    setSosDeliveryByLine((prev) => ({
+      ...(prev || {}),
+      [deliveryKey]: {
+        ...(prev?.[deliveryKey] || {}),
+        ...nextStatus,
+        pilotId: normalizePilotId(pilotId),
+        stageId: String(stageId || '').trim(),
+        updatedAt: Date.now()
+      }
+    }));
+  }, []);
+
+  const clearSosDeliveryStatus = useCallback((pilotId, stageId) => {
+    const deliveryKey = buildSosDeliveryKey(pilotId, stageId);
+    setSosDeliveryByLine((prev) => {
+      if (!prev?.[deliveryKey]) {
+        return prev;
+      }
+
+      const next = { ...(prev || {}) };
+      delete next[deliveryKey];
+      return next;
+    });
+  }, []);
+
+  const getSosDeliveryStatus = useCallback((pilotId, stageId) => (
+    sosDeliveryByLineRef.current?.[buildSosDeliveryKey(pilotId, stageId)] || null
+  ), []);
+
+  const clearResolvedSosAlerts = useCallback((stageSosChanges = {}) => {
+    const disabledEntries = extractStageFlagEntries(stageSosChanges).filter((entry) => !entry.enabled);
+    if (disabledEntries.length === 0) {
+      return;
+    }
+
+    disabledEntries.forEach((entry) => {
+      clearSosDeliveryStatus(entry.pilotId, entry.stageId);
+    });
+
+    setPendingSosAlerts((prev) => prev.filter((alert) => !disabledEntries.some((entry) => (
+      entry.pilotId === alert.pilotId && entry.stageId === alert.stageId
+    ))));
+  }, [clearSosDeliveryStatus]);
+
+  const applyAcknowledgedSosEntries = useCallback((stageSosChanges = {}) => {
+    const acknowledgedEntries = extractStageFlagEntries(stageSosChanges)
+      .filter((entry) => normalizeStageSosLevel(entry.value) >= 3);
+
+    if (acknowledgedEntries.length === 0) {
+      return;
+    }
+
+    acknowledgedEntries.forEach((entry) => {
+      removePendingSosAlert('', {
+        pilotId: entry.pilotId,
+        stageId: entry.stageId
+      });
+      setSosDeliveryStatus(entry.pilotId, entry.stageId, {
+        status: 'acked',
+        acknowledgedAt: Date.now(),
+        errorMessage: ''
+      });
+    });
+  }, [removePendingSosAlert, setSosDeliveryStatus]);
+
+  const suppressNextLocalSetupTimingCapture = useCallback((section) => {
+    if (!section) {
+      return;
+    }
+
+    localSetupTimingCaptureSuppressionRef.current.add(section);
+  }, []);
+
+  const consumeLocalSetupTimingCaptureSuppression = useCallback((section) => {
+    if (!localSetupTimingCaptureSuppressionRef.current.has(section)) {
+      return false;
+    }
+
+    localSetupTimingCaptureSuppressionRef.current.delete(section);
+    return true;
+  }, []);
+
+  const setLocalStageSosLevel = useCallback((pilotId, stageId, nextLevel, options = {}) => {
+    const normalizedPilotId = normalizePilotId(pilotId);
+    const normalizedStageId = String(stageId || '').trim();
+    const normalizedLevel = normalizeStageSosLevel(nextLevel);
+
+    if (!normalizedPilotId || !normalizedStageId) {
+      return;
+    }
+
+    if (clientRole === 'setup' && options.suppressSetupCapture !== false) {
+      suppressNextLocalSetupTimingCapture('stageSos');
+    }
+
+    setStageSosState((prev) => {
+      const next = { ...(prev || {}) };
+      const nextPilotStages = { ...(next[normalizedPilotId] || {}) };
+
+      if (normalizedLevel > 0) {
+        nextPilotStages[normalizedStageId] = normalizedLevel;
+      } else {
+        delete nextPilotStages[normalizedStageId];
+      }
+
+      if (Object.keys(nextPilotStages).length > 0) {
+        next[normalizedPilotId] = nextPilotStages;
+      } else {
+        delete next[normalizedPilotId];
+      }
+
+      return next;
+    });
+  }, [clientRole, suppressNextLocalSetupTimingCapture]);
 
   const mergePilotTelemetryEntries = useCallback((entries = [], options = {}) => {
     const safeEntries = Array.isArray(entries)
@@ -1602,7 +1849,10 @@ export const RallyProvider = ({ children }) => {
     const packageType = options.packageType === 'snapshot' ? 'snapshot' : 'delta';
     const messageTimestamp = getNextLogicalTimestamp();
     const packageId = createEntityId(packageType === 'snapshot' ? 'snapshot' : 'batch');
-    const chunks = chunkChangesByApproximateSize(changes);
+    const isHighPriority = options.highPriority === true;
+    const chunks = isHighPriority
+      ? [changes]
+      : chunkChangesByApproximateSize(changes);
 
     if (chunks.length === 0) {
       return null;
@@ -1613,8 +1863,36 @@ export const RallyProvider = ({ children }) => {
       originalMessageType: packageType === 'snapshot' ? 'full-snapshot' : SYNC_MESSAGE_TYPES.DELTA_BATCH,
       packageType,
       timestamp: messageTimestamp,
+      ...(isHighPriority ? {
+        highPriority: true,
+        priority: true,
+        channelType: 'priority'
+      } : {}),
       ...(isPlainObject(options.extraMeta) ? options.extraMeta : {})
     };
+
+    if (isHighPriority) {
+      const highPriorityBatch = {
+        ...sharedMeta,
+        ...(packageType === 'snapshot' ? { snapshotId: packageId } : { batchId: packageId }),
+        partIndex: 0,
+        totalParts: 1,
+        payload: chunks[0]
+      };
+
+      const published = await wsProvider.current.publish(highPriorityBatch);
+      if (!published) {
+        return null;
+      }
+
+      return {
+        packageId,
+        timestamp: messageTimestamp,
+        totalParts: 1,
+        packageType,
+        highPriority: true
+      };
+    }
 
     await Promise.all(chunks.map((chunk, partIndex) => syncEngineRef.current.enqueue({
       ...sharedMeta,
@@ -1628,7 +1906,8 @@ export const RallyProvider = ({ children }) => {
       packageId,
       timestamp: messageTimestamp,
       totalParts: chunks.length,
-      packageType
+      packageType,
+      highPriority: isHighPriority
     };
   }, [getNextLogicalTimestamp]);
 
@@ -1952,7 +2231,7 @@ export const RallyProvider = ({ children }) => {
       case 'stageAlerts':
         return !!stageAlertsRef.current?.[pilotId]?.[stageId];
       case 'stageSos':
-        return !!stageSosRef.current?.[pilotId]?.[stageId];
+        return normalizeStageSosLevel(stageSosRef.current?.[pilotId]?.[stageId]);
       default:
         return null;
     }
@@ -2058,8 +2337,9 @@ export const RallyProvider = ({ children }) => {
         setStageSosState((prev) => {
           const next = { ...prev };
           const nextPilotStages = { ...(next[pilotId] || {}) };
-          if (value) {
-            nextPilotStages[stageId] = stageId;
+          const nextStageSosLevel = normalizeStageSosLevel(value);
+          if (nextStageSosLevel > 0) {
+            nextPilotStages[stageId] = nextStageSosLevel;
           } else {
             delete nextPilotStages[stageId];
           }
@@ -2256,6 +2536,58 @@ export const RallyProvider = ({ children }) => {
     });
   }, [clientRole, getNextLogicalTimestamp]);
 
+  const acknowledgeSosAlert = useCallback((notificationId) => {
+    const normalizedNotificationId = String(notificationId || '').trim();
+    if (!normalizedNotificationId) {
+      return false;
+    }
+
+    const alert = pendingSosAlertsRef.current.find((entry) => entry.notificationId === normalizedNotificationId);
+    if (!alert) {
+      return false;
+    }
+
+    removePendingSosAlert(normalizedNotificationId, alert);
+    setSosDeliveryByLine((prev) => {
+      const next = { ...(prev || {}) };
+      Object.entries(next).forEach(([key, value]) => {
+        if (
+          value?.notificationId === normalizedNotificationId
+          || (value?.pilotId === alert.pilotId && value?.stageId === alert.stageId)
+        ) {
+          next[key] = {
+            ...value,
+            status: 'acked',
+            acknowledgedAt: Date.now(),
+            updatedAt: Date.now()
+          };
+        }
+      });
+      return next;
+    });
+    applyAcknowledgedSosEntries({
+      [alert.pilotId]: {
+        [alert.stageId]: 3
+      }
+    });
+
+    return enqueueChangePackages({
+      stageSos: {
+        [alert.pilotId]: {
+          [alert.stageId]: 3
+        }
+      }
+    }, {
+      highPriority: true,
+      extraMeta: {
+        notificationId: normalizedNotificationId,
+        acknowledgedAt: Date.now(),
+        acknowledgedBy: setupInstanceIdRef.current,
+        acknowledgedByRole: wsRoleRef.current || clientRole
+      }
+    });
+  }, [applyAcknowledgedSosEntries, clientRole, enqueueChangePackages, removePendingSosAlert]);
+
   const applyDeltaBatchChanges = useCallback((changes = {}, metadata = {}) => {
     if (!isPlainObject(changes)) {
       return;
@@ -2443,7 +2775,7 @@ export const RallyProvider = ({ children }) => {
       })));
     }
 
-    if (normalizedChanges.stageAlerts !== undefined) {
+    if (normalizedChanges.stageAlerts !== undefined && !shouldPreserveLocalTimingSection('stageAlerts', messageTimestamp)) {
       setStageAlerts(() => (isSnapshotPackage ? (isPlainObject(normalizedChanges.stageAlerts) ? normalizedChanges.stageAlerts : {}) : mergePilotStageFlagMap(stageAlertsRef.current, normalizedChanges.stageAlerts, {
         resolvePilotId: (pilotId) => resolveKnownEntityId(pilotId, pilotsRef.current, 'pilot'),
         resolveStageId: (stageId) => resolveKnownEntityId(stageId, stagesRef.current, 'stage')
@@ -2453,8 +2785,18 @@ export const RallyProvider = ({ children }) => {
     if (normalizedChanges.stageSos !== undefined) {
       setStageSosState(() => (isSnapshotPackage ? (isPlainObject(normalizedChanges.stageSos) ? normalizedChanges.stageSos : {}) : mergePilotStageFlagMap(stageSosRef.current, normalizedChanges.stageSos, {
         resolvePilotId: (pilotId) => resolveKnownEntityId(pilotId, pilotsRef.current, 'pilot'),
-        resolveStageId: (stageId) => resolveKnownEntityId(stageId, stagesRef.current, 'stage')
+        resolveStageId: (stageId) => resolveKnownEntityId(stageId, stagesRef.current, 'stage'),
+        normalizeValue: (value) => {
+          const nextStageSosLevel = normalizeStageSosLevel(value);
+          return nextStageSosLevel > 0 ? nextStageSosLevel : null;
+        }
       })));
+      clearResolvedSosAlerts(normalizedChanges.stageSos);
+      applyAcknowledgedSosEntries(normalizedChanges.stageSos);
+
+      if (metadata?.channelType === 'priority' && !isSnapshotPackage) {
+        registerIncomingSosAlerts(normalizedChanges.stageSos, metadata);
+      }
     }
 
     if (normalizedChanges.pilotTelemetry !== undefined) {
@@ -2479,7 +2821,7 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 0);
-  }, [mergePilotTelemetryEntries, suppressNextSetupTimingCapture]);
+  }, [applyAcknowledgedSosEntries, clearResolvedSosAlerts, mergePilotTelemetryEntries, registerIncomingSosAlerts, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
 
   const applyDeltaBatchControl = useCallback((data = {}) => {
     const controlType = String(data?.controlType || '').trim();
@@ -2491,26 +2833,39 @@ export const RallyProvider = ({ children }) => {
       return false;
     }
 
-    if (controlType === 'session-manifest') {
-      const latestSnapshotVersionValue = Number(controlPayload?.latestSnapshotVersion || 0);
-      const lastSnapshotAtValue = Number(controlPayload?.lastSnapshotAt || 0);
-      const latestSetupSyncAtValue = Number(controlPayload?.latestSetupSyncAt || 0);
-      const latestTimesSyncAtValue = Number(controlPayload?.latestTimesSyncAt || 0);
-
-      setSessionManifest((prev) => ({
-        ...(prev || {}),
-        ...controlPayload,
-        latestSnapshotVersion: latestSnapshotVersionValue,
-        lastSnapshotAt: lastSnapshotAtValue,
-        latestSetupSyncAt: latestSetupSyncAtValue,
-        latestTimesSyncAt: latestTimesSyncAtValue
-      }));
-      setLatestSnapshotVersion(latestSnapshotVersionValue);
-      if (latestSetupSyncAtValue > 0) {
-        setLastSetupSyncAt(latestSetupSyncAtValue);
-      }
-      if (latestTimesSyncAtValue > 0) {
-        setLastTimesSyncAt(latestTimesSyncAtValue);
+    if (controlType === 'sos-ack') {
+      console.log('[SOS][ack]', {
+        notificationId: controlPayload?.notificationId || null,
+        pilotId: controlPayload?.pilotId || null,
+        stageId: controlPayload?.stageId || null,
+        acknowledgedAt: Number(controlPayload?.acknowledgedAt || Date.now())
+      });
+      removePendingSosAlert(controlPayload?.notificationId, {
+        pilotId: controlPayload?.pilotId,
+        stageId: controlPayload?.stageId
+      });
+      setSosDeliveryByLine((prev) => {
+        const next = { ...(prev || {}) };
+        Object.entries(next).forEach(([key, value]) => {
+          if (
+            value?.notificationId === String(controlPayload?.notificationId || '').trim()
+            || (
+              value?.pilotId === normalizePilotId(controlPayload?.pilotId)
+              && value?.stageId === String(controlPayload?.stageId || '').trim()
+            )
+          ) {
+            next[key] = {
+              ...value,
+              status: 'acked',
+              acknowledgedAt: Number(controlPayload?.acknowledgedAt || Date.now()),
+              updatedAt: Date.now()
+            };
+          }
+        });
+        return next;
+      });
+      if (controlPayload?.pilotId && controlPayload?.stageId) {
+        setLocalStageSosLevel(controlPayload.pilotId, controlPayload.stageId, 3);
       }
       return true;
     }
@@ -2695,7 +3050,9 @@ export const RallyProvider = ({ children }) => {
     return false;
   }, [
     buildLineSyncKey,
-    publishDeltaBatchControl
+    publishDeltaBatchControl,
+    removePendingSosAlert,
+    setLocalStageSosLevel
   ]);
 
   const applyWebSocketData = useCallback((data) => {
@@ -2930,7 +3287,11 @@ export const RallyProvider = ({ children }) => {
       if (messageSource === 'android-app' || data?.section === 'stageSos') {
         setStageSosState((prev) => mergePilotStageFlagMap(prev, normalizedData.stageSos, {
           resolvePilotId: (pilotId) => resolveKnownEntityId(pilotId, pilotsRef.current, 'pilot'),
-          resolveStageId: (stageId) => resolveKnownEntityId(stageId, stagesRef.current, 'stage')
+          resolveStageId: (stageId) => resolveKnownEntityId(stageId, stagesRef.current, 'stage'),
+          normalizeValue: (value) => {
+            const nextStageSosLevel = normalizeStageSosLevel(value);
+            return nextStageSosLevel > 0 ? nextStageSosLevel : null;
+          }
         }));
       } else if (!shouldPreserveLocalTimingSection('stageSos')) {
         setStageSosState(normalizedData.stageSos);
@@ -3129,8 +3490,8 @@ export const RallyProvider = ({ children }) => {
     return changes;
   }, [buildWebSocketSnapshot]);
 
-  const publishSetupSnapshotBatchMessages = useCallback(async (allowedSections = null, baseManifest = null) => {
-    const previousSnapshotVersion = Number(baseManifest?.latestSnapshotVersion || latestSnapshotVersion || 0);
+  const publishSetupSnapshotBatchMessages = useCallback(async (allowedSections = null) => {
+    const previousSnapshotVersion = Number(latestSnapshotVersion || 0);
     return enqueueChangePackages(buildSnapshotChanges(allowedSections), {
       packageType: 'snapshot',
       extraMeta: {
@@ -3151,63 +3512,26 @@ export const RallyProvider = ({ children }) => {
     setWsOwnership(nextOwnership);
   }, []);
 
-  const publishSyncManifestUpdate = useCallback(async (partialManifest = {}, baseManifest = null) => {
-    const previousManifest = baseManifest || sessionManifest || {};
-    const nextManifest = {
-      ...previousManifest,
-      ...partialManifest,
-      channelKey: partialManifest.channelKey || wsChannelKey || previousManifest.channelKey || '',
-      sessionId: partialManifest.sessionId || previousManifest.sessionId || createEntityId('session'),
-      initializedAt: partialManifest.initializedAt || previousManifest.initializedAt || Date.now(),
-      latestSnapshotVersion: Number(partialManifest.latestSnapshotVersion ?? previousManifest.latestSnapshotVersion ?? latestSnapshotVersion ?? 0),
-      lastSnapshotAt: Number(partialManifest.lastSnapshotAt ?? previousManifest.lastSnapshotAt ?? 0),
-      latestSetupSyncAt: Number(partialManifest.latestSetupSyncAt ?? previousManifest.latestSetupSyncAt ?? lastSetupSyncAt ?? 0),
-      latestTimesSyncAt: Number(partialManifest.latestTimesSyncAt ?? previousManifest.latestTimesSyncAt ?? lastTimesSyncAt ?? 0),
-      updatedAt: Date.now()
-    };
-
-    setSessionManifest(nextManifest);
-    setLatestSnapshotVersion(nextManifest.latestSnapshotVersion || 0);
-    await publishDeltaBatchControl('session-manifest', nextManifest, {
-      timestamp: Number(nextManifest.updatedAt || Date.now())
-    });
-    return nextManifest;
-  }, [lastSetupSyncAt, lastTimesSyncAt, latestSnapshotVersion, publishDeltaBatchControl, sessionManifest, wsChannelKey]);
-
-  const publishSetupSnapshot = useCallback(async (channelKey, allowedSections = null, baseManifest = null) => {
+  const publishSetupSnapshot = useCallback(async (_channelKey, allowedSections = null) => {
     if (snapshotPublishInFlightRef.current) {
       return null;
     }
 
     snapshotPublishInFlightRef.current = true;
     try {
-      const previousManifest = baseManifest || sessionManifest || {};
-      const nextSnapshotVersion = Math.max(
-        Number(previousManifest.latestSnapshotVersion || 0),
-        Number(latestSnapshotVersion || 0)
-      ) + 1;
-      const snapshotTimestamp = Date.now();
-
-      const publishedSnapshot = await publishSetupSnapshotBatchMessages(allowedSections, previousManifest);
+      const nextSnapshotVersion = Number(latestSnapshotVersion || 0) + 1;
+      const publishedSnapshot = await publishSetupSnapshotBatchMessages(allowedSections);
 
       if (!publishedSnapshot) {
         return null;
       }
 
       setLatestSnapshotVersion(nextSnapshotVersion);
-
-      return publishSyncManifestUpdate({
-        channelKey: channelKey || previousManifest.channelKey || wsChannelKey || '',
-        sessionId: previousManifest.sessionId || createEntityId('session'),
-        initializedAt: previousManifest.initializedAt || snapshotTimestamp,
-        latestSnapshotVersion: nextSnapshotVersion,
-        lastSnapshotAt: snapshotTimestamp,
-        snapshotId: publishedSnapshot.packageId || ''
-      }, previousManifest);
+      return publishedSnapshot;
     } finally {
       snapshotPublishInFlightRef.current = false;
     }
-  }, [latestSnapshotVersion, publishSetupSnapshotBatchMessages, publishSyncManifestUpdate, sessionManifest, wsChannelKey]);
+  }, [latestSnapshotVersion, publishSetupSnapshotBatchMessages]);
 
   useEffect(() => {
     publishSetupSnapshotRef.current = publishSetupSnapshot;
@@ -3345,18 +3669,12 @@ export const RallyProvider = ({ children }) => {
       setLastTimesSyncAt(syncAt);
     }
 
-    await publishSyncManifestUpdate({
-      ...(publishedBaseSections.length > 0 ? { latestSetupSyncAt: syncAt } : {}),
-      ...(publishedTimingSections.length > 0 ? { latestTimesSyncAt: syncAt } : {})
-    });
     return true;
   }, [
     clearPendingSetupPatchEntries,
     dirtySetupSections,
     getPendingSetupPatchEntries,
-    publishSyncManifestUpdate,
-    publishSetupDeltaBatchMessages,
-    sessionManifest
+    publishSetupDeltaBatchMessages
   ]);
 
   useEffect(() => {
@@ -3429,286 +3747,322 @@ export const RallyProvider = ({ children }) => {
 
   // WebSocket connection management
   const connectSyncChannel = useCallback(async (channelKey, options = {}) => {
-    const { valid } = parseChannelKey(channelKey);
-    if (!valid) {
-      setWsError('Invalid channel key format');
-      return false;
+    if (wsConnectInFlightRef.current) {
+      return wsConnectInFlightRef.current;
     }
 
-    const role = options.role || 'client';
-    const canPublish = options.readOnly !== true;
-    const shouldReadHistory = options.readHistory ?? (role === 'setup' ? true : !canPublish);
-    const allowedSections = options.allowedSections ?? (
-      role === 'times'
-        ? TIMES_ROLE_TIMING_SECTION_KEYS
-        : null
-    );
+    const connectPromise = (async () => {
+      const { valid } = parseChannelKey(channelKey);
+      if (!valid) {
+        setWsError('Invalid channel key format');
+        return false;
+      }
 
-    try {
-      setWsConnectionStatus('connecting');
-      setWsError(null);
-      
-      wsProvider.current = getWebSocketProvider();
-      const existingSessionMeta = normalizeCurrentSessionMeta(metaCurrentSessionRef.current);
-      if (!existingSessionMeta || existingSessionMeta.channelKey !== channelKey) {
-        const nextSessionMeta = normalizeCurrentSessionMeta({
-          sessionId: existingSessionMeta?.sessionId || createSyncInstanceId(),
-          channelKey,
-          updatedAt: Date.now(),
-          lastProjectMessage: null
-        });
+      const role = options.role || 'client';
+      const canPublish = options.readOnly !== true;
+      const shouldReadHistory = options.readHistory ?? (role === 'setup' ? true : !canPublish);
+      const allowedSections = options.allowedSections ?? (
+        role === 'times'
+          ? TIMES_ROLE_TIMING_SECTION_KEYS
+          : null
+      );
 
-        if (nextSessionMeta) {
-          metaCurrentSessionRef.current = nextSessionMeta;
-          setMetaCurrentSession(nextSessionMeta);
+      try {
+        setWsConnectionStatus('connecting');
+        setWsError(null);
+        setPendingSosAlerts([]);
+
+        wsProvider.current = getWebSocketProvider();
+        const existingSessionMeta = normalizeCurrentSessionMeta(metaCurrentSessionRef.current);
+        if (!existingSessionMeta || existingSessionMeta.channelKey !== channelKey) {
+          const nextSessionMeta = normalizeCurrentSessionMeta({
+            sessionId: existingSessionMeta?.sessionId || createSyncInstanceId(),
+            channelKey,
+            updatedAt: Date.now(),
+            lastProjectMessage: null
+          });
+
+          if (nextSessionMeta) {
+            metaCurrentSessionRef.current = nextSessionMeta;
+            setMetaCurrentSession(nextSessionMeta);
+          }
         }
-      }
 
-      const sessionHistoryMarker = getCurrentSessionHistoryMarker(channelKey);
-      const sessionHistoryAt = Number(sessionHistoryMarker?.timestamp || 0);
-      console.log('[SessionMeta][connect]', {
-        channelKey,
-        sessionHistoryAt,
-        sessionHistoryMarker
-      });
+        const sessionHistoryMarker = getCurrentSessionHistoryMarker(channelKey);
+        const sessionHistoryAt = Number(sessionHistoryMarker?.timestamp || 0);
+        console.log('[SessionMeta][connect]', {
+          channelKey,
+          sessionHistoryAt,
+          sessionHistoryMarker
+        });
 
-      if (!syncEngineRef.current) {
-        syncEngineRef.current = new SyncEngine({
-          role,
-          instanceId: setupInstanceIdRef.current,
-          publish: (message) => wsProvider.current?.publish(message),
-          onOwnershipChange: (ownership = {}) => {
-            if (role !== 'setup') {
+        if (!syncEngineRef.current) {
+          syncEngineRef.current = new SyncEngine({
+            role,
+            instanceId: setupInstanceIdRef.current,
+            publish: (message) => wsProvider.current?.publish(message),
+            onOwnershipChange: (ownership = {}) => {
+              if (role !== 'setup') {
+                return;
+              }
+
+              console.log('[Setup][ownership]', ownership);
+              applyWsOwnership(ownership);
+            },
+            onSnapshotDue: async () => {
+              if (role !== 'setup') {
+                return false;
+              }
+
+              return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
+            },
+            onLeaseClaimed: async () => {
+              if (role !== 'setup') {
+                return false;
+              }
+
+              return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
+            }
+          });
+        } else {
+          syncEngineRef.current.setRole(role);
+          syncEngineRef.current.setInstanceId(setupInstanceIdRef.current);
+          syncEngineRef.current.setPublish((message) => wsProvider.current?.publish(message));
+          syncEngineRef.current.setCallbacks({
+            onOwnershipChange: (ownership = {}) => {
+              if (role !== 'setup') {
+                return;
+              }
+
+              console.log('[Setup][ownership]', ownership);
+              applyWsOwnership(ownership);
+            },
+            onSnapshotDue: async () => {
+              if (role !== 'setup') {
+                return false;
+              }
+
+              return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
+            },
+            onLeaseClaimed: async () => {
+              if (role !== 'setup') {
+                return false;
+              }
+
+              return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
+            }
+          });
+        }
+
+        if (!wsMessageReceiver.current) {
+          wsMessageReceiver.current = new WsMessageReceiver((data) => {
+            const routedData = syncEngineRef.current?.normalizeIncoming(data);
+            if (routedData === null) {
               return;
             }
-
-            console.log('[Setup][ownership]', ownership);
-            applyWsOwnership(ownership);
-          },
-          onSnapshotDue: async () => {
-            if (role !== 'setup') {
-              return false;
-            }
-
-            return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-          },
-          onLeaseClaimed: async () => {
-            if (role !== 'setup') {
-              return false;
-            }
-
-            return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-          }
-        });
-      } else {
-        syncEngineRef.current.setRole(role);
-        syncEngineRef.current.setInstanceId(setupInstanceIdRef.current);
-        syncEngineRef.current.setPublish((message) => wsProvider.current?.publish(message));
-        syncEngineRef.current.setCallbacks({
-          onOwnershipChange: (ownership = {}) => {
-            if (role !== 'setup') {
+            if (routedData) {
+              recordCurrentSessionMessage(routedData);
+              applyWebSocketData(routedData);
               return;
             }
+            applyWebSocketData(data);
+          });
+        }
 
-            console.log('[Setup][ownership]', ownership);
-            applyWsOwnership(ownership);
-          },
-          onSnapshotDue: async () => {
-            if (role !== 'setup') {
-              return false;
+        const onWsMessage = (data) => {
+          wsMessageReceiver.current?.handleMessage(data);
+        };
+
+        const onWsStatus = (status, _provider, error) => {
+          setWsConnectionStatus(status);
+          if (error) setWsError(error);
+        };
+
+        const connectOptions = {
+          readHistory: shouldReadHistory,
+          lastReceivedAt: Number(sessionHistoryAt || wsLastReceivedAt || wsLastReceivedMarkerRef.current?.timestamp || 0),
+          lastReceivedMarker: sessionHistoryMarker || wsLastReceivedMarkerRef.current || null,
+          snapshotStalenessMs: 5 * 60 * 1000,
+          onEchoMessage: ({ channelType, data } = {}) => {
+            if (
+              channelType === 'priority'
+              && isPlainObject(data?.payload?.stageSos)
+            ) {
+              extractStageFlagEntries(data.payload.stageSos)
+                .filter((entry) => entry.enabled)
+                .forEach((entry) => {
+                  setLocalStageSosLevel(entry.pilotId, entry.stageId, 2);
+                  setSosDeliveryStatus(entry.pilotId, entry.stageId, {
+                    status: 'sent',
+                    notificationId: String(data?.notificationId || '').trim() || undefined,
+                    errorMessage: ''
+                  });
+                });
             }
-
-            return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
           },
-          onLeaseClaimed: async () => {
-            if (role !== 'setup') {
-              return false;
+          onReceiveActivity: ({ timestamp, details } = {}) => {
+            const activityAt = Number(timestamp || Date.now());
+            const channelType = String(details?.channelType || '').trim();
+            if (wsProvider.current?.isConnected && wsConnectionStatusRef.current !== 'connected') {
+              setWsConnectionStatus('connected');
+              setWsError(null);
             }
-
-            return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-          }
-        });
-      }
-      
-      if (!wsMessageReceiver.current) {
-        wsMessageReceiver.current = new WsMessageReceiver((data) => {
-          const routedData = syncEngineRef.current?.normalizeIncoming(data);
-          if (routedData) {
-            recordCurrentSessionMessage(routedData);
-            applyWebSocketData(routedData);
-            return;
-          }
-
-          applyWebSocketData(data);
-        });
-      }
-
-      const onWsMessage = (data) => {
-        wsMessageReceiver.current?.handleMessage(data);
-      };
-
-      const onWsStatus = (status, _provider, error) => {
-        setWsConnectionStatus(status);
-        if (error) setWsError(error);
-      };
-
-      const connectOptions = {
-        readHistory: shouldReadHistory,
-        lastReceivedAt: Number(sessionHistoryAt || wsLastReceivedAt || wsLastReceivedMarkerRef.current?.timestamp || 0),
-        lastReceivedMarker: sessionHistoryMarker || wsLastReceivedMarkerRef.current || null,
-        snapshotStalenessMs: 5 * 60 * 1000,
-        onReceiveActivity: ({ timestamp, details } = {}) => {
-          const activityAt = Number(timestamp || Date.now());
-          const channelType = String(details?.channelType || '').trim();
-          if (isPlainObject(details) && channelType !== 'telemetry') {
-            wsLastReceivedMarkerRef.current = {
-              timestamp: Number(details.timestamp || activityAt || 0),
-              snapshotId: String(details.snapshotId || '').trim(),
-              partIndex: Number.isFinite(details.partIndex) ? Number(details.partIndex) : 0,
-              messageType: String(details.messageType || '').trim(),
-              packageType: String(details.packageType || '').trim(),
-              controlType: String(details.controlType || '').trim(),
-              section: String(details.section || '').trim()
-            };
-          } else {
-            if (channelType !== 'telemetry') {
+            if (isPlainObject(details) && channelType !== 'telemetry') {
+              wsLastReceivedMarkerRef.current = {
+                timestamp: Number(details.timestamp || activityAt || 0),
+                snapshotId: String(details.snapshotId || '').trim(),
+                partIndex: Number.isFinite(details.partIndex) ? Number(details.partIndex) : 0,
+                messageType: String(details.messageType || '').trim(),
+                packageType: String(details.packageType || '').trim(),
+                controlType: String(details.controlType || '').trim(),
+                section: String(details.section || '').trim()
+              };
+            } else if (channelType !== 'telemetry') {
               wsLastReceivedMarkerRef.current = {
                 timestamp: activityAt,
                 partIndex: 0
               };
             }
+            if (channelType !== 'telemetry') {
+              setWsLastReceivedAt(activityAt);
+            }
+            setWsLastMessageAt(activityAt);
+            setWsReceivedPulse((prev) => prev + 1);
+          },
+          onSendMessage: (details = {}) => {
+            recordCurrentSessionMessage(details);
+          },
+          onSendActivity: ({ timestamp } = {}) => {
+            const activityAt = Number(timestamp || Date.now());
+            if (wsProvider.current?.isConnected && wsConnectionStatusRef.current !== 'connected') {
+              setWsConnectionStatus('connected');
+              setWsError(null);
+            }
+            setWsLastSentAt(activityAt);
+            setWsLastMessageAt(activityAt);
+            setWsSentPulse((prev) => prev + 1);
           }
-          if (channelType !== 'telemetry') {
-            setWsLastReceivedAt(activityAt);
+        };
+
+        await wsProvider.current.connect(channelKey, onWsMessage, onWsStatus, connectOptions);
+
+        syncEngineRef.current.connect({
+          role,
+          instanceId: setupInstanceIdRef.current,
+          publish: (message) => wsProvider.current?.publish(message),
+          onSnapshotDue: async () => {
+            if (role !== 'setup') {
+              return false;
+            }
+
+            return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
+          },
+          onLeaseClaimed: async () => {
+            if (role !== 'setup') {
+              return false;
+            }
+
+            return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
           }
-          setWsLastMessageAt(activityAt);
-          setWsReceivedPulse((prev) => prev + 1);
-        },
-        onSendMessage: (details = {}) => {
-          recordCurrentSessionMessage(details);
-        },
-        onSendActivity: ({ timestamp } = {}) => {
-          const activityAt = Number(timestamp || Date.now());
-          setWsLastSentAt(activityAt);
-          setWsLastMessageAt(activityAt);
-          setWsSentPulse((prev) => prev + 1);
-        }
-      };
+        });
 
-      await wsProvider.current.connect(channelKey, onWsMessage, onWsStatus, connectOptions);
+        const bootstrapState = wsProvider.current.getBootstrapState?.() || {};
 
-      syncEngineRef.current.connect({
-        role,
-        instanceId: setupInstanceIdRef.current,
-        publish: (message) => wsProvider.current?.publish(message),
-        onSnapshotDue: async () => {
-          if (role !== 'setup') {
-            return false;
-          }
+        setWsChannelKey(channelKey);
+        setWsInstanceId(setupInstanceIdRef.current);
+        setWsCanPublish(canPublish);
+        setWsRole(role);
+        setWsPublishSections(allowedSections);
+        setWsLastMessageAt(Date.now());
+        localStorage.setItem('rally_ws_channel_key', JSON.stringify(channelKey));
+        setWsEnabled(true);
+        localStorage.setItem('rally_ws_enabled', JSON.stringify(true));
 
-          return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-        },
-        onLeaseClaimed: async () => {
-          if (role !== 'setup') {
-            return false;
-          }
+        setLatestSnapshotVersion(Number(bootstrapState.snapshotVersion || 0));
 
-          return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-        }
-      });
-
-      const bootstrapState = wsProvider.current.getBootstrapState?.() || {};
-      const existingManifest = bootstrapState.sessionManifest || null;
-      
-      setWsChannelKey(channelKey);
-      setWsInstanceId(setupInstanceIdRef.current);
-      setWsCanPublish(canPublish);
-      setWsRole(role);
-      setWsPublishSections(allowedSections);
-      setWsLastMessageAt(Date.now());
-      localStorage.setItem('rally_ws_channel_key', JSON.stringify(channelKey));
-      setWsEnabled(true);
-      localStorage.setItem('rally_ws_enabled', JSON.stringify(true));
-
-      if (existingManifest) {
-        setSessionManifest(existingManifest);
-        setLatestSnapshotVersion(Number(existingManifest.latestSnapshotVersion || 0));
-        setLastSetupSyncAt(Number(existingManifest.latestSetupSyncAt || 0));
-        setLastTimesSyncAt(Number(existingManifest.latestTimesSyncAt || 0));
-      }
-
-      if (role === 'times' && existingManifest) {
-        const sanitizedDirtySections = (Array.isArray(dirtyTimingSections) ? dirtyTimingSections : [])
-          .filter((section) => TIMES_ROLE_TIMING_SECTION_SET.has(section));
-        const sanitizedTouchedAt = Object.fromEntries(
-          Object.entries(timingSectionTouchedAt || {}).filter(([section]) => TIMES_ROLE_TIMING_SECTION_SET.has(section))
-        );
-        const sanitizedLineVersions = Object.fromEntries(
-          Object.entries(timingLineVersionsRef.current || {}).filter(([, entry]) => TIMES_ROLE_TIMING_SECTION_SET.has(entry?.section))
-        );
-
-        if (sanitizedDirtySections.length !== (Array.isArray(dirtyTimingSections) ? dirtyTimingSections.length : 0)) {
-          setDirtyTimingSections(sanitizedDirtySections);
-        }
-
-        if (Object.keys(sanitizedTouchedAt).length !== Object.keys(timingSectionTouchedAt || {}).length) {
-          setTimingSectionTouchedAt(sanitizedTouchedAt);
-        }
-
-        if (Object.keys(sanitizedLineVersions).length !== Object.keys(timingLineVersionsRef.current || {}).length) {
-          timesPendingLineKeys.current = new Set(
-            Array.from(timesPendingLineKeys.current).filter((key) => TIMES_ROLE_TIMING_SECTION_SET.has(sanitizedLineVersions[key]?.section))
+        if (role === 'times') {
+          const sanitizedDirtySections = (Array.isArray(dirtyTimingSections) ? dirtyTimingSections : [])
+            .filter((section) => TIMES_ROLE_TIMING_SECTION_SET.has(section));
+          const sanitizedTouchedAt = Object.fromEntries(
+            Object.entries(timingSectionTouchedAt || {}).filter(([section]) => TIMES_ROLE_TIMING_SECTION_SET.has(section))
           );
-          setTimingLineVersions(sanitizedLineVersions);
+          const sanitizedLineVersions = Object.fromEntries(
+            Object.entries(timingLineVersionsRef.current || {}).filter(([, entry]) => TIMES_ROLE_TIMING_SECTION_SET.has(entry?.section))
+          );
+
+          if (sanitizedDirtySections.length !== (Array.isArray(dirtyTimingSections) ? dirtyTimingSections.length : 0)) {
+            setDirtyTimingSections(sanitizedDirtySections);
+          }
+
+          if (Object.keys(sanitizedTouchedAt).length !== Object.keys(timingSectionTouchedAt || {}).length) {
+            setTimingSectionTouchedAt(sanitizedTouchedAt);
+          }
+
+          if (Object.keys(sanitizedLineVersions).length !== Object.keys(timingLineVersionsRef.current || {}).length) {
+            timesPendingLineKeys.current = new Set(
+              Array.from(timesPendingLineKeys.current).filter((key) => TIMES_ROLE_TIMING_SECTION_SET.has(sanitizedLineVersions[key]?.section))
+            );
+            setTimingLineVersions(sanitizedLineVersions);
+          }
+
+          const remoteTimesSyncAt = Number(existingManifest.latestTimesSyncAt || 0);
+          const latestLocalTimingVersionAt = Math.max(
+            0,
+            ...Object.values(sanitizedLineVersions).map((entry) => Number(entry?.updatedAt || 0))
+          );
+          const latestLocalTimingEditAt = Math.max(
+            Number(lastTimesEditAt || 0),
+            latestLocalTimingVersionAt
+          );
+
+          if (remoteTimesSyncAt > latestLocalTimingEditAt) {
+            timesPendingLineKeys.current.clear();
+            setDirtyTimingSections([]);
+            setTimingSectionTouchedAt({});
+            setTimingLineVersions({});
+            setLastTimesEditAt(remoteTimesSyncAt);
+            setLastTimesAckedEditAt(remoteTimesSyncAt);
+          }
         }
 
-        const remoteTimesSyncAt = Number(existingManifest.latestTimesSyncAt || 0);
-        const latestLocalTimingVersionAt = Math.max(
-          0,
-          ...Object.values(sanitizedLineVersions).map((entry) => Number(entry?.updatedAt || 0))
-        );
-        const latestLocalTimingEditAt = Math.max(
-          Number(lastTimesEditAt || 0),
-          latestLocalTimingVersionAt
-        );
-
-        if (remoteTimesSyncAt > latestLocalTimingEditAt) {
-          timesPendingLineKeys.current.clear();
-          setDirtyTimingSections([]);
-          setTimingSectionTouchedAt({});
-          setTimingLineVersions({});
-          setLastTimesEditAt(remoteTimesSyncAt);
-          setLastTimesAckedEditAt(remoteTimesSyncAt);
+        if (role === 'times') {
+          window.setTimeout(() => {
+            publishDirtyTimingSectionsRef.current?.();
+          }, 500);
         }
-      }
 
-      if (role === 'times') {
-        window.setTimeout(() => {
-          publishDirtyTimingSectionsRef.current?.();
-        }, 500);
+        return true;
+      } catch (error) {
+        syncEngineRef.current?.disconnect();
+        setWsConnectionStatus('error');
+        setWsError(error.message);
+        return false;
+      } finally {
+        wsConnectInFlightRef.current = null;
       }
+    })();
 
-      return true;
-    } catch (error) {
-      syncEngineRef.current?.disconnect();
-      setWsConnectionStatus('error');
-      setWsError(error.message);
-      return false;
-    }
+    wsConnectInFlightRef.current = connectPromise;
+    return connectPromise;
   }, [
     applyWebSocketData,
+    applyWsOwnership,
     publishDirtyTimingSections,
     publishDirtySetupSections,
     publishSetupSnapshot,
-    publishSyncManifestUpdate,
     buildPendingTimingDeltaEntries,
     publishTimingDeltaEntries,
     dirtyTimingSections,
     timingSectionTouchedAt,
     dirtySetupSections,
+    getCurrentSessionHistoryMarker,
     lastTimesEditAt,
     lastTimesSyncAt,
-    lastSetupSyncAt
+    lastSetupSyncAt,
+    recordCurrentSessionMessage,
+    setLocalStageSosLevel,
+    setSosDeliveryStatus,
+    wsLastReceivedAt
   ]);
 
   const disconnectSyncChannel = useCallback(() => {
@@ -3739,6 +4093,7 @@ export const RallyProvider = ({ children }) => {
       setWsRole('client');
       setWsInstanceId(setupInstanceIdRef.current);
       setWsPublishSections(null);
+    setPendingSosAlerts([]);
     applyWsOwnership({
       ownerId: null,
       ownerEpoch: 0,
@@ -3813,10 +4168,6 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('rally_setup_last_sync_at', JSON.stringify(lastSetupSyncAt));
   }, [lastSetupSyncAt]);
-
-  useEffect(() => {
-    localStorage.setItem('rally_ws_session_manifest', JSON.stringify(sessionManifest));
-  }, [sessionManifest]);
 
   useEffect(() => {
     localStorage.setItem('rally_ws_snapshot_version', JSON.stringify(latestSnapshotVersion));
@@ -3963,9 +4314,10 @@ export const RallyProvider = ({ children }) => {
     if (hydratingDomainsRef.current.has('timingExtra')) return;
     localStorage.setItem('rally_stage_sos', JSON.stringify(stageSos));
     updateDataVersion('timingExtra');
+    if (consumeLocalSetupTimingCaptureSuppression('stageSos')) return;
     if (consumeSetupTimingCaptureSuppression('stageSos')) return;
     captureSetupPatchEntries('stageSos', diffTimingLineEntries('stageSos', previousStageSos, stageSos));
-  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, stageSos, updateDataVersion]);
+  }, [captureSetupPatchEntries, consumeLocalSetupTimingCaptureSuppression, consumeSetupTimingCaptureSuppression, stageSos, updateDataVersion]);
 
   useEffect(() => {
     const previousMapPlacemarks = previousSetupSyncStateRef.current.mapPlacemarks;
@@ -4926,31 +5278,82 @@ export const RallyProvider = ({ children }) => {
   }, [clientRole, markTimingLineDirty, markTimingSectionDirty, setStageAlerts]);
 
   const isStageSos = useCallback((pilotId, stageId) => (
-    !!stageSos?.[pilotId]?.[stageId]
+    normalizeStageSosLevel(stageSos?.[pilotId]?.[stageId]) > 0
   ), [stageSos]);
 
-  const setStageSos = useCallback((pilotId, stageId, sos) => {
-    setStageSosState((prev) => {
-      const next = { ...prev };
-      const nextPilotStages = { ...(next[pilotId] || {}) };
+  const setStageSos = useCallback((pilotId, stageId, sos, options = {}) => {
+    const normalizedPilotId = normalizePilotId(pilotId);
+    const normalizedStageId = String(stageId || '').trim();
+    const isHighPriority = options?.highPriority === true;
+    const nextStageSosLevel = normalizeStageSosLevel(sos ? (options?.level || 1) : 0);
 
-      if (sos) {
-        nextPilotStages[stageId] = stageId;
-      } else {
-        delete nextPilotStages[stageId];
-      }
+    if (isHighPriority && clientRole === 'setup') {
+      suppressNextLocalSetupTimingCapture('stageSos');
+    }
 
-      if (Object.keys(nextPilotStages).length > 0) {
-        next[pilotId] = nextPilotStages;
-      } else {
-        delete next[pilotId];
-      }
-
-      return next;
+    setLocalStageSosLevel(normalizedPilotId, normalizedStageId, nextStageSosLevel, {
+      suppressSetupCapture: isHighPriority
     });
-    markTimingSectionDirty('stageSos');
-    markTimingLineDirty('stageSos', pilotId, stageId);
-  }, [clientRole, markTimingLineDirty, markTimingSectionDirty]);
+
+    if (!isHighPriority) {
+      markTimingSectionDirty('stageSos');
+      markTimingLineDirty('stageSos', normalizedPilotId, normalizedStageId);
+    }
+
+    if (nextStageSosLevel <= 0) {
+      clearSosDeliveryStatus(normalizedPilotId, normalizedStageId);
+      removePendingSosAlert('', {
+        pilotId: normalizedPilotId,
+        stageId: normalizedStageId
+      });
+      return;
+    }
+
+    if (!isHighPriority) {
+      return;
+    }
+
+    const notificationId = buildSosNotificationId({
+      pilotId: normalizedPilotId,
+      stageId: normalizedStageId,
+      timestamp: getNextLogicalTimestamp()
+    });
+
+    setSosDeliveryStatus(normalizedPilotId, normalizedStageId, {
+      status: 'sending',
+      notificationId,
+      errorMessage: ''
+    });
+
+    void enqueueChangePackages({
+      stageSos: {
+        [normalizedPilotId]: {
+          [normalizedStageId]: 1
+        }
+      }
+    }, {
+      highPriority: true,
+      extraMeta: {
+        notificationId
+      }
+    }).then((result) => {
+      if (!result) {
+        setSosDeliveryStatus(normalizedPilotId, normalizedStageId, {
+          status: 'error',
+          notificationId,
+          errorMessage: 'Unable to publish SOS alert.'
+        });
+        return;
+      }
+
+    }).catch((error) => {
+      setSosDeliveryStatus(normalizedPilotId, normalizedStageId, {
+        status: 'error',
+        notificationId,
+        errorMessage: error?.message || 'Unable to publish SOS alert.'
+      });
+    });
+  }, [clearSosDeliveryStatus, clientRole, enqueueChangePackages, getNextLogicalTimestamp, markTimingLineDirty, markTimingSectionDirty, removePendingSosAlert, setLocalStageSosLevel, setSosDeliveryStatus, suppressNextLocalSetupTimingCapture]);
 
   // Stream configuration functions
   const getStreamConfig = (pilotId) => {
@@ -5157,8 +5560,8 @@ export const RallyProvider = ({ children }) => {
     wsPublishSections,
     wsInstanceId,
     wsOwnership,
+    pendingSosAlerts,
     clientRole,
-    sessionManifest,
     latestSnapshotVersion,
     dirtySetupSections,
     lastSetupEditAt,
@@ -5406,8 +5809,9 @@ export const RallyProvider = ({ children }) => {
     wsPublishSections,
     wsInstanceId,
     wsOwnership,
+    pendingSosAlerts,
+    sosDeliveryByLine,
     clientRole,
-    sessionManifest,
     latestSnapshotVersion,
     dirtySetupSections,
     lastSetupEditAt,
@@ -5418,18 +5822,22 @@ export const RallyProvider = ({ children }) => {
     lastTimesAckAt,
     lastTimesAckedEditAt,
     lineSyncResults,
+    getSosDeliveryStatus,
     connectSyncChannel,
     disconnectSyncChannel,
     generateNewChannelKey,
     setClientRole,
-    requestTimingLineSync
+    requestTimingLineSync,
+    acknowledgeSosAlert
   }), [
+    acknowledgeSosAlert,
     clientRole,
     connectSyncChannel,
     disconnectSyncChannel,
     dirtySetupSections,
     dirtyTimingSections,
     generateNewChannelKey,
+    getSosDeliveryStatus,
     lastSetupEditAt,
     lastSetupSyncAt,
     lastTimesAckAt,
@@ -5438,8 +5846,9 @@ export const RallyProvider = ({ children }) => {
     lastTimesSyncAt,
     latestSnapshotVersion,
     lineSyncResults,
+    pendingSosAlerts,
+    sosDeliveryByLine,
     requestTimingLineSync,
-    sessionManifest,
     setClientRole,
     wsChannelKey,
     wsConnectionStatus,
