@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { Button } from '../components/ui/button';
@@ -28,6 +29,7 @@ import LiveSyncTab from '../components/setup/LiveSyncTab.jsx';
 
 export default function Setup() {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     wsChannelKey,
     wsEnabled,
@@ -40,11 +42,13 @@ export default function Setup() {
     wsInstanceId,
     wsOwnership,
     wsRole,
+    connectSyncChannel,
     setClientRole
   } = useRallyWs();
   const [hideStreams, setHideStreams] = useState(false);
   const [activeTab, setActiveTab] = useState('pilots');
   const [connectionNow, setConnectionNow] = useState(() => Date.now());
+  const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
   const [messagesLastMinute, setMessagesLastMinute] = useState(0);
   const [messagesThisSecond, setMessagesThisSecond] = useState(0);
   const [receivedMessagesLastMinute, setReceivedMessagesLastMinute] = useState(0);
@@ -92,6 +96,37 @@ export default function Setup() {
     setClientRole('setup');
     return () => setClientRole('client');
   }, [setClientRole]);
+
+  useEffect(() => {
+    if (autoConnectAttempted) return;
+
+    const wsKey = searchParams.get('ws');
+    if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
+      setAutoConnectAttempted(true);
+      console.log('[Setup] Auto-connecting with URL key:', wsKey);
+      connectSyncChannel(wsKey, { role: 'setup' });
+      return;
+    }
+
+    if (!wsKey) {
+      setAutoConnectAttempted(true);
+    }
+  }, [autoConnectAttempted, connectSyncChannel, searchParams, wsConnectionStatus]);
+
+  useEffect(() => {
+    if (wsConnectionStatus !== 'connected' || !wsChannelKey) {
+      return;
+    }
+
+    const currentWsKey = searchParams.get('ws');
+    if (currentWsKey === wsChannelKey) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('ws', wsChannelKey);
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, wsChannelKey, wsConnectionStatus]);
 
   useEffect(() => {
     if (!wsEnabled) return undefined;

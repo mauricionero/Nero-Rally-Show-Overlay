@@ -1,4 +1,4 @@
-const DEFAULT_FLUSH_INTERVAL_MS = 1500;
+const DEFAULT_FLUSH_INTERVAL_MS = 1000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 5000;
 const DEFAULT_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_OWNERSHIP_OBSERVATION_MS = 15000;
@@ -149,112 +149,6 @@ const filterChangesForRecipient = (recipientRole, sourceRole, changes = {}) => {
   return accepted;
 };
 
-const mergeNestedChange = (target = {}, key, value) => {
-  if (!isPlainObject(target[key])) {
-    target[key] = {};
-  }
-
-  target[key] = deepMerge(target[key], value);
-};
-
-const mergeArrayChange = (target = {}, key, value) => {
-  if (!Array.isArray(target[key])) {
-    target[key] = [];
-  }
-
-  if (Array.isArray(value)) {
-    target[key] = [...value];
-    return;
-  }
-
-  target[key] = [ ...(target[key] || []), value ];
-};
-
-const convertSetupPatchEntriesToChanges = (entries = []) => {
-  const changes = {};
-
-  (Array.isArray(entries) ? entries : []).forEach((entry) => {
-    if (!entry?.section) {
-      return;
-    }
-
-    if (entry.kind === 'meta') {
-      if (!isPlainObject(changes.meta)) {
-        changes.meta = {};
-      }
-      changes.meta[entry.field] = entry.value;
-      return;
-    }
-
-    if (entry.kind === 'timing-line') {
-      if (!isPlainObject(changes[entry.section])) {
-        changes[entry.section] = {};
-      }
-
-      const pilotId = String(entry.pilotId || '').trim();
-      const stageId = String(entry.stageId || '').trim();
-      if (!pilotId || !stageId) {
-        return;
-      }
-
-      if (!isPlainObject(changes[entry.section][pilotId])) {
-        changes[entry.section][pilotId] = {};
-      }
-      changes[entry.section][pilotId][stageId] = entry.value;
-      return;
-    }
-
-    if (!isPlainObject(changes[entry.section])) {
-      changes[entry.section] = {};
-    }
-
-    const id = String(entry.id || '').trim();
-    if (!id) {
-      return;
-    }
-
-    if (entry.op === 'delete') {
-      changes[entry.section][id] = null;
-      return;
-    }
-
-    if (isPlainObject(entry.changes)) {
-      changes[entry.section][id] = deepMerge(changes[entry.section][id] || {}, entry.changes);
-    }
-  });
-
-  return changes;
-};
-
-const convertTimingEntriesToChanges = (entries = []) => {
-  const changes = {};
-
-  (Array.isArray(entries) ? entries : []).forEach((entry) => {
-    if (!entry?.section) {
-      return;
-    }
-
-    if (!isPlainObject(changes[entry.section])) {
-      changes[entry.section] = {};
-    }
-
-    const pilotId = String(entry.pilotId || '').trim();
-    const stageId = String(entry.stageId || '').trim();
-
-    if (!pilotId || !stageId) {
-      return;
-    }
-
-    if (!isPlainObject(changes[entry.section][pilotId])) {
-      changes[entry.section][pilotId] = {};
-    }
-
-    changes[entry.section][pilotId][stageId] = entry.value;
-  });
-
-  return changes;
-};
-
 const convertPilotTelemetryMessageToChanges = (message = {}) => {
   const pilotId = String(message?.pilotId || message?.pilotid || '').trim();
   if (!pilotId) {
@@ -362,20 +256,8 @@ const convertMessageToChanges = (message = {}) => {
     return isPlainObject(message?.changes) ? message.changes : {};
   }
 
-  if (messageType === 'setup-patch') {
-    return convertSetupPatchEntriesToChanges(message?.entries);
-  }
-
-  if (messageType === 'timing-delta') {
-    return convertTimingEntriesToChanges(message?.entries);
-  }
-
   if (messageType === 'pilot-telemetry') {
     return convertPilotTelemetryMessageToChanges(message);
-  }
-
-  if (messageType === 'full-snapshot') {
-    return {};
   }
 
   return convertPayloadMessageToChanges(message);

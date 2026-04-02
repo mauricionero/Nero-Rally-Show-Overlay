@@ -45,6 +45,36 @@ export const parseChannelKey = (fullKey) => {
   return { valid: true, channelId };
 };
 
+const normalizeIncomingEnvelope = (data, channelType, channelName) => {
+  let normalizedData = data;
+
+  if (typeof normalizedData === 'string') {
+    try {
+      normalizedData = JSON.parse(normalizedData);
+    } catch (error) {
+      return {
+        raw: data,
+        channelType,
+        channelName
+      };
+    }
+  }
+
+  if (normalizedData && typeof normalizedData === 'object' && !Array.isArray(normalizedData)) {
+    return {
+      ...normalizedData,
+      channelType,
+      channelName
+    };
+  }
+
+  return {
+    value: normalizedData,
+    channelType,
+    channelName
+  };
+};
+
 /**
  * WebSocket Provider Class - Ably Implementation
  */
@@ -63,17 +93,12 @@ class WebSocketProvider {
     };
     this.onMessageCallback = null;
     this.onStatusCallback = null;
-    this.onSnapshotRequestCallback = null;
-    this.onTimesSyncRequestCallback = null;
-    this.onTimesLineRequestCallback = null;
-    this.onTimesLineResponseCallback = null;
     this.onReceiveActivityCallback = null;
     this.onSendActivityCallback = null;
     this.onSendMessageCallback = null;
     this.isConnected = false;
     this.connectionState = 'disconnected';
     this.historyBootstrapLoadedSnapshot = false;
-    this.historyBootstrapNeedsSnapshot = false;
     this.bootstrapState = {
       mode: 'none',
       messages: [],
@@ -399,17 +424,10 @@ class WebSocketProvider {
     this.channelId = channelId;
     this.onMessageCallback = onMessage;
     this.onStatusCallback = onStatus;
-    this.onSnapshotRequestCallback = options.onSnapshotRequest || null;
-    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
-    this.onTimesLineRequestCallback = options.onTimesLineRequest || null;
-    this.onTimesLineResponseCallback = options.onTimesLineResponse || null;
-    this.onTimesSyncAckCallback = options.onTimesSyncAck || null;
-    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
     this.onReceiveActivityCallback = options.onReceiveActivity || null;
     this.onSendActivityCallback = options.onSendActivity || null;
     this.onSendMessageCallback = options.onSendMessage || null;
     this.historyBootstrapLoadedSnapshot = false;
-    this.historyBootstrapNeedsSnapshot = false;
     this.bootstrapState = {
       mode: 'none',
       messages: [],
@@ -476,7 +494,6 @@ class WebSocketProvider {
 
         if (historyBootstrap.mode === 'snapshot' && historyBootstrap.snapshotMessages.length > 0) {
           this.historyBootstrapLoadedSnapshot = true;
-          this.historyBootstrapNeedsSnapshot = false;
           console.log('[WebSocket][RX][history] Loaded snapshot bootstrap from history', {
             count: historyBootstrap.snapshotMessages.length,
             snapshotTimestamp: historyBootstrap.snapshotTimestamp,
@@ -484,11 +501,11 @@ class WebSocketProvider {
           });
 
           historyBootstrap.snapshotMessages.forEach((message) => {
-            const routedData = {
-              ...message.data,
-              channelType: 'snapshots',
-              channelName: channelNames.snapshots
-            };
+            const routedData = normalizeIncomingEnvelope(
+              message.data,
+              'snapshots',
+              channelNames.snapshots
+            );
             this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
             this.onMessageCallback?.(routedData);
           });
@@ -504,11 +521,11 @@ class WebSocketProvider {
               snapshotTimestamp: historyBootstrap.snapshotTimestamp
             });
             replayMessages.forEach((message) => {
-              const routedData = {
-                ...message.data,
-                channelType: 'data',
-                channelName: channelNames.data
-              };
+              const routedData = normalizeIncomingEnvelope(
+                message.data,
+                'data',
+                channelNames.data
+              );
               this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
               this.onMessageCallback?.(routedData);
             });
@@ -523,7 +540,6 @@ class WebSocketProvider {
           });
         } else if (historyBootstrap.messages.length > 0) {
           this.historyBootstrapLoadedSnapshot = false;
-          this.historyBootstrapNeedsSnapshot = historyBootstrap.mode !== 'replay' && !historyBootstrap.historyComplete;
           console.log('[WebSocket][RX][history] Replaying history without snapshot bootstrap', {
             count: historyBootstrap.messages.length,
             mode: historyBootstrap.mode,
@@ -531,11 +547,11 @@ class WebSocketProvider {
           });
 
           historyBootstrap.messages.forEach((message) => {
-            const routedData = {
-              ...message.data,
-              channelType: 'data',
-              channelName: channelNames.data
-            };
+            const routedData = normalizeIncomingEnvelope(
+              message.data,
+              'data',
+              channelNames.data
+            );
             this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
             this.onMessageCallback?.(routedData);
           });
@@ -564,11 +580,11 @@ class WebSocketProvider {
             return;
           }
 
-          const routedData = {
-            ...(message.data || {}),
+          const routedData = normalizeIncomingEnvelope(
+            message.data,
             channelType,
-            channelName: channel.name
-          };
+            channel.name
+          );
           console.log('[WebSocket][RX][update]', {
             channelType,
             data: routedData
@@ -675,12 +691,12 @@ class WebSocketProvider {
     }
 
     try {
-      await targetChannel.publish('update', data);
       console.log('[WebSocket][TX][update]', {
         channelName: targetChannel?.name || null,
         channelType: targetChannel === this.snapshotChannel ? 'snapshots' : targetChannel === this.telemetryChannel ? 'telemetry' : 'data',
         data
       });
+      await targetChannel.publish('update', data);
       this.onSendMessageCallback?.({
         ...(data || {}),
         channelType: targetChannel === this.snapshotChannel ? 'snapshots' : targetChannel === this.telemetryChannel ? 'telemetry' : 'data',
@@ -716,12 +732,12 @@ class WebSocketProvider {
         payload: data
       };
 
-      await targetChannel.publish('update', payload);
       console.log('[WebSocket][TX][update]', {
         channelName: targetChannel?.name || null,
         channelType: 'data',
         data: payload
       });
+      await targetChannel.publish('update', payload);
       this.onSendMessageCallback?.({
         ...payload,
         channelType: 'data',

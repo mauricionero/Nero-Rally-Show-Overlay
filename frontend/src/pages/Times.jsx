@@ -144,7 +144,7 @@ export default function Times() {
     const wsKey = searchParams.get('ws');
     if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
       setAutoConnectAttempted(true);
-      connectSyncChannel(wsKey, { readOnly: false, readHistory: true, requestSnapshot: false, publishSnapshot: false, role: 'times' });
+      connectSyncChannel(wsKey, { readOnly: false, readHistory: true, role: 'times' });
     }
   }, [searchParams, wsConnectionStatus, connectSyncChannel, autoConnectAttempted]);
 
