@@ -149,6 +149,16 @@ const filterChangesForRecipient = (recipientRole, sourceRole, changes = {}) => {
   return accepted;
 };
 
+const isMergeableQueuedDelta = (message = {}) => (
+  normalizeMessageType(message?.messageType) === SYNC_MESSAGE_TYPES.DELTA_BATCH
+  && String(message?.packageType || 'delta').trim() === 'delta'
+  && message?.highPriority !== true
+  && message?.priority !== true
+  && !String(message?.controlType || '').trim()
+  && (!message?.channelType || String(message.channelType).trim() === 'data')
+  && isPlainObject(message?.payload)
+);
+
 const convertPilotTelemetryMessageToChanges = (message = {}) => {
   const pilotId = String(message?.pilotId || message?.pilotid || '').trim();
   if (!pilotId) {
@@ -455,13 +465,43 @@ export default class SyncEngine {
           continue;
         }
 
+        let mergedEntries = [pending[index]];
+        let mergedMessage = message;
+
+        if (isMergeableQueuedDelta(message)) {
+          let mergedPayload = deepMerge({}, message.payload);
+          let latestTimestamp = Number(message?.timestamp || 0);
+          let scanIndex = index + 1;
+
+          while (scanIndex < pending.length) {
+            const nextMessage = pending[scanIndex]?.message;
+            if (!isMergeableQueuedDelta(nextMessage)) {
+              break;
+            }
+
+            mergedPayload = deepMerge(mergedPayload, nextMessage.payload);
+            latestTimestamp = Math.max(latestTimestamp, Number(nextMessage?.timestamp || 0));
+            mergedEntries.push(pending[scanIndex]);
+            scanIndex += 1;
+          }
+
+          mergedMessage = {
+            ...message,
+            timestamp: latestTimestamp || Date.now(),
+            partIndex: 0,
+            totalParts: 1,
+            payload: mergedPayload
+          };
+          index = scanIndex - 1;
+        }
+
         const batch = {
           source: this.role,
           sourceRole: this.role,
           sourceInstanceId: this.instanceId,
           instanceId: this.instanceId,
           timestamp: Date.now(),
-          ...message
+          ...mergedMessage
         };
 
         const published = await this.publish(batch);
@@ -472,7 +512,7 @@ export default class SyncEngine {
             queuedCount: pending.length,
             message: batch
           });
-          const remaining = pending.slice(index);
+          const remaining = pending.slice(index - mergedEntries.length + 1);
           this.queue = remaining.concat(this.queue);
           return false;
         }
@@ -480,7 +520,7 @@ export default class SyncEngine {
         console.log('[SyncEngine] Published batch', {
           role: this.role,
           instanceId: this.instanceId,
-          queuedCount: 1,
+          queuedCount: mergedEntries.length,
           packageType: batch.packageType || 'delta',
           originalMessageType: batch.originalMessageType || batch.messageType,
           section: batch.section || null,
@@ -489,11 +529,13 @@ export default class SyncEngine {
 
         this.onQueueFlush?.({
           batch,
-          queuedCount: 1
+          queuedCount: mergedEntries.length
         });
 
-        onSuccess?.();
-        resolve(true);
+        mergedEntries.forEach(({ onSuccess: mergedSuccess, resolve: mergedResolve }) => {
+          mergedSuccess?.();
+          mergedResolve(true);
+        });
       }
 
       return true;
@@ -582,10 +624,24 @@ export default class SyncEngine {
       return;
     }
 
+    console.log('[SyncEngine][snapshot] timer started', {
+      instanceId: this.instanceId,
+      ownerId: this.ownerId,
+      ownerEpoch: this.ownerEpoch,
+      intervalMs: this.snapshotIntervalMs
+    });
+
     this.snapshotTimer = window.setInterval(() => {
       if (!this.isConnected || !this.isOwner) {
         return;
       }
+
+      console.log('[SyncEngine][snapshot] due', {
+        instanceId: this.instanceId,
+        ownerId: this.ownerId,
+        ownerEpoch: this.ownerEpoch,
+        timestamp: Date.now()
+      });
 
       this.onSnapshotDue?.({
         instanceId: this.instanceId,
@@ -654,9 +710,13 @@ export default class SyncEngine {
     if (published) {
       this.lastOwnerHeartbeatAt = timestamp;
       this.lastSeenOwnershipAt = timestamp;
+      return published;
     }
 
-    return published;
+    this.isOwner = false;
+    this.stopHeartbeat();
+    this.stopSnapshotTimer();
+    return false;
   }
 
   releaseOwnership(reason = 'disconnect') {

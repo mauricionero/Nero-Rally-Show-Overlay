@@ -348,9 +348,6 @@ export default function Overlay() {
     ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
     : 0;
   const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
-  const activityGlow = activityProgress > 0
-    ? `0 0 ${8 + (18 * activityProgress)}px ${getLedLoadRgba(activityLevel, 0.18 + (0.5 * activityProgress))}`
-    : '0 0 0 rgba(34, 197, 94, 0)';
   const activityFill = activityProgress > 0
     ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
     : 'rgba(63, 63, 70, 0.45)';
@@ -514,10 +511,7 @@ export default function Overlay() {
                   <TooltipTrigger asChild>
                     <div
                       className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
-                      style={{
-                        backgroundColor: activityFill,
-                        boxShadow: activityGlow
-                      }}
+                      style={{ backgroundColor: activityFill }}
                     />
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">

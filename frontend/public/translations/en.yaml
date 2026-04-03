@@ -305,6 +305,9 @@ debug:
   activeDate: "Active Debug Date"
   usingRealDate: "Using real current date"
   syncNote: "This value is saved locally and synced by WebSocket, but it is not included in exports."
+  latestSnapshotKnown: "Latest Snapshot Known"
+  lastSnapshotGeneratedAt: "Last Snapshot Generated At"
+  lastSnapshotGotAt: "Last Snapshot Got At"
 
 # ===========================================
 # OVERLAY PAGE - SCENES

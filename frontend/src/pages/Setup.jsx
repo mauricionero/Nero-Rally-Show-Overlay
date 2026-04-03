@@ -7,7 +7,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Cpu, Crown, GitBranch, Mail, Play, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
+import { ArrowDown, ArrowUp, Cpu, Crown, GitBranch, Hourglass, Mail, Play, RefreshCw, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
@@ -42,6 +42,7 @@ export default function Setup() {
     wsSentPulse,
     wsInstanceId,
     wsOwnership,
+    wsSyncState,
     wsRole,
     connectSyncChannel,
     setClientRole
@@ -200,9 +201,6 @@ export default function Setup() {
     ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
     : 0;
   const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
-  const activityGlow = activityProgress > 0
-    ? `0 0 ${8 + (18 * activityProgress)}px ${getLedLoadRgba(activityLevel, 0.18 + (0.5 * activityProgress))}`
-    : '0 0 0 rgba(34, 197, 94, 0)';
   const activityFill = activityProgress > 0
     ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
     : 'rgba(63, 63, 70, 0.45)';
@@ -221,6 +219,22 @@ export default function Setup() {
   const ownershipBadgeClassName = isPrimaryOwnership || ownershipState?.hasOwnership
     ? 'bg-[#FACC15] text-black border-transparent'
     : 'bg-zinc-800 text-zinc-400 border-zinc-700';
+  const syncBadge = (() => {
+    if (!wsEnabled || wsConnectionStatus !== 'connected') {
+      return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: RefreshCw, spin: false, label: 'Idle', description: 'No sync activity.' };
+    }
+    if (wsSyncState === 'waiting_snapshot') {
+      return { color: 'bg-[#F97316] text-black border-transparent', Icon: Hourglass, spin: false, label: 'Waiting Snapshot', description: 'Waiting for a snapshot before this session becomes current.' };
+    }
+    if (wsSyncState === 'syncing_snapshot') {
+      return { color: 'bg-[#FACC15] text-black border-transparent', Icon: RefreshCw, spin: true, label: 'Syncing', description: 'Applying snapshot data now.' };
+    }
+    if (wsSyncState === 'current') {
+      return { color: 'bg-[#22C55E] text-black border-transparent', Icon: RefreshCw, spin: false, label: 'Current', description: 'Snapshot sync is complete.' };
+    }
+    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: RefreshCw, spin: false, label: 'Idle', description: 'No sync activity.' };
+  })();
+  const SyncIcon = syncBadge.Icon;
 
   const handleGoLive = (url) => {
     window.open(url, '_blank');
@@ -252,6 +266,22 @@ export default function Setup() {
           <TooltipProvider delayDuration={150}>
             <Tooltip>
               <TooltipTrigger asChild>
+                <div className={`${statusBadgeClassName} ${syncBadge.color}`}>
+                  <SyncIcon className={`w-3 h-3 ${syncBadge.spin ? 'animate-spin' : ''}`} />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+                <div className="text-xs">
+                  <div className="font-semibold">WebSocket Sync</div>
+                  <div>Status: {syncBadge.label}</div>
+                  <div>{syncBadge.description}</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <div className={`${statusBadgeClassName} ${connectionBadge.color}`}>
                   <ConnectionIcon className="w-3 h-3" />
                 </div>
@@ -270,10 +300,7 @@ export default function Setup() {
               <TooltipTrigger asChild>
                 <div
                   className={`${statusBadgeClassName} border-zinc-700 transition-all duration-500`}
-                  style={{
-                    backgroundColor: activityFill,
-                    boxShadow: activityGlow
-                  }}
+                  style={{ backgroundColor: activityFill }}
                 >
                   <Mail className={`w-3 h-3 ${activityProgress > 0 ? 'text-black/80' : 'text-zinc-400'}`} />
                 </div>
@@ -465,7 +492,7 @@ export default function Setup() {
 
           {activeTab === 'times' && (
             <TabsContent value="times">
-              <TimesTab />
+              <TimesTab tableFirstColumnWidth={90} />
             </TabsContent>
           )}
 

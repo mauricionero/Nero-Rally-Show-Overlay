@@ -6,7 +6,7 @@ import TimesTab from '../components/setup/TimesTab.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Flag, RotateCcw, Car, Timer, Lock, Unlock, Mail } from 'lucide-react';
+import { ArrowDown, ArrowUp, Car, Cpu, Flag, Hourglass, Lock, Mail, RefreshCw, RotateCcw, Timer, Unlock, Wifi, WifiLow, WifiOff } from 'lucide-react';
 import PerformanceLed from '../components/PerformanceLed.jsx';
 import SosAlertStack from '../components/SosAlertStack.jsx';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../utils/stageSchedule.js';
@@ -75,6 +75,7 @@ export default function Times() {
     wsLastSentAt,
     wsReceivedPulse,
     wsSentPulse,
+    wsSyncState,
     connectSyncChannel,
     setClientRole
   } = useRallyWs();
@@ -205,25 +206,40 @@ export default function Times() {
   ) || null;
   const connectionAgeMs = latestActivityAt ? Math.max(0, connectionNow - latestActivityAt) : null;
   const connectionLed = (() => {
-    if (!wsEnabled) return { color: 'rgba(63, 63, 70, 0.65)', glow: '0 0 0 rgba(0,0,0,0)', label: 'Local only' };
-    if (wsConnectionStatus === 'connecting') return { color: 'rgba(250, 204, 21, 1)', glow: '0 0 12px rgba(250, 204, 21, 0.45)', label: t('config.connecting') };
-    if (wsConnectionStatus === 'connected') return { color: 'rgba(34, 197, 94, 1)', glow: '0 0 12px rgba(34, 197, 94, 0.45)', label: t('config.connected') };
-    if (wsConnectionStatus === 'suspended') return { color: 'rgba(249, 115, 22, 1)', glow: '0 0 12px rgba(249, 115, 22, 0.35)', label: 'Suspended' };
-    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'rgba(239, 68, 68, 1)', glow: '0 0 12px rgba(239, 68, 68, 0.35)', label: 'Failed' };
-    return { color: 'rgba(63, 63, 70, 0.65)', glow: '0 0 0 rgba(0,0,0,0)', label: 'Disconnected' };
+    if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: 'Local only', Icon: WifiOff };
+    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', label: t('config.connecting'), Icon: WifiLow };
+    if (wsConnectionStatus === 'connected') return { color: 'bg-[#22C55E] text-black border-transparent', label: t('config.connected'), Icon: Wifi };
+    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316] text-black border-transparent', label: 'Suspended', Icon: WifiLow };
+    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', label: 'Failed', Icon: WifiOff };
+    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: 'Disconnected', Icon: WifiOff };
   })();
   const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && connectionAgeMs !== null
     ? Math.max(0, 1 - (connectionAgeMs / 30000))
     : 0;
   const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
   const activityLed = {
-    color: activityProgress > 0
+    bg: activityProgress > 0
       ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
-      : 'rgba(63, 63, 70, 0.45)',
-    glow: activityProgress > 0
-      ? `0 0 ${8 + (18 * activityProgress)}px ${getLedLoadRgba(activityLevel, 0.18 + (0.5 * activityProgress))}`
-      : '0 0 0 rgba(0,0,0,0)'
+      : 'rgba(63, 63, 70, 0.45)'
   };
+  const syncLed = (() => {
+    if (!wsEnabled || wsConnectionStatus !== 'connected') {
+      return { color: 'rgba(63, 63, 70, 0.65)', label: 'Idle', description: 'No sync activity.', Icon: RefreshCw, spin: false };
+    }
+    if (wsSyncState === 'waiting_snapshot') {
+      return { color: 'rgba(249, 115, 22, 1)', label: 'Waiting Snapshot', description: 'Waiting for a snapshot before becoming current.', Icon: Hourglass, spin: false };
+    }
+    if (wsSyncState === 'syncing_snapshot') {
+      return { color: 'rgba(250, 204, 21, 1)', label: 'Syncing', description: 'Applying snapshot data now.', Icon: RefreshCw, spin: true };
+    }
+    if (wsSyncState === 'current') {
+      return { color: 'rgba(34, 197, 94, 1)', label: 'Current', description: 'Snapshot sync is complete.', Icon: RefreshCw, spin: false };
+    }
+    return { color: 'rgba(63, 63, 70, 0.65)', label: 'Idle', description: 'No sync activity.', Icon: RefreshCw, spin: false };
+  })();
+  const SyncLedIcon = syncLed.Icon;
+  const ConnectionLedIcon = connectionLed.Icon;
+  const statusBadgeClassName = 'inline-flex items-center justify-center rounded border min-w-[16px] h-[16px] px-0.5';
 
   const headerStage = selectedStage;
   const StageIcon = headerStage ? getStageTypeIcon(headerStage.type) : Flag;
@@ -245,11 +261,31 @@ export default function Times() {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
-                className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
-                style={{ backgroundColor: connectionLed.color, boxShadow: connectionLed.glow }}
+              <div
+                className={`${statusBadgeClassName} ${syncLed.color}`}
+                aria-label={`WebSocket sync ${syncLed.label}`}
+              >
+                <SyncLedIcon className={`w-2.5 h-2.5 ${syncLed.spin ? 'animate-spin' : ''}`} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
+              <div className="text-xs">
+                <div className="font-semibold">WebSocket Sync</div>
+                <div>Status: {syncLed.label}</div>
+                <div>{syncLed.description}</div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={`${statusBadgeClassName} ${connectionLed.color}`}
                 aria-label={`WebSocket ${wsConnectionStatus}`}
-              />
+              >
+                <ConnectionLedIcon className="w-2.5 h-2.5" />
+              </div>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
               <div className="text-xs">
@@ -263,11 +299,13 @@ export default function Times() {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
-                className="inline-flex w-2.5 h-2.5 rounded-full border border-zinc-700"
-                style={{ backgroundColor: activityLed.color, boxShadow: activityLed.glow }}
+              <div
+                className={statusBadgeClassName}
+                style={{ backgroundColor: activityLed.bg }}
                 aria-label="WebSocket activity"
-              />
+              >
+                <Mail className={`w-2.5 h-2.5 ${activityProgress > 0 ? 'text-black/80' : 'text-zinc-400'}`} />
+              </div>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
               <div className="text-xs">
@@ -290,7 +328,7 @@ export default function Times() {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <PerformanceLed className="w-2.5 h-2.5" />
+        <PerformanceLed icon={Cpu} className="min-w-[16px] h-[16px] px-0.5 rounded border border-zinc-700" iconClassName="w-2.5 h-2.5 text-black/80" />
       </div>
       <div className={`sticky top-0 z-30 backdrop-blur-sm ${headerStageHasSos ? 'bg-[#2A0B0B]/95 border-b border-red-500/70' : 'bg-black/95 border-b border-[#FF4500]'}`}>
         <div className="max-w-5xl mx-auto px-2 sm:px-4 py-3">
@@ -354,6 +392,7 @@ export default function Times() {
           activeStageId={selectedStageId}
           showStageAccent={false}
           compactStagePadding={true}
+          tableFirstColumnWidth={90}
         />
       </div>
     </div>

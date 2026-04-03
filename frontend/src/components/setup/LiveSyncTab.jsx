@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -23,6 +23,12 @@ export default function LiveSyncTab() {
 
   const [copied, setCopied] = useState(false);
   const [newKey, setNewKey] = useState('');
+
+  useEffect(() => {
+    if (wsChannelKey && wsChannelKey !== newKey) {
+      setNewKey(wsChannelKey);
+    }
+  }, [newKey, wsChannelKey]);
 
   const handleGenerateKey = () => {
     const key = generateNewChannelKey();

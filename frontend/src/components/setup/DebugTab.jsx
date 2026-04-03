@@ -1,5 +1,6 @@
 import React from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
+import { useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -10,6 +11,27 @@ import { Bug, CalendarDays } from 'lucide-react';
 export default function DebugTab() {
   const { t } = useTranslation();
   const { debugDate, setDebugDate } = useRally();
+  const {
+    wsOwnership,
+    wsLatestSnapshotAt,
+    wsLastSnapshotGeneratedAt,
+    wsLastSnapshotReceivedAt
+  } = useRallyWs();
+
+  const formatSnapshotDateTime = (value) => {
+    const timestamp = Number(value || 0);
+    if (!timestamp) {
+      return '—';
+    }
+
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch (error) {
+      return String(timestamp);
+    }
+  };
+
+  const isOwner = !!wsOwnership?.hasOwnership;
 
   return (
     <div className="space-y-4">
@@ -54,6 +76,19 @@ export default function DebugTab() {
           </div>
 
           <p className="text-xs text-zinc-500">{t('debug.syncNote')}</p>
+
+          <div className="space-y-2 border-t border-zinc-800 pt-4">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-zinc-400">{t('debug.latestSnapshotKnown')}</span>
+              <span className="text-white font-mono text-right">{formatSnapshotDateTime(wsLatestSnapshotAt)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-zinc-400">{isOwner ? t('debug.lastSnapshotGeneratedAt') : t('debug.lastSnapshotGotAt')}</span>
+              <span className="text-white font-mono text-right">
+                {formatSnapshotDateTime(isOwner ? wsLastSnapshotGeneratedAt : wsLastSnapshotReceivedAt)}
+              </span>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

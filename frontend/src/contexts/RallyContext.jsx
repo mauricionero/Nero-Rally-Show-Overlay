@@ -1217,6 +1217,13 @@ export const RallyProvider = ({ children }) => {
   const [wsSentPulse, setWsSentPulse] = useState(0);
   const [wsRole, setWsRole] = useState('client');
   const [wsPublishSections, setWsPublishSections] = useState(null);
+  const [wsDataIsCurrent, setWsDataIsCurrent] = useState(false);
+  const [wsHasSnapshotBootstrap, setWsHasSnapshotBootstrap] = useState(false);
+  const [wsSyncState, setWsSyncState] = useState('idle');
+  const [wsLatestSnapshotAt, setWsLatestSnapshotAt] = useState(null);
+  const [wsLastSnapshotGeneratedAt, setWsLastSnapshotGeneratedAt] = useState(null);
+  const [wsLastSnapshotReceivedAt, setWsLastSnapshotReceivedAt] = useState(null);
+  const [snapshotFreshnessTick, setSnapshotFreshnessTick] = useState(() => Date.now());
   const [clientRole, setClientRole] = useState('client');
   const [wsOwnership, setWsOwnership] = useState({
     ownerId: null,
@@ -1264,6 +1271,7 @@ export const RallyProvider = ({ children }) => {
   const pendingStorageDomainsRef = useRef(new Set());
   const wsRoleRef = useRef(wsRole);
   const wsConnectionStatusRef = useRef(wsConnectionStatus);
+  const wsDataIsCurrentRef = useRef(wsDataIsCurrent);
   const pendingLocalTimingSectionsRef = useRef(new Set());
   const timingLineVersionsRef = useRef(timingLineVersions);
   const publishDirtyTimingSectionsRef = useRef(null);
@@ -1272,6 +1280,10 @@ export const RallyProvider = ({ children }) => {
   const publishSetupSnapshotRef = useRef(null);
   const snapshotRequestInFlightRef = useRef(false);
   const snapshotPublishInFlightRef = useRef(false);
+  const lastSnapshotEnsureAttemptRef = useRef({
+    channelKey: '',
+    timestamp: 0
+  });
   const lastSnapshotRequestHandledAtRef = useRef(0);
   const incomingSetupTimingCaptureSuppressionRef = useRef(new Set());
   const persistenceReadyRef = useRef(false);
@@ -2155,6 +2167,26 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     wsRoleRef.current = wsRole;
   }, [wsRole]);
+
+  useEffect(() => {
+    wsDataIsCurrentRef.current = wsDataIsCurrent;
+  }, [wsDataIsCurrent]);
+
+  useEffect(() => () => {
+    if (setupPublishTimer.current) {
+      window.clearTimeout(setupPublishTimer.current);
+      setupPublishTimer.current = null;
+    }
+
+    if (timesPublishTimer.current) {
+      window.clearTimeout(timesPublishTimer.current);
+      timesPublishTimer.current = null;
+    }
+
+    wsProvider.current?.disconnect?.();
+    syncEngineRef.current?.disconnect?.();
+    wsConnectInFlightRef.current = null;
+  }, []);
 
   useEffect(() => {
     timingLineVersionsRef.current = timingLineVersions;
@@ -3513,6 +3545,10 @@ export const RallyProvider = ({ children }) => {
   }, []);
 
   const publishSetupSnapshot = useCallback(async (_channelKey, allowedSections = null) => {
+    if (!wsDataIsCurrentRef.current || !syncEngineRef.current?.isOwner) {
+      return null;
+    }
+
     if (snapshotPublishInFlightRef.current) {
       return null;
     }
@@ -3526,7 +3562,15 @@ export const RallyProvider = ({ children }) => {
         return null;
       }
 
+      const snapshotTimestamp = Number(publishedSnapshot.timestamp || Date.now());
+      console.log('[Snapshot] Published', {
+        snapshotVersion: nextSnapshotVersion,
+        timestamp: snapshotTimestamp,
+        totalParts: Number(publishedSnapshot.totalParts || 1)
+      });
       setLatestSnapshotVersion(nextSnapshotVersion);
+      setWsLatestSnapshotAt(snapshotTimestamp);
+      setWsLastSnapshotGeneratedAt(snapshotTimestamp);
       return publishedSnapshot;
     } finally {
       snapshotPublishInFlightRef.current = false;
@@ -3536,6 +3580,71 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     publishSetupSnapshotRef.current = publishSetupSnapshot;
   }, [publishSetupSnapshot]);
+
+  useEffect(() => {
+    if (wsRole !== 'setup' || wsConnectionStatus !== 'connected' || !wsOwnership?.hasOwnership) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setSnapshotFreshnessTick(Date.now());
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [wsConnectionStatus, wsOwnership, wsRole]);
+
+  useEffect(() => {
+    const normalizedChannelKey = String(wsChannelKey || '').trim();
+    const snapshotStalenessMs = 5 * 60 * 1000;
+    const snapshotEnsureRetryMs = 30000;
+    const latestKnownSnapshotAt = Number(wsLatestSnapshotAt || 0);
+    const needsFreshSnapshot = latestKnownSnapshotAt <= 0 || (Date.now() - latestKnownSnapshotAt) > snapshotStalenessMs;
+    const lastEnsureAttempt = lastSnapshotEnsureAttemptRef.current;
+    const canRetryEnsure = (
+      lastEnsureAttempt.channelKey !== normalizedChannelKey
+      || (Date.now() - Number(lastEnsureAttempt.timestamp || 0)) >= snapshotEnsureRetryMs
+    );
+
+    if (!normalizedChannelKey) {
+      lastSnapshotEnsureAttemptRef.current = {
+        channelKey: '',
+        timestamp: 0
+      };
+      return;
+    }
+
+    if (
+      wsRole !== 'setup'
+      || wsConnectionStatus !== 'connected'
+      || !wsDataIsCurrent
+      || !wsOwnership?.hasOwnership
+    ) {
+      return;
+    }
+
+    if (!needsFreshSnapshot) {
+      return;
+    }
+
+    if (!canRetryEnsure) {
+      return;
+    }
+
+    lastSnapshotEnsureAttemptRef.current = {
+      channelKey: normalizedChannelKey,
+      timestamp: Date.now()
+    };
+    void publishSetupSnapshotRef.current?.(normalizedChannelKey, wsPublishSections);
+  }, [
+    snapshotFreshnessTick,
+    wsChannelKey,
+    wsConnectionStatus,
+    wsDataIsCurrent,
+    wsLatestSnapshotAt,
+    wsOwnership,
+    wsPublishSections,
+    wsRole
+  ]);
 
   const markTimingSectionDirty = useCallback((section) => {
     if (clientRole === 'setup') {
@@ -3626,6 +3735,54 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     publishDirtyTimingDeltasRef.current = publishDirtyTimingSections;
   }, [publishDirtyTimingSections]);
+
+  useEffect(() => {
+    if (clientRole !== 'times' || wsRole !== 'times') {
+      if (timesPublishTimer.current) {
+        window.clearTimeout(timesPublishTimer.current);
+        timesPublishTimer.current = null;
+      }
+      return;
+    }
+
+    if (
+      !wsEnabled
+      || !wsCanPublish
+      || wsConnectionStatus !== 'connected'
+      || !wsProvider.current?.isConnected
+      || !wsDataIsCurrent
+    ) {
+      return;
+    }
+
+    if (!Array.isArray(dirtyTimingSections) || dirtyTimingSections.length === 0) {
+      return;
+    }
+
+    if (timesPublishTimer.current) {
+      window.clearTimeout(timesPublishTimer.current);
+    }
+
+    timesPublishTimer.current = window.setTimeout(() => {
+      timesPublishTimer.current = null;
+      publishDirtyTimingSectionsRef.current?.();
+    }, 400);
+
+    return () => {
+      if (timesPublishTimer.current) {
+        window.clearTimeout(timesPublishTimer.current);
+        timesPublishTimer.current = null;
+      }
+    };
+  }, [
+    clientRole,
+    dirtyTimingSections,
+    wsCanPublish,
+    wsConnectionStatus,
+    wsDataIsCurrent,
+    wsEnabled,
+    wsRole
+  ]);
 
   const publishDirtySetupSections = useCallback(async (sections = null) => {
     const nextSections = Array.isArray(sections) && sections.length > 0
@@ -3760,7 +3917,8 @@ export const RallyProvider = ({ children }) => {
 
       const role = options.role || 'client';
       const canPublish = options.readOnly !== true;
-      const shouldReadHistory = options.readHistory ?? (role === 'setup' ? true : !canPublish);
+      const requireSnapshotBootstrap = role !== 'setup';
+      const shouldReadHistory = options.readHistory ?? true;
       const allowedSections = options.allowedSections ?? (
         role === 'times'
           ? TIMES_ROLE_TIMING_SECTION_KEYS
@@ -3770,6 +3928,9 @@ export const RallyProvider = ({ children }) => {
       try {
         setWsConnectionStatus('connecting');
         setWsError(null);
+        setWsDataIsCurrent(false);
+        setWsHasSnapshotBootstrap(false);
+        setWsSyncState(requireSnapshotBootstrap ? 'waiting_snapshot' : 'idle');
         setPendingSosAlerts([]);
 
         wsProvider.current = getWebSocketProvider();
@@ -3815,13 +3976,6 @@ export const RallyProvider = ({ children }) => {
               }
 
               return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-            },
-            onLeaseClaimed: async () => {
-              if (role !== 'setup') {
-                return false;
-              }
-
-              return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
             }
           });
         } else {
@@ -3838,13 +3992,6 @@ export const RallyProvider = ({ children }) => {
               applyWsOwnership(ownership);
             },
             onSnapshotDue: async () => {
-              if (role !== 'setup') {
-                return false;
-              }
-
-              return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-            },
-            onLeaseClaimed: async () => {
               if (role !== 'setup') {
                 return false;
               }
@@ -3870,16 +4017,49 @@ export const RallyProvider = ({ children }) => {
         }
 
         const onWsMessage = (data) => {
+          if (
+            data?.channelType === 'snapshots'
+            && data?.messageType === 'delta-batch'
+            && data?.packageType === 'snapshot'
+          ) {
+            setWsSyncState('syncing_snapshot');
+            const snapshotTimestamp = Number(data?.timestamp || Date.now());
+            const totalParts = Math.max(1, Number(data?.totalParts || 1));
+            const partIndex = Math.max(0, Number(data?.partIndex || 0));
+            const snapshotVersion = Number(data?.snapshotVersion || 0);
+            if (snapshotVersion > 0) {
+              setLatestSnapshotVersion((prev) => Math.max(Number(prev || 0), snapshotVersion));
+            }
+            setWsLatestSnapshotAt(snapshotTimestamp);
+            if (partIndex + 1 >= totalParts) {
+              setWsHasSnapshotBootstrap(true);
+              setWsLastSnapshotReceivedAt(snapshotTimestamp);
+              setWsSyncState('current');
+              if (role !== 'setup') {
+                setWsDataIsCurrent(true);
+              }
+            }
+          }
           wsMessageReceiver.current?.handleMessage(data);
         };
 
         const onWsStatus = (status, _provider, error) => {
           setWsConnectionStatus(status);
-          if (error) setWsError(error);
+          if (status === 'connected') {
+            setWsError(null);
+          } else if (error) {
+            setWsError(error);
+          }
+          if (status !== 'connected') {
+            setWsDataIsCurrent(false);
+            setWsHasSnapshotBootstrap(false);
+            setWsSyncState(status === 'connecting' ? 'idle' : 'disconnected');
+          }
         };
 
         const connectOptions = {
           readHistory: shouldReadHistory,
+          requireSnapshotBootstrap,
           lastReceivedAt: Number(sessionHistoryAt || wsLastReceivedAt || wsLastReceivedMarkerRef.current?.timestamp || 0),
           lastReceivedMarker: sessionHistoryMarker || wsLastReceivedMarkerRef.current || null,
           snapshotStalenessMs: 5 * 60 * 1000,
@@ -3903,7 +4083,7 @@ export const RallyProvider = ({ children }) => {
           onReceiveActivity: ({ timestamp, details } = {}) => {
             const activityAt = Number(timestamp || Date.now());
             const channelType = String(details?.channelType || '').trim();
-            if (wsProvider.current?.isConnected && wsConnectionStatusRef.current !== 'connected') {
+            if (wsConnectionStatusRef.current !== 'connected') {
               setWsConnectionStatus('connected');
               setWsError(null);
             }
@@ -3934,7 +4114,7 @@ export const RallyProvider = ({ children }) => {
           },
           onSendActivity: ({ timestamp } = {}) => {
             const activityAt = Number(timestamp || Date.now());
-            if (wsProvider.current?.isConnected && wsConnectionStatusRef.current !== 'connected') {
+            if (wsConnectionStatusRef.current !== 'connected') {
               setWsConnectionStatus('connected');
               setWsError(null);
             }
@@ -3956,13 +4136,6 @@ export const RallyProvider = ({ children }) => {
             }
 
             return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
-          },
-          onLeaseClaimed: async () => {
-            if (role !== 'setup') {
-              return false;
-            }
-
-            return publishSetupSnapshotRef.current?.(channelKey, allowedSections);
           }
         });
 
@@ -3978,7 +4151,24 @@ export const RallyProvider = ({ children }) => {
         setWsEnabled(true);
         localStorage.setItem('rally_ws_enabled', JSON.stringify(true));
 
+        const hasSnapshotBootstrap = !!bootstrapState.hasSnapshotBootstrap;
+        const latestSnapshotAt = Number(bootstrapState.snapshotTimestamp || 0);
         setLatestSnapshotVersion(Number(bootstrapState.snapshotVersion || 0));
+        setWsHasSnapshotBootstrap(hasSnapshotBootstrap);
+        setWsLatestSnapshotAt(latestSnapshotAt || null);
+        setWsLastSnapshotReceivedAt(hasSnapshotBootstrap ? (latestSnapshotAt || null) : null);
+        setWsSyncState(
+          role === 'setup'
+            ? 'current'
+            : hasSnapshotBootstrap
+              ? 'current'
+              : 'waiting_snapshot'
+        );
+        setWsDataIsCurrent(
+          role === 'setup'
+            ? (!shouldReadHistory || !!bootstrapState.historyComplete)
+            : hasSnapshotBootstrap
+        );
 
         if (role === 'times') {
           const sanitizedDirtySections = (Array.isArray(dirtyTimingSections) ? dirtyTimingSections : [])
@@ -4005,24 +4195,6 @@ export const RallyProvider = ({ children }) => {
             setTimingLineVersions(sanitizedLineVersions);
           }
 
-          const remoteTimesSyncAt = Number(existingManifest.latestTimesSyncAt || 0);
-          const latestLocalTimingVersionAt = Math.max(
-            0,
-            ...Object.values(sanitizedLineVersions).map((entry) => Number(entry?.updatedAt || 0))
-          );
-          const latestLocalTimingEditAt = Math.max(
-            Number(lastTimesEditAt || 0),
-            latestLocalTimingVersionAt
-          );
-
-          if (remoteTimesSyncAt > latestLocalTimingEditAt) {
-            timesPendingLineKeys.current.clear();
-            setDirtyTimingSections([]);
-            setTimingSectionTouchedAt({});
-            setTimingLineVersions({});
-            setLastTimesEditAt(remoteTimesSyncAt);
-            setLastTimesAckedEditAt(remoteTimesSyncAt);
-          }
         }
 
         if (role === 'times') {
@@ -4036,6 +4208,9 @@ export const RallyProvider = ({ children }) => {
         syncEngineRef.current?.disconnect();
         setWsConnectionStatus('error');
         setWsError(error.message);
+        setWsDataIsCurrent(false);
+        setWsHasSnapshotBootstrap(false);
+        setWsSyncState('disconnected');
         return false;
       } finally {
         wsConnectInFlightRef.current = null;
@@ -4087,6 +4262,16 @@ export const RallyProvider = ({ children }) => {
     setWsConnectionStatus('disconnected');
     setWsEnabled(false);
     setWsCanPublish(false);
+    setWsDataIsCurrent(false);
+    setWsHasSnapshotBootstrap(false);
+    setWsSyncState('disconnected');
+    setWsLatestSnapshotAt(null);
+    setWsLastSnapshotGeneratedAt(null);
+    setWsLastSnapshotReceivedAt(null);
+    lastSnapshotEnsureAttemptRef.current = {
+      channelKey: '',
+      timestamp: 0
+    };
     setWsLastMessageAt(null);
     setWsLastReceivedAt(null);
     setWsLastSentAt(null);
@@ -4109,10 +4294,14 @@ export const RallyProvider = ({ children }) => {
 
   // Publish to WebSocket when data version changes
   useEffect(() => {
+    if (wsRole === 'times') {
+      return;
+    }
+
     if (wsEnabled && wsProvider.current?.isConnected) {
       publishOutgoingSyncBatch();
     }
-  }, [dataVersion, wsEnabled, publishOutgoingSyncBatch]);
+  }, [dataVersion, wsEnabled, wsRole, publishOutgoingSyncBatch]);
 
   useEffect(() => {
     localStorage.setItem('rally_dirty_times', JSON.stringify(dirtyTimingSections));
@@ -5558,6 +5747,12 @@ export const RallyProvider = ({ children }) => {
     wsSentPulse,
     wsRole,
     wsPublishSections,
+    wsDataIsCurrent,
+    wsHasSnapshotBootstrap,
+    wsSyncState,
+    wsLatestSnapshotAt,
+    wsLastSnapshotGeneratedAt,
+    wsLastSnapshotReceivedAt,
     wsInstanceId,
     wsOwnership,
     pendingSosAlerts,
@@ -5807,6 +6002,12 @@ export const RallyProvider = ({ children }) => {
     wsSentPulse,
     wsRole,
     wsPublishSections,
+    wsDataIsCurrent,
+    wsHasSnapshotBootstrap,
+    wsSyncState,
+    wsLatestSnapshotAt,
+    wsLastSnapshotGeneratedAt,
+    wsLastSnapshotReceivedAt,
     wsInstanceId,
     wsOwnership,
     pendingSosAlerts,
@@ -5860,6 +6061,12 @@ export const RallyProvider = ({ children }) => {
     wsReceivedPulse,
     wsSentPulse,
     wsPublishSections,
+    wsDataIsCurrent,
+    wsHasSnapshotBootstrap,
+    wsSyncState,
+    wsLatestSnapshotAt,
+    wsLastSnapshotGeneratedAt,
+    wsLastSnapshotReceivedAt,
     wsInstanceId,
     wsOwnership,
     wsRole

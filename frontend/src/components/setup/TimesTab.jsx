@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
@@ -335,7 +335,7 @@ const getStageTypeColor = (type) => {
   }
 };
 
-function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false, layout = 'cards', isReadOnly = false }) {
+function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false, layout = 'cards', isReadOnly = false, firstColumnWidth = 130 }) {
   const { t } = useTranslation();
   const showLineSyncRequest = typeof window !== 'undefined' && window.location?.pathname !== '/times';
   const {
@@ -682,7 +682,10 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-zinc-700">
-                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[224px] sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <th
+                  className="text-left text-white uppercase font-bold p-1 sm:p-2 sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800"
+                  style={{ fontFamily: 'Barlow Condensed, sans-serif', width: `${firstColumnWidth}px`, minWidth: `${firstColumnWidth}px` }}
+                >
                   #
                 </th>
                 <th className="text-left text-white uppercase font-bold p-1 sm:p-2 min-w-[200px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -736,7 +739,10 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 
                 return (
                   <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
-                    <td className="pl-0 pr-1 py-1 sm:pl-0.5 sm:pr-2 sm:py-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800">
+                    <td
+                      className="pl-0 pr-1 py-1 sm:pl-0.5 sm:pr-2 sm:py-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800"
+                      style={{ width: `${firstColumnWidth}px`, minWidth: `${firstColumnWidth}px` }}
+                    >
                       <div
                         className="flex flex-wrap items-center gap-1.5 pl-0 pr-1 py-0.5"
                         style={{ borderLeft: `2px solid ${category?.color || 'transparent'}` }}
@@ -1258,7 +1264,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 }
 
 // Liaison/Service Park Stage Component - Simple start/end per pilot
-function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', isReadOnly = false }) {
+function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', isReadOnly = false, firstColumnWidth = 130 }) {
   const { t } = useTranslation();
   const stageSortedPilots = sortedPilots;
 
@@ -1268,7 +1274,10 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-zinc-700">
-                <th className="text-left text-white uppercase font-bold p-1 sm:p-2 w-[90px] sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <th
+                  className="text-left text-white uppercase font-bold p-1 sm:p-2 sticky left-0 z-10 bg-[#0B0B0F] border-r border-zinc-800"
+                  style={{ fontFamily: 'Barlow Condensed, sans-serif', width: `${firstColumnWidth}px`, minWidth: `${firstColumnWidth}px` }}
+                >
                   #
                 </th>
                 <th className="text-left text-white uppercase font-bold p-1 sm:p-2 min-w-[200px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -1289,7 +1298,10 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
               const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
               return (
                 <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
-                  <td className="p-1 sm:p-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800">
+                  <td
+                    className="p-1 sm:p-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800"
+                    style={{ width: `${firstColumnWidth}px`, minWidth: `${firstColumnWidth}px` }}
+                  >
                     <div
                       className="flex items-center gap-1.5 px-1.5 py-0.5"
                       style={{ borderLeft: `2px solid ${category?.color || 'transparent'}` }}
@@ -1391,7 +1403,8 @@ export default function TimesTab({
   showCurrentStageCard = true,
   defaultOpenStageIds,
   showStageAccent = true,
-  compactStagePadding = false
+  compactStagePadding = false,
+  tableFirstColumnWidth = 90
 }) {
   const { t } = useTranslation();
   const { pilots, stages, categories, currentStageId } = useRallyMeta();
@@ -1531,6 +1544,7 @@ export default function TimesTab({
                     manualStartTime
                     layout={showTimesAsCards ? 'cards' : 'table'}
                     isReadOnly={activeStageId !== undefined ? activeStageId !== stage.id : false}
+                    firstColumnWidth={tableFirstColumnWidth}
                   />
                 )}
                 {isTransitStageType(stage.type) && (
@@ -1540,6 +1554,7 @@ export default function TimesTab({
                     categoryMap={categoryMap}
                     layout={showTimesAsCards ? 'cards' : 'table'}
                     isReadOnly={activeStageId !== undefined ? activeStageId !== stage.id : false}
+                    firstColumnWidth={tableFirstColumnWidth}
                   />
                 )}
                 {isLapRaceStageType(stage.type) && (

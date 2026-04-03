@@ -13,10 +13,11 @@ This app now uses a batch-based sync model with per-domain permissions and owner
 - `payload` is the canonical wire body for delta batches and control batches.
 - Snapshot leadership belongs to the active setup owner.
 - Setup ownership is leased with heartbeats and can fail over to another setup tab.
-- The Ably transport is split into three derived channels per key:
-  - `rally-{key}-data`
-  - `rally-{key}-snapshots`
-  - `rally-{key}-telemetry`
+- The Ably transport is split into four derived channels per key:
+  - `rally-data:{key}`
+  - `rally-snapshots:{key}`
+  - `rally-telemetry:{key}`
+  - `rally-priority:{key}`
 - Snapshots and telemetry do not share the data channel history.
 
 ## Important Files

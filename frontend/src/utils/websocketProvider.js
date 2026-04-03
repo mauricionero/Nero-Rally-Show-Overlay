@@ -7,10 +7,10 @@
  * Key format: 1-{channelId} (keeping prefix for future extensibility)
  * 
  * Channel layout:
- * - rally-{channelId}-data
- * - rally-{channelId}-snapshots
- * - rally-{channelId}-telemetry
- * - rally-{channelId}-priority
+ * - rally-data:{channelId}
+ * - rally-snapshots:{channelId}
+ * - rally-telemetry:{channelId}
+ * - rally-priority:{channelId}
  */
 
 import Ably from 'ably';
@@ -74,6 +74,21 @@ const normalizeIncomingEnvelope = (data, channelType, channelName) => {
     channelType,
     channelName
   };
+};
+
+const getHistoryMessageData = (message) => {
+  const data = message?.data;
+
+  if (!data || typeof data !== 'string') {
+    return (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+  }
+
+  try {
+    const parsed = JSON.parse(data);
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch (error) {
+    return {};
+  }
 };
 
 const getLogChannelLabel = (channelType) => {
@@ -174,6 +189,7 @@ class WebSocketProvider {
     this.isConnected = false;
     this.connectionState = 'disconnected';
     this.historyBootstrapLoadedSnapshot = false;
+    this.waitingForSnapshotBootstrap = false;
     this.bootstrapState = {
       mode: 'none',
       messages: [],
@@ -181,7 +197,8 @@ class WebSocketProvider {
       priorityMessages: [],
       snapshotTimestamp: 0,
       snapshotVersion: 0,
-      historyComplete: false
+      historyComplete: false,
+      hasSnapshotBootstrap: false
     };
   }
 
@@ -196,10 +213,10 @@ class WebSocketProvider {
     }
 
     return {
-      data: `rally-${channelId}-data`,
-      snapshots: `rally-${channelId}-snapshots`,
-      telemetry: `rally-${channelId}-telemetry`,
-      priority: `rally-${channelId}-priority`
+      data: `rally-data:${channelId}`,
+      snapshots: `rally-snapshots:${channelId}`,
+      telemetry: `rally-telemetry:${channelId}`,
+      priority: `rally-priority:${channelId}`
     };
   }
 
@@ -218,7 +235,8 @@ class WebSocketProvider {
   }
 
   getMessageTimestamp(message) {
-    const payloadTimestamp = Number(message?.data?.timestamp || 0);
+    const messageData = getHistoryMessageData(message);
+    const payloadTimestamp = Number(messageData?.timestamp || 0);
     const transportTimestamp = Number(message?.timestamp || 0);
     return Math.max(payloadTimestamp, transportTimestamp, 0);
   }
@@ -228,18 +246,20 @@ class WebSocketProvider {
   }
 
   isSnapshotBatchMessage(message) {
+    const messageData = getHistoryMessageData(message);
     return (
       this.isUpdateHistoryMessage(message)
-      && message?.data?.messageType === 'delta-batch'
-      && message?.data?.packageType === 'snapshot'
+      && messageData?.messageType === 'delta-batch'
+      && messageData?.packageType === 'snapshot'
     );
   }
 
   getMessageOrderParts(message) {
+    const messageData = getHistoryMessageData(message);
     return {
       timestamp: this.getMessageTimestamp(message),
-      snapshotId: String(message?.data?.snapshotId || '').trim(),
-      partIndex: Number.isFinite(message?.data?.partIndex) ? Number(message.data.partIndex) : 0
+      snapshotId: String(messageData?.snapshotId || '').trim(),
+      partIndex: Number.isFinite(messageData?.partIndex) ? Number(messageData.partIndex) : 0
     };
   }
 
@@ -293,7 +313,8 @@ class WebSocketProvider {
         priorityMessages: [],
         snapshotTimestamp: 0,
         snapshotVersion: 0,
-        historyComplete: false
+        historyComplete: false,
+        hasSnapshotBootstrap: false
       };
       return {
         messages: [],
@@ -302,6 +323,7 @@ class WebSocketProvider {
         snapshotTimestamp: 0,
         snapshotVersion: 0,
         historyComplete: false,
+        hasSnapshotBootstrap: false,
         mode: 'none'
       };
     }
@@ -310,15 +332,25 @@ class WebSocketProvider {
     const maxPages = Number.isFinite(Number(options.maxPages))
       ? Number(options.maxPages)
       : Number.POSITIVE_INFINITY;
+    const requireSnapshotBootstrap = options.requireSnapshotBootstrap === true;
     const lastReceivedAt = Number(options.lastReceivedAt || 0);
     const lastReceivedMarker = options.lastReceivedMarker && typeof options.lastReceivedMarker === 'object'
       ? options.lastReceivedMarker
       : null;
     const snapshotStalenessMs = Number(options.snapshotStalenessMs || (5 * 60 * 1000));
-    const shouldUseSnapshot = !Number.isFinite(lastReceivedAt) || lastReceivedAt <= 0
+    const shouldUseSnapshot = requireSnapshotBootstrap || !Number.isFinite(lastReceivedAt) || lastReceivedAt <= 0
       ? true
       : (Date.now() - lastReceivedAt) > snapshotStalenessMs;
     const boundaryMarker = lastReceivedMarker || (lastReceivedAt > 0 ? { timestamp: lastReceivedAt, partIndex: 0 } : null);
+
+    const latestSnapshotMeta = snapshotChannel
+      ? await snapshotChannel.history({ limit: 50, direction: 'backwards' })
+      : null;
+    const latestSnapshotItems = Array.isArray(latestSnapshotMeta?.items) ? latestSnapshotMeta.items : [];
+    const latestSnapshotMessage = latestSnapshotItems.find((message) => this.isSnapshotBatchMessage(message)) || null;
+    const latestSnapshotData = latestSnapshotMessage ? getHistoryMessageData(latestSnapshotMessage) : {};
+    const latestAvailableSnapshotTimestamp = latestSnapshotMessage ? this.getMessageTimestamp(latestSnapshotMessage) : 0;
+    const latestAvailableSnapshotVersion = Number(latestSnapshotData?.snapshotVersion || 0);
 
     const loadPagedHistory = async (channel, stopWhen) => {
       const collected = [];
@@ -376,7 +408,38 @@ class WebSocketProvider {
 
     const snapshotTimestamp = snapshotMessages.length > 0
       ? Math.max(...snapshotMessages.map((message) => this.getMessageTimestamp(message)))
-      : 0;
+      : latestAvailableSnapshotTimestamp;
+
+    if (requireSnapshotBootstrap && snapshotMessages.length === 0) {
+      this.bootstrapState = {
+        mode: 'await-snapshot',
+        messages: [],
+        snapshotMessages: [],
+        priorityMessages: [],
+        snapshotTimestamp: 0,
+        snapshotVersion: 0,
+        historyComplete: false,
+        hasSnapshotBootstrap: false
+      };
+
+      console.log('[WebSocket][RX][bootstrap] Waiting for snapshot bootstrap', {
+        shouldUseSnapshot,
+        requireSnapshotBootstrap,
+        totalReadCount: snapshotCollected.length,
+        snapshotHistoryReadCount: snapshotCollected.length
+      });
+
+      return {
+        messages: [],
+        snapshotMessages: [],
+        priorityMessages: [],
+        snapshotTimestamp: 0,
+        snapshotVersion: 0,
+        historyComplete: false,
+        hasSnapshotBootstrap: false,
+        mode: 'await-snapshot'
+      };
+    }
 
     const dataCollected = dataChannel
       ? await loadPagedHistory(dataChannel, (collected) => {
@@ -413,8 +476,11 @@ class WebSocketProvider {
       : [];
 
     const updateMessages = dataCollected.filter((message) => this.isUpdateHistoryMessage(message));
-    const snapshotVersion = Number(snapshotMessages[0]?.data?.snapshotVersion || 0);
-    const selectedSnapshotId = String(snapshotMessages[0]?.data?.snapshotId || '').trim();
+    const selectedSnapshotData = snapshotMessages.length > 0
+      ? getHistoryMessageData(snapshotMessages[0])
+      : latestSnapshotData;
+    const snapshotVersion = Number(selectedSnapshotData?.snapshotVersion || latestAvailableSnapshotVersion || 0);
+    const selectedSnapshotId = String(selectedSnapshotData?.snapshotId || '').trim();
     const selectedSnapshotIdentity = snapshotVersion > 0
       ? { type: 'version', value: snapshotVersion }
       : selectedSnapshotId
@@ -432,11 +498,11 @@ class WebSocketProvider {
             }
 
             if (selectedSnapshotIdentity.type === 'version') {
-              return Number(message?.data?.snapshotVersion || 0) !== selectedSnapshotIdentity.value;
+              return Number(getHistoryMessageData(message)?.snapshotVersion || 0) !== selectedSnapshotIdentity.value;
             }
 
             if (selectedSnapshotIdentity.type === 'id') {
-              return String(message?.data?.snapshotId || '').trim() !== selectedSnapshotIdentity.value;
+              return String(getHistoryMessageData(message)?.snapshotId || '').trim() !== selectedSnapshotIdentity.value;
             }
 
             return this.getMessageTimestamp(message) !== selectedSnapshotIdentity.value;
@@ -485,12 +551,15 @@ class WebSocketProvider {
       priorityMessages,
       snapshotTimestamp,
       snapshotVersion,
-      historyComplete: true
+      historyComplete: true,
+      hasSnapshotBootstrap: snapshotMessages.length > 0
     };
 
     console.log('[WebSocket][RX][bootstrap] History applied', {
       mode: this.bootstrapState.mode,
+      shouldUseSnapshot,
       totalReadCount: dataCollected.length + snapshotCollected.length + priorityCollected.length,
+      snapshotHistoryReadCount: snapshotCollected.length,
       usedSnapshotCount: snapshotMessages.length,
       usedReplayCount: messages.length,
       usedPriorityCount: priorityMessages.length,
@@ -506,6 +575,7 @@ class WebSocketProvider {
       snapshotTimestamp,
       snapshotVersion,
       historyComplete: true,
+      hasSnapshotBootstrap: snapshotMessages.length > 0,
       mode: shouldUseSnapshot && snapshotMessages.length > 0 ? 'snapshot' : 'replay'
     };
   }
@@ -531,6 +601,7 @@ class WebSocketProvider {
       this.disconnect();
     }
     this.historyBootstrapLoadedSnapshot = false;
+    this.waitingForSnapshotBootstrap = false;
     this.bootstrapState = {
       mode: 'none',
       messages: [],
@@ -538,7 +609,8 @@ class WebSocketProvider {
       priorityMessages: [],
       snapshotTimestamp: 0,
       snapshotVersion: 0,
-      historyComplete: false
+      historyComplete: false,
+      hasSnapshotBootstrap: false
     };
 
     const apiKey = process.env.REACT_APP_ABLY_KEY;
@@ -560,25 +632,45 @@ class WebSocketProvider {
       
       // Wait for connection
       await new Promise((resolve, reject) => {
+        const settle = (fn, value) => {
+          clearTimeout(timeout);
+          activeClient.connection.off?.('connected', handleConnected);
+          activeClient.connection.off?.('failed', handleFailed);
+          fn(value);
+        };
+
+        const handleConnected = () => {
+          if (this.client !== activeClient) {
+            return;
+          }
+          settle(resolve);
+        };
+
+        const handleFailed = (stateChange) => {
+          if (this.client !== activeClient) {
+            return;
+          }
+          settle(reject, new Error(stateChange.reason?.message || 'Connection failed'));
+        };
+
         const timeout = setTimeout(() => {
+          activeClient.connection.off?.('connected', handleConnected);
+          activeClient.connection.off?.('failed', handleFailed);
           reject(new Error('Connection timeout'));
         }, 15000);
-        
-        activeClient.connection.on('connected', () => {
-          if (this.client !== activeClient) {
-            return;
-          }
-          clearTimeout(timeout);
-          resolve();
-        });
-        
-        activeClient.connection.on('failed', (stateChange) => {
-          if (this.client !== activeClient) {
-            return;
-          }
-          clearTimeout(timeout);
-          reject(new Error(stateChange.reason?.message || 'Connection failed'));
-        });
+
+        if (activeClient.connection.state === 'connected') {
+          settle(resolve);
+          return;
+        }
+
+        if (activeClient.connection.state === 'failed') {
+          settle(reject, new Error(activeClient.connection.errorReason?.message || 'Connection failed'));
+          return;
+        }
+
+        activeClient.connection.on('connected', handleConnected);
+        activeClient.connection.on('failed', handleFailed);
       });
 
       const channelNames = this.getChannelNames(channelId);
@@ -600,8 +692,11 @@ class WebSocketProvider {
           limit: options.historyLimit || 1000,
           lastReceivedAt: options.lastReceivedAt || 0,
           lastReceivedMarker: options.lastReceivedMarker || null,
-          snapshotStalenessMs: options.snapshotStalenessMs || (5 * 60 * 1000)
+          snapshotStalenessMs: options.snapshotStalenessMs || (5 * 60 * 1000),
+          requireSnapshotBootstrap: options.requireSnapshotBootstrap === true
         });
+
+        this.waitingForSnapshotBootstrap = options.requireSnapshotBootstrap === true && historyBootstrap.mode === 'await-snapshot';
 
         if (historyBootstrap.mode === 'snapshot' && historyBootstrap.snapshotMessages.length > 0) {
           this.historyBootstrapLoadedSnapshot = true;
@@ -718,12 +813,22 @@ class WebSocketProvider {
         }
 
         const handler = (message) => {
+          const routedData = normalizeIncomingEnvelope(
+            message.data,
+            channelType,
+            channel.name
+          );
+          const isSnapshotMessage = routedData?.messageType === 'delta-batch' && routedData?.packageType === 'snapshot';
+
+          if (channelType === 'snapshots') {
+            if (!this.waitingForSnapshotBootstrap || !isSnapshotMessage) {
+              return;
+            }
+          } else if (this.waitingForSnapshotBootstrap) {
+            return;
+          }
+
           if (isOwnMessage(message)) {
-            const routedData = normalizeIncomingEnvelope(
-              message.data,
-              channelType,
-              channel.name
-            );
             console.log(buildWebSocketLogPrefix('echo', 'update', channelType, routedData), {
               channelType,
               data: routedData
@@ -734,20 +839,30 @@ class WebSocketProvider {
               data: routedData
             });
             this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'echo', routedData);
+            if (
+              channelType === 'snapshots'
+              && Number(routedData?.partIndex || 0) + 1 >= Number(routedData?.totalParts || 1)
+            ) {
+              this.waitingForSnapshotBootstrap = false;
+              this.historyBootstrapLoadedSnapshot = true;
+              this.unsubscribeChannelType('snapshots');
+            }
             return;
           }
-
-          const routedData = normalizeIncomingEnvelope(
-            message.data,
-            channelType,
-            channel.name
-          );
           console.log(buildWebSocketLogPrefix('receive', 'update', channelType, routedData), {
             channelType,
             data: routedData
           });
           this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'live', routedData);
           this.onMessageCallback?.(routedData);
+          if (
+            channelType === 'snapshots'
+            && Number(routedData?.partIndex || 0) + 1 >= Number(routedData?.totalParts || 1)
+          ) {
+            this.waitingForSnapshotBootstrap = false;
+            this.historyBootstrapLoadedSnapshot = true;
+            this.unsubscribeChannelType('snapshots');
+          }
         };
 
         await channel.subscribe(eventName, handler);
@@ -761,6 +876,9 @@ class WebSocketProvider {
       await subscribeToChannel(this.dataChannel, 'data');
       await subscribeToChannel(this.telemetryChannel, 'telemetry');
       await subscribeToChannel(this.priorityChannel, 'priority');
+      if (options.requireSnapshotBootstrap === true && !this.historyBootstrapLoadedSnapshot) {
+        await subscribeToChannel(this.snapshotChannel, 'snapshots');
+      }
 
       // Monitor connection state
       activeClient.connection.on('disconnected', () => {
@@ -886,16 +1004,32 @@ class WebSocketProvider {
           : targetChannel === this.priorityChannel
             ? 'priority'
             : 'data';
+      const isEphemeralMessage = channelType === 'telemetry'
+        || data?.messageType === 'ownership-heartbeat';
+      const publishEnvelope = isEphemeralMessage
+        ? {
+            name: 'update',
+            data,
+            extras: {
+              ephemeral: true
+            }
+          }
+        : {
+            name: 'update',
+            data
+          };
       console.log(buildWebSocketLogPrefix('send', 'update', channelType, data), {
         channelName: targetChannel?.name || null,
         channelType,
+        ephemeral: isEphemeralMessage,
         data
       });
-      await targetChannel.publish('update', data);
+      await targetChannel.publish(publishEnvelope);
       this.onSendMessageCallback?.({
         ...(data || {}),
         channelType,
         channelName: targetChannel?.name || null,
+        ephemeral: isEphemeralMessage,
         timestamp: Number(data?.timestamp || Date.now())
       });
       this.notifySend('update');
@@ -950,6 +1084,33 @@ class WebSocketProvider {
     }
   }
 
+  unsubscribeChannelType(channelType) {
+    const nextSubscriptions = [];
+
+    this.channelSubscriptions.forEach((subscription) => {
+      const matches = (
+        (channelType === 'data' && subscription.channel === this.dataChannel)
+        || (channelType === 'snapshots' && subscription.channel === this.snapshotChannel)
+        || (channelType === 'telemetry' && subscription.channel === this.telemetryChannel)
+        || (channelType === 'priority' && subscription.channel === this.priorityChannel)
+      );
+
+      if (!matches) {
+        nextSubscriptions.push(subscription);
+        return;
+      }
+
+      try {
+        subscription.channel?.unsubscribe?.(subscription.eventName, subscription.handler);
+      } catch (error) {
+        console.warn('[WebSocket] Failed to unsubscribe channel handler', error);
+        nextSubscriptions.push(subscription);
+      }
+    });
+
+    this.channelSubscriptions = nextSubscriptions;
+  }
+
   /**
    * Disconnect from the channel
    */
@@ -981,8 +1142,10 @@ class WebSocketProvider {
       priorityMessages: [],
       snapshotTimestamp: 0,
       snapshotVersion: 0,
-      historyComplete: false
+      historyComplete: false,
+      hasSnapshotBootstrap: false
     };
+    this.waitingForSnapshotBootstrap = false;
     this.updateStatus('disconnected');
     console.log('[WebSocket] Disconnected');
   }
