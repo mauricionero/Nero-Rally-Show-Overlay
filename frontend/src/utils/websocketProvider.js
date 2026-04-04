@@ -14,6 +14,8 @@
  */
 
 import Ably from 'ably';
+import { isTransportDebugEnabled } from './debugFlags.js';
+import SyncConnectionService from './sync/SyncConnectionService.js';
 
 // Provider identifier (keeping for future extensibility)
 export const PROVIDER_ID = '1';
@@ -200,6 +202,9 @@ class WebSocketProvider {
       historyComplete: false,
       hasSnapshotBootstrap: false
     };
+    this.lastProjectMarker = null;
+    this.needsRecoveryAfterReconnect = false;
+    this.connectionService = null;
   }
 
   getChannelNames(channelId = this.channelId) {
@@ -300,6 +305,78 @@ class WebSocketProvider {
     };
   }
 
+  shouldTrackProjectMarker(details = {}) {
+    const channelType = String(details?.channelType || '').trim();
+    if (!details || channelType === 'telemetry') {
+      return false;
+    }
+
+    const packageType = String(details?.packageType || '').trim();
+    const messageType = String(details?.messageType || '').trim();
+    if (
+      messageType === 'ownership-heartbeat'
+      || messageType === 'ownership-claim'
+      || messageType === 'ownership-release'
+    ) {
+      return false;
+    }
+    return (
+      packageType === 'snapshot'
+      || packageType === 'delta'
+      || packageType === 'control'
+      || channelType === 'data'
+      || channelType === 'snapshots'
+      || channelType === 'priority'
+    );
+  }
+
+  updateProjectMarker(details = {}) {
+    if (!this.shouldTrackProjectMarker(details)) {
+      return;
+    }
+
+    const timestamp = Number(details?.timestamp || Date.now());
+    const partIndex = Number.isFinite(details?.partIndex) ? Number(details.partIndex) : 0;
+    this.lastProjectMarker = {
+      timestamp,
+      snapshotId: String(details?.snapshotId || '').trim(),
+      partIndex,
+      channelType: String(details?.channelType || '').trim() || null,
+      channelName: String(details?.channelName || '').trim() || null,
+      messageType: String(details?.messageType || '').trim() || null,
+      packageType: String(details?.packageType || '').trim() || null,
+      controlType: String(details?.controlType || '').trim() || null,
+      section: String(details?.section || '').trim() || null
+    };
+  }
+
+  hasChannelSubscription(channelType) {
+    return this.channelSubscriptions.some((subscription) => (
+      (channelType === 'data' && subscription.channel === this.dataChannel)
+      || (channelType === 'snapshots' && subscription.channel === this.snapshotChannel)
+      || (channelType === 'telemetry' && subscription.channel === this.telemetryChannel)
+      || (channelType === 'priority' && subscription.channel === this.priorityChannel)
+    ));
+  }
+
+  async dispatchMessagesInChunks(messages = [], mapper = (message) => message, source = 'history', batchSize = 25) {
+    const safeMessages = Array.isArray(messages) ? messages : [];
+
+    for (let index = 0; index < safeMessages.length; index += batchSize) {
+      const chunk = safeMessages.slice(index, index + batchSize);
+
+      chunk.forEach((message) => {
+        const routedData = mapper(message);
+        this.notifyReceive('update', Number(message?.timestamp || Date.now()), source, routedData);
+        this.onMessageCallback?.(routedData);
+      });
+
+      if (index + batchSize < safeMessages.length) {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+    }
+  }
+
   async loadBootstrapHistory(options = {}) {
     const dataChannel = this.dataChannel || this.channel;
     const snapshotChannel = this.snapshotChannel || this.channel;
@@ -328,7 +405,7 @@ class WebSocketProvider {
       };
     }
 
-    const pageSize = Number(options.limit || 1000);
+    const pageSize = Number(options.limit || 250);
     const maxPages = Number.isFinite(Number(options.maxPages))
       ? Number(options.maxPages)
       : Number.POSITIVE_INFINITY;
@@ -422,12 +499,14 @@ class WebSocketProvider {
         hasSnapshotBootstrap: false
       };
 
-      console.log('[WebSocket][RX][bootstrap] Waiting for snapshot bootstrap', {
-        shouldUseSnapshot,
-        requireSnapshotBootstrap,
-        totalReadCount: snapshotCollected.length,
-        snapshotHistoryReadCount: snapshotCollected.length
-      });
+      if (isTransportDebugEnabled()) {
+        console.debug('[WebSocket][RX][bootstrap] Waiting for snapshot bootstrap', {
+          shouldUseSnapshot,
+          requireSnapshotBootstrap,
+          totalReadCount: snapshotCollected.length,
+          snapshotHistoryReadCount: snapshotCollected.length
+        });
+      }
 
       return {
         messages: [],
@@ -555,18 +634,20 @@ class WebSocketProvider {
       hasSnapshotBootstrap: snapshotMessages.length > 0
     };
 
-    console.log('[WebSocket][RX][bootstrap] History applied', {
-      mode: this.bootstrapState.mode,
-      shouldUseSnapshot,
-      totalReadCount: dataCollected.length + snapshotCollected.length + priorityCollected.length,
-      snapshotHistoryReadCount: snapshotCollected.length,
-      usedSnapshotCount: snapshotMessages.length,
-      usedReplayCount: messages.length,
-      usedPriorityCount: priorityMessages.length,
-      droppedCount: Math.max(0, (dataCollected.length + snapshotCollected.length + priorityCollected.length) - snapshotMessages.length - messages.length - priorityMessages.length),
-      snapshotTimestamp,
-      snapshotVersion
-    });
+    if (isTransportDebugEnabled()) {
+      console.debug('[WebSocket][RX][bootstrap] History applied', {
+        mode: this.bootstrapState.mode,
+        shouldUseSnapshot,
+        totalReadCount: dataCollected.length + snapshotCollected.length + priorityCollected.length,
+        snapshotHistoryReadCount: snapshotCollected.length,
+        usedSnapshotCount: snapshotMessages.length,
+        usedReplayCount: messages.length,
+        usedPriorityCount: priorityMessages.length,
+        droppedCount: Math.max(0, (dataCollected.length + snapshotCollected.length + priorityCollected.length) - snapshotMessages.length - messages.length - priorityMessages.length),
+        snapshotTimestamp,
+        snapshotVersion
+      });
+    }
 
     return {
       messages,
@@ -602,6 +683,15 @@ class WebSocketProvider {
     }
     this.historyBootstrapLoadedSnapshot = false;
     this.waitingForSnapshotBootstrap = false;
+    this.lastProjectMarker = options.lastReceivedMarker && typeof options.lastReceivedMarker === 'object'
+      ? {
+          ...options.lastReceivedMarker,
+          timestamp: Number(options.lastReceivedMarker?.timestamp || options.lastReceivedAt || 0)
+        }
+      : (Number(options.lastReceivedAt || 0) > 0
+        ? { timestamp: Number(options.lastReceivedAt || 0), partIndex: 0 }
+        : null);
+    this.needsRecoveryAfterReconnect = false;
     this.bootstrapState = {
       mode: 'none',
       messages: [],
@@ -686,231 +776,18 @@ class WebSocketProvider {
         const messageConnectionId = String(message?.connectionId || '').trim();
         return !!messageConnectionId && !!activeConnectionId && messageConnectionId === activeConnectionId;
       };
-
-      if (options.readHistory !== false) {
-        const historyBootstrap = await this.loadBootstrapHistory({
-          limit: options.historyLimit || 1000,
-          lastReceivedAt: options.lastReceivedAt || 0,
-          lastReceivedMarker: options.lastReceivedMarker || null,
-          snapshotStalenessMs: options.snapshotStalenessMs || (5 * 60 * 1000),
-          requireSnapshotBootstrap: options.requireSnapshotBootstrap === true
-        });
-
-        this.waitingForSnapshotBootstrap = options.requireSnapshotBootstrap === true && historyBootstrap.mode === 'await-snapshot';
-
-        if (historyBootstrap.mode === 'snapshot' && historyBootstrap.snapshotMessages.length > 0) {
-          this.historyBootstrapLoadedSnapshot = true;
-          console.log('[WebSocket][RX][history] Loaded snapshot bootstrap from history', {
-            count: historyBootstrap.snapshotMessages.length,
-            snapshotTimestamp: historyBootstrap.snapshotTimestamp,
-            snapshotVersion: historyBootstrap.snapshotVersion || null
-          });
-
-          historyBootstrap.snapshotMessages.forEach((message) => {
-            const routedData = normalizeIncomingEnvelope(
-              message.data,
-              'snapshots',
-              channelNames.snapshots
-            );
-            this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
-            this.onMessageCallback?.(routedData);
-          });
-
-          const replayMessages = historyBootstrap.messages.filter((message) => (
-            Number(message?.data?.timestamp || message?.timestamp || 0) > historyBootstrap.snapshotTimestamp
-            && !(message?.data?.messageType === 'delta-batch' && message?.data?.packageType === 'snapshot')
-          ));
-
-          if (replayMessages.length > 0) {
-            console.log('[WebSocket][RX][history] Replayed incremental updates after snapshot', {
-              count: replayMessages.length,
-              snapshotTimestamp: historyBootstrap.snapshotTimestamp
-            });
-            replayMessages.forEach((message) => {
-              const routedData = normalizeIncomingEnvelope(
-                message.data,
-                'data',
-                channelNames.data
-              );
-              this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
-              this.onMessageCallback?.(routedData);
-            });
-          }
-
-          if (historyBootstrap.priorityMessages.length > 0) {
-            console.log('[WebSocket][RX][history] Replayed high-priority updates after snapshot', {
-              count: historyBootstrap.priorityMessages.length,
-              snapshotTimestamp: historyBootstrap.snapshotTimestamp
-            });
-            historyBootstrap.priorityMessages.forEach((message) => {
-              const routedData = normalizeIncomingEnvelope(
-                message.data,
-                'priority',
-                channelNames.priority
-              );
-              this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
-              this.onMessageCallback?.(routedData);
-            });
-          }
-
-          console.log('[WebSocket][RX][bootstrap] Applied history summary', {
-            channelId,
-            mode: historyBootstrap.mode,
-            snapshotMessagesUsed: historyBootstrap.snapshotMessages.length,
-            replayMessagesUsed: historyBootstrap.messages.length,
-            priorityMessagesUsed: historyBootstrap.priorityMessages.length,
-            totalMessagesRead: historyBootstrap.snapshotMessages.length + historyBootstrap.messages.length + historyBootstrap.priorityMessages.length
-          });
-        } else if (historyBootstrap.messages.length > 0 || historyBootstrap.priorityMessages.length > 0) {
-          this.historyBootstrapLoadedSnapshot = false;
-          console.log('[WebSocket][RX][history] Replaying history without snapshot bootstrap', {
-            count: historyBootstrap.messages.length,
-            mode: historyBootstrap.mode,
-            historyComplete: !!historyBootstrap.historyComplete
-          });
-
-          historyBootstrap.messages.forEach((message) => {
-            const routedData = normalizeIncomingEnvelope(
-              message.data,
-              'data',
-              channelNames.data
-            );
-            this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
-            this.onMessageCallback?.(routedData);
-          });
-
-          if (historyBootstrap.priorityMessages.length > 0) {
-            console.log('[WebSocket][RX][history] Replaying high-priority history', {
-              count: historyBootstrap.priorityMessages.length,
-              mode: historyBootstrap.mode,
-              historyComplete: !!historyBootstrap.historyComplete
-            });
-            historyBootstrap.priorityMessages.forEach((message) => {
-              const routedData = normalizeIncomingEnvelope(
-                message.data,
-                'priority',
-                channelNames.priority
-              );
-              this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'history', routedData);
-              this.onMessageCallback?.(routedData);
-            });
-          }
-
-          console.log('[WebSocket][RX][bootstrap] Applied history summary', {
-            channelId,
-            mode: historyBootstrap.mode,
-            snapshotMessagesUsed: historyBootstrap.snapshotMessages.length,
-            replayMessagesUsed: historyBootstrap.messages.length,
-            priorityMessagesUsed: historyBootstrap.priorityMessages.length,
-            totalMessagesRead: historyBootstrap.snapshotMessages.length + historyBootstrap.messages.length + historyBootstrap.priorityMessages.length
-          });
-        }
-      }
-
-      const subscribeToChannel = async (channel, channelType, eventName = 'update') => {
-        if (!channel) {
-          return;
-        }
-
-        const handler = (message) => {
-          const routedData = normalizeIncomingEnvelope(
-            message.data,
-            channelType,
-            channel.name
-          );
-          const isSnapshotMessage = routedData?.messageType === 'delta-batch' && routedData?.packageType === 'snapshot';
-
-          if (channelType === 'snapshots') {
-            if (!this.waitingForSnapshotBootstrap || !isSnapshotMessage) {
-              return;
-            }
-          } else if (this.waitingForSnapshotBootstrap) {
-            return;
-          }
-
-          if (isOwnMessage(message)) {
-            console.log(buildWebSocketLogPrefix('echo', 'update', channelType, routedData), {
-              channelType,
-              data: routedData
-            });
-            this.onEchoMessageCallback?.({
-              timestamp: Number(message?.timestamp || Date.now()),
-              channelType,
-              data: routedData
-            });
-            this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'echo', routedData);
-            if (
-              channelType === 'snapshots'
-              && Number(routedData?.partIndex || 0) + 1 >= Number(routedData?.totalParts || 1)
-            ) {
-              this.waitingForSnapshotBootstrap = false;
-              this.historyBootstrapLoadedSnapshot = true;
-              this.unsubscribeChannelType('snapshots');
-            }
-            return;
-          }
-          console.log(buildWebSocketLogPrefix('receive', 'update', channelType, routedData), {
-            channelType,
-            data: routedData
-          });
-          this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'live', routedData);
-          this.onMessageCallback?.(routedData);
-          if (
-            channelType === 'snapshots'
-            && Number(routedData?.partIndex || 0) + 1 >= Number(routedData?.totalParts || 1)
-          ) {
-            this.waitingForSnapshotBootstrap = false;
-            this.historyBootstrapLoadedSnapshot = true;
-            this.unsubscribeChannelType('snapshots');
-          }
-        };
-
-        await channel.subscribe(eventName, handler);
-        this.channelSubscriptions.push({
-          channel,
-          eventName,
-          handler
-        });
-      };
-
-      await subscribeToChannel(this.dataChannel, 'data');
-      await subscribeToChannel(this.telemetryChannel, 'telemetry');
-      await subscribeToChannel(this.priorityChannel, 'priority');
-      if (options.requireSnapshotBootstrap === true && !this.historyBootstrapLoadedSnapshot) {
-        await subscribeToChannel(this.snapshotChannel, 'snapshots');
-      }
-
-      // Monitor connection state
-      activeClient.connection.on('disconnected', () => {
-        if (this.client !== activeClient) {
-          return;
-        }
-        this.updateStatus('disconnected');
+      this.connectionService = new SyncConnectionService({
+        provider: this,
+        client: activeClient,
+        channelId,
+        channelNames,
+        options,
+        isOwnMessage,
+        normalizeIncomingEnvelope,
+        buildWebSocketLogPrefix
       });
 
-      activeClient.connection.on('connected', () => {
-        if (this.client !== activeClient) {
-          return;
-        }
-        this.updateStatus('connected');
-      });
-
-      activeClient.connection.on('suspended', () => {
-        if (this.client !== activeClient) {
-          return;
-        }
-        this.updateStatus('suspended');
-      });
-
-      activeClient.connection.on('failed', () => {
-        if (this.client !== activeClient) {
-          return;
-        }
-        this.updateStatus('failed');
-      });
-
-      this.updateStatus('connected');
-      console.log('[WebSocket] Connected to channels', channelNames);
+      await this.connectionService.start();
       
     } catch (error) {
       this.updateStatus('error', error.message);
@@ -928,6 +805,9 @@ class WebSocketProvider {
   }
 
   notifyReceive(name = 'update', timestamp = Date.now(), source = 'live', details = null) {
+    if (source !== 'echo' && details) {
+      this.updateProjectMarker(details);
+    }
     this.onReceiveActivityCallback?.({
       name,
       timestamp,
@@ -1018,12 +898,14 @@ class WebSocketProvider {
             name: 'update',
             data
           };
-      console.log(buildWebSocketLogPrefix('send', 'update', channelType, data), {
-        channelName: targetChannel?.name || null,
-        channelType,
-        ephemeral: isEphemeralMessage,
-        data
-      });
+      if (isTransportDebugEnabled()) {
+        console.debug(buildWebSocketLogPrefix('send', 'update', channelType, data), {
+          channelName: targetChannel?.name || null,
+          channelType,
+          ephemeral: isEphemeralMessage,
+          data
+        });
+      }
       await targetChannel.publish(publishEnvelope);
       this.onSendMessageCallback?.({
         ...(data || {}),
@@ -1064,11 +946,13 @@ class WebSocketProvider {
       };
 
       const channelType = targetChannel === this.priorityChannel ? 'priority' : 'data';
-      console.log(buildWebSocketLogPrefix('send', 'update', channelType, payload), {
-        channelName: targetChannel?.name || null,
-        channelType,
-        data: payload
-      });
+      if (isTransportDebugEnabled()) {
+        console.debug(buildWebSocketLogPrefix('send', 'update', channelType, payload), {
+          channelName: targetChannel?.name || null,
+          channelType,
+          data: payload
+        });
+      }
       await targetChannel.publish('update', payload);
       this.onSendMessageCallback?.({
         ...payload,
@@ -1135,6 +1019,7 @@ class WebSocketProvider {
       this.onSendMessageCallback = null;
       this.onEchoMessageCallback = null;
     }
+    this.connectionService = null;
     this.bootstrapState = {
       mode: 'none',
       messages: [],
@@ -1147,7 +1032,9 @@ class WebSocketProvider {
     };
     this.waitingForSnapshotBootstrap = false;
     this.updateStatus('disconnected');
-    console.log('[WebSocket] Disconnected');
+    if (isTransportDebugEnabled()) {
+      console.debug('[WebSocket] Disconnected');
+    }
   }
 
   /**

@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Bug, CalendarDays } from 'lucide-react';
+import { DEFAULT_DEBUG_FLAGS, loadDebugFlags, saveDebugFlags } from '../../utils/debugFlags.js';
 
 export default function DebugTab() {
   const { t } = useTranslation();
@@ -17,6 +19,35 @@ export default function DebugTab() {
     wsLastSnapshotGeneratedAt,
     wsLastSnapshotReceivedAt
   } = useRallyWs();
+  const [debugFlags, setDebugFlags] = useState(() => loadDebugFlags());
+
+  const debugOptions = useMemo(() => ([
+    {
+      key: 'sync',
+      title: 'Sync internals',
+      description: 'Show centralized sync-engine, session-marker, and websocket apply debug logs.'
+    },
+    {
+      key: 'transport',
+      title: 'Transport messages',
+      description: 'Show detailed TX/RX/ECHO websocket transport logs.'
+    },
+    {
+      key: 'telemetry',
+      title: 'Telemetry logs',
+      description: 'Show telemetry-specific debug and warning logs.'
+    },
+    {
+      key: 'connection',
+      title: 'Connection lifecycle',
+      description: 'Show connection bootstrap, replay, subscribe, and reconnect-service logs.'
+    },
+    {
+      key: 'outbound',
+      title: 'Outbound queue',
+      description: 'Show outbound package building, chunking, and queue publish logs.'
+    }
+  ]), []);
 
   const formatSnapshotDateTime = (value) => {
     const timestamp = Number(value || 0);
@@ -32,6 +63,16 @@ export default function DebugTab() {
   };
 
   const isOwner = !!wsOwnership?.hasOwnership;
+
+  const updateDebugFlag = (flagKey, checked) => {
+    const nextFlags = {
+      ...DEFAULT_DEBUG_FLAGS,
+      ...(debugFlags || {}),
+      [flagKey]: checked === true
+    };
+    const savedFlags = saveDebugFlags(nextFlags);
+    setDebugFlags(savedFlags);
+  };
 
   return (
     <div className="space-y-4">
@@ -87,6 +128,31 @@ export default function DebugTab() {
               <span className="text-white font-mono text-right">
                 {formatSnapshotDateTime(isOwner ? wsLastSnapshotGeneratedAt : wsLastSnapshotReceivedAt)}
               </span>
+            </div>
+          </div>
+
+          <div className="space-y-3 border-t border-zinc-800 pt-4">
+            <div>
+              <div className="text-sm font-semibold text-white">Debug logs</div>
+              <p className="text-xs text-zinc-500">
+                These options are persisted locally and take effect immediately.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {debugOptions.map((option) => (
+                <label key={option.key} className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-[#09090B] px-3 py-3">
+                  <Checkbox
+                    checked={debugFlags?.[option.key] === true}
+                    onCheckedChange={(checked) => updateDebugFlag(option.key, checked)}
+                    className="mt-0.5 border-zinc-600"
+                  />
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-white">{option.title}</div>
+                    <div className="text-xs text-zinc-500">{option.description}</div>
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
         </CardContent>

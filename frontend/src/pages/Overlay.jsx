@@ -12,32 +12,12 @@ import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
-import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Mail, Wifi, WifiOff, X, VideoOff } from 'lucide-react';
-import { getLedLoadRgba, getMessagesPerMinuteLoadLevel } from '../utils/ledLoadColors.js';
-import PerformanceLed from '../components/PerformanceLed.jsx';
+import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
+import WsLedStrip from '../components/WsLedStrip.jsx';
+import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
 
 // version constant
 import { VERSION } from '../config/version.js';
-
-const STORAGE_DOMAIN_VERSION_KEYS = {
-  meta: 'rally_meta_version',
-  pilots: 'rally_pilots_version',
-  categories: 'rally_categories_version',
-  stages: 'rally_stages_version',
-  timingCore: 'rally_timing_core_version',
-  timingExtra: 'rally_timing_extra_version',
-  maps: 'rally_maps_version',
-  streams: 'rally_streams_version',
-  media: 'rally_media_version'
-};
-
-const readStoredDomainVersions = () => Object.fromEntries(
-  Object.entries(STORAGE_DOMAIN_VERSION_KEYS).map(([domain, storageKey]) => {
-    const parsedValue = Number(localStorage.getItem(storageKey) || 0);
-    return [domain, Number.isFinite(parsedValue) ? parsedValue : 0];
-  })
-);
 
 export default function Overlay() {
   const [searchParams] = useSearchParams();
@@ -58,19 +38,11 @@ export default function Overlay() {
     connectSyncChannel,
     disconnectSyncChannel
   } = useRally();
-  const [heartbeatStatus, setHeartbeatStatus] = useState('normal');
   const [leftZoneWidth, setLeftZoneWidth] = useState(256);
   const [showWsPanel, setShowWsPanel] = useState(false);
   const [wsKeyInput, setWsKeyInput] = useState('');
-  const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
+  const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
   const [hideStreams, setHideStreams] = useState(false);
-  const [connectionNow, setConnectionNow] = useState(() => Date.now());
-  const [messagesLastMinute, setMessagesLastMinute] = useState(0);
-  const [messagesThisSecond, setMessagesThisSecond] = useState(0);
-  const [receivedMessagesLastMinute, setReceivedMessagesLastMinute] = useState(0);
-  const [receivedMessagesThisSecond, setReceivedMessagesThisSecond] = useState(0);
-  const [sentMessagesLastMinute, setSentMessagesLastMinute] = useState(0);
-  const [sentMessagesThisSecond, setSentMessagesThisSecond] = useState(0);
   const defaultTransitionImageUrl = '/transition-default.png';
   const [transitionType, setTransitionType] = useState(() => {
     try {
@@ -91,40 +63,13 @@ export default function Overlay() {
   const [transitionPhase, setTransitionPhase] = useState('idle');
   const [transitionOpacity, setTransitionOpacity] = useState(0);
   const [transitionTransform, setTransitionTransform] = useState('scale(1)');
-  const receivedMessageBucketsRef = React.useRef(new Array(60).fill(0));
-  const sentMessageBucketsRef = React.useRef(new Array(60).fill(0));
-  const messageBucketIndexRef = React.useRef(0);
-  const receivedMessageBucketTotalRef = React.useRef(0);
-  const sentMessageBucketTotalRef = React.useRef(0);
-  const messageSecondAlertRef = React.useRef(false);
   const transitionTimersRef = React.useRef([]);
   const transitionRafRef = React.useRef(null);
-  const domainVersionSnapshotRef = React.useRef(readStoredDomainVersions());
-
-  const syncMessageCounters = useCallback(() => {
-    const bucketIndex = messageBucketIndexRef.current;
-    const receivedThisSecondValue = receivedMessageBucketsRef.current[bucketIndex] || 0;
-    const sentThisSecondValue = sentMessageBucketsRef.current[bucketIndex] || 0;
-    const totalLastMinuteValue = receivedMessageBucketTotalRef.current + sentMessageBucketTotalRef.current;
-    const totalThisSecondValue = receivedThisSecondValue + sentThisSecondValue;
-
-    setReceivedMessagesLastMinute(receivedMessageBucketTotalRef.current);
-    setReceivedMessagesThisSecond(receivedThisSecondValue);
-    setSentMessagesLastMinute(sentMessageBucketTotalRef.current);
-    setSentMessagesThisSecond(sentThisSecondValue);
-    setMessagesLastMinute(totalLastMinuteValue);
-    setMessagesThisSecond(totalThisSecondValue);
-
-    if (!messageSecondAlertRef.current && totalThisSecondValue >= 100) {
-      messageSecondAlertRef.current = true;
-      toast.error(
-        <span className="text-white">
-          Too many messages in 1 second:{' '}
-          <strong className="text-red-400">{totalThisSecondValue}</strong>
-        </span>
-      );
-    }
-  }, []);
+  const wsActivity = useWsActivityCounters({
+    enabled: true,
+    wsReceivedPulse,
+    wsSentPulse
+  });
 
   useEffect(() => {
     document.title = `${t('header.title')} - ${t('header.overlay')}`;
@@ -148,15 +93,24 @@ export default function Overlay() {
 
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
-    if (autoConnectAttempted) return;
-    
     const wsKey = searchParams.get('ws');
-    if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
-      setAutoConnectAttempted(true);
+    if (!wsKey || wsConnectionStatus === 'connected' || wsConnectionStatus === 'connecting') {
+      return undefined;
+    }
+
+    const now = Date.now();
+    const retryDelayMs = lastAutoConnectAttemptAt > 0 ? 3000 : 0;
+    const elapsedMs = now - Number(lastAutoConnectAttemptAt || 0);
+    const remainingDelayMs = Math.max(0, retryDelayMs - elapsedMs);
+
+    const timeoutId = window.setTimeout(() => {
+      setLastAutoConnectAttemptAt(Date.now());
       console.log('[Overlay] Auto-connecting with URL key:', wsKey);
       connectSyncChannel(wsKey, { readOnly: true, role: 'overlay' });
-    }
-  }, [searchParams, wsConnectionStatus, connectSyncChannel, autoConnectAttempted]);
+    }, remainingDelayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [connectSyncChannel, lastAutoConnectAttemptAt, searchParams, wsConnectionStatus]);
 
   const clearTransitionTimers = useCallback(() => {
     transitionTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -249,93 +203,12 @@ export default function Overlay() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [requestSceneChange]);
 
-  // Keep a localStorage heartbeat active as a safety net for same-browser tabs,
-  // even when WebSocket is connected.
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setHeartbeatStatus('checking');
-      
-      try {
-        const nextDomainVersions = readStoredDomainVersions();
-        const changedDomains = Object.keys(STORAGE_DOMAIN_VERSION_KEYS).filter(
-          (domain) => nextDomainVersions[domain] !== domainVersionSnapshotRef.current[domain]
-        );
-
-        if (changedDomains.length > 0) {
-          domainVersionSnapshotRef.current = nextDomainVersions;
-          setHeartbeatStatus('changed');
-          window.dispatchEvent(new CustomEvent('rally-reload-domains', {
-            detail: {
-              domains: changedDomains
-            }
-          }));
-          setTimeout(() => setHeartbeatStatus('normal'), 1000);
-        } else {
-          setTimeout(() => setHeartbeatStatus('normal'), 300);
-        }
-      } catch (e) {
-        console.error('Heartbeat error:', e);
-        setHeartbeatStatus('normal');
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => setConnectionNow(Date.now()), 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const tick = () => {
-      const len = receivedMessageBucketsRef.current.length;
-      const currentIndex = messageBucketIndexRef.current;
-      const nextIndex = (currentIndex + 1) % len;
-      const removedReceived = receivedMessageBucketsRef.current[nextIndex];
-      const removedSent = sentMessageBucketsRef.current[nextIndex];
-
-      if (removedReceived) {
-        receivedMessageBucketTotalRef.current -= removedReceived;
-      }
-
-      if (removedSent) {
-        sentMessageBucketTotalRef.current -= removedSent;
-      }
-
-      receivedMessageBucketsRef.current[nextIndex] = 0;
-      sentMessageBucketsRef.current[nextIndex] = 0;
-      messageBucketIndexRef.current = nextIndex;
-      messageSecondAlertRef.current = false;
-      syncMessageCounters();
-    };
-
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [syncMessageCounters]);
-
-  useEffect(() => {
-    if (!wsReceivedPulse) return;
-    const index = messageBucketIndexRef.current;
-    receivedMessageBucketsRef.current[index] += 1;
-    receivedMessageBucketTotalRef.current += 1;
-    syncMessageCounters();
-  }, [syncMessageCounters, wsReceivedPulse]);
-
-  useEffect(() => {
-    if (!wsSentPulse) return;
-    const index = messageBucketIndexRef.current;
-    sentMessageBucketsRef.current[index] += 1;
-    sentMessageBucketTotalRef.current += 1;
-    syncMessageCounters();
-  }, [syncMessageCounters, wsSentPulse]);
-
   const latestActivityAt = Math.max(
     Number(wsLastReceivedAt || 0),
     Number(wsLastSentAt || 0),
     Number(wsLastMessageAt || 0)
   ) || null;
-  const wsMessageAgeMs = latestActivityAt ? Math.max(0, connectionNow - latestActivityAt) : null;
+  const wsMessageAgeMs = latestActivityAt ? Math.max(0, wsActivity.connectionNow - latestActivityAt) : null;
   const connectionBadge = (() => {
     if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
     if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', label: t('config.connecting') };
@@ -344,13 +217,6 @@ export default function Overlay() {
     if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', label: 'Failed' };
     return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
   })();
-  const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && wsMessageAgeMs !== null
-    ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
-    : 0;
-  const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
-  const activityFill = activityProgress > 0
-    ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
-    : 'rgba(63, 63, 70, 0.45)';
 
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
@@ -505,37 +371,13 @@ export default function Overlay() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div
-                      className="w-3 h-3 rounded-full border border-zinc-700 transition-all duration-500"
-                      style={{ backgroundColor: activityFill }}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                    <div className="text-xs">
-                      <div className="font-semibold">Message Activity</div>
-                      {wsMessageAgeMs !== null ? (
-                        <>
-                          <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
-                          <div className="flex items-center gap-1"><Mail className="w-3 h-3" /> Messages last minute: {messagesLastMinute}</div>
-                          <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3" /> Received last minute: {receivedMessagesLastMinute}</div>
-                          <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3" /> Sent last minute: {sentMessagesLastMinute}</div>
-                          <div className="flex items-center gap-1"><Mail className="w-3 h-3" /> Messages this second: {messagesThisSecond}</div>
-                          <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3" /> Received this second: {receivedMessagesThisSecond}</div>
-                          <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3" /> Sent this second: {sentMessagesThisSecond}</div>
-                          <div>LED fades from full brightness to off over 30 seconds.</div>
-                        </>
-                      ) : (
-                        <div>No WebSocket messages received yet.</div>
-                      )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <PerformanceLed />
+              <WsLedStrip
+                wsEnabled={wsEnabled}
+                wsConnectionStatus={wsConnectionStatus}
+                activityAgeMs={wsMessageAgeMs}
+                counts={wsActivity}
+                size="tiny"
+              />
             </div>
           </div>
         </div>

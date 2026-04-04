@@ -1,16 +1,19 @@
+import { isSyncDebugEnabled } from './debugFlags.js';
+import {
+  SYNC_ROLES,
+  filterChangesForRoleRecipient,
+  normalizeSyncRole,
+  SETUP_BASE_SECTION_KEYS,
+  TIMING_SECTION_KEYS
+} from './sync/SyncRolePolicy.js';
+
+export { SYNC_ROLES } from './sync/SyncRolePolicy.js';
+
 const DEFAULT_FLUSH_INTERVAL_MS = 1000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 5000;
 const DEFAULT_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_OWNERSHIP_OBSERVATION_MS = 15000;
 const DEFAULT_HEARTBEAT_MISSES_TO_TAKEOVER = 3;
-
-export const SYNC_ROLES = {
-  CLIENT: 'client',
-  SETUP: 'setup',
-  TIMES: 'times',
-  OVERLAY: 'overlay',
-  MOBILE: 'mobile'
-};
 
 export const SYNC_MESSAGE_TYPES = {
   DELTA_BATCH: 'delta-batch',
@@ -49,17 +52,9 @@ const deepMerge = (target = {}, source = {}) => {
   return next;
 };
 
-const normalizeRole = (value) => {
-  const role = String(value || '').trim().toLowerCase();
-  if (Object.values(SYNC_ROLES).includes(role)) {
-    return role;
-  }
-  return SYNC_ROLES.CLIENT;
-};
-
 const normalizeMessageType = (value) => String(value || '').trim();
 
-const normalizeSourceRole = (data = {}) => normalizeRole(
+const normalizeSourceRole = (data = {}) => normalizeSyncRole(
   data?.sourceRole
   || data?.senderRole
   || data?.role
@@ -72,82 +67,6 @@ const normalizeSourceRole = (data = {}) => normalizeRole(
       : SYNC_ROLES.SETUP
   )
 );
-
-const TIMING_DOMAINS = new Set([
-  'times',
-  'arrivalTimes',
-  'startTimes',
-  'realStartTimes',
-  'lapTimes',
-  'positions',
-  'stagePilots',
-  'retiredStages',
-  'stageAlerts',
-  'stageSos'
-]);
-
-const SETUP_DOMAINS = new Set([
-  'meta',
-  'pilots',
-  'categories',
-  'stages',
-  'mapPlacemarks',
-  'cameras',
-  'externalMedia',
-  'streamConfigs'
-]);
-
-const TELEMETRY_DOMAINS = new Set(['pilotTelemetry']);
-
-const getChangeDomains = (changes = {}) => Object.keys(changes || {});
-
-const canReceiveDomain = (recipientRole, sourceRole, domain) => {
-  const role = normalizeRole(recipientRole);
-  const origin = normalizeRole(sourceRole);
-  const normalizedDomain = String(domain || '').trim();
-
-  if (!normalizedDomain) {
-    return false;
-  }
-
-  if (origin === SYNC_ROLES.SETUP) {
-    return true;
-  }
-
-  if (origin === SYNC_ROLES.TIMES) {
-    return TIMING_DOMAINS.has(normalizedDomain);
-  }
-
-  if (origin === SYNC_ROLES.MOBILE) {
-    if (role === SYNC_ROLES.SETUP) {
-      return TELEMETRY_DOMAINS.has(normalizedDomain) || normalizedDomain === 'stageSos';
-    }
-
-    if (role === SYNC_ROLES.TIMES) {
-      return normalizedDomain === 'stageSos';
-    }
-
-    if (role === SYNC_ROLES.OVERLAY) {
-      return TELEMETRY_DOMAINS.has(normalizedDomain);
-    }
-  }
-
-  return false;
-};
-
-const filterChangesForRecipient = (recipientRole, sourceRole, changes = {}) => {
-  const accepted = {};
-
-  getChangeDomains(changes).forEach((domain) => {
-    if (!canReceiveDomain(recipientRole, sourceRole, domain)) {
-      return;
-    }
-
-    accepted[domain] = changes[domain];
-  });
-
-  return accepted;
-};
 
 const isMergeableQueuedDelta = (message = {}) => (
   normalizeMessageType(message?.messageType) === SYNC_MESSAGE_TYPES.DELTA_BATCH
@@ -197,12 +116,12 @@ const convertPayloadMessageToChanges = (message = {}) => {
     return changes;
   }
 
-  if (TIMING_DOMAINS.has(section) || section === 'stageSos') {
+  if (TIMING_SECTION_KEYS.includes(section) || section === 'stageSos') {
     changes[section] = payload[section] ?? payload;
     return changes;
   }
 
-  if (SETUP_DOMAINS.has(section)) {
+  if (SETUP_BASE_SECTION_KEYS.includes(section)) {
     if (Array.isArray(payload[section])) {
       changes[section] = {};
       payload[section].forEach((item) => {
@@ -275,7 +194,7 @@ const convertMessageToChanges = (message = {}) => {
 
 export default class SyncEngine {
   constructor(options = {}) {
-    this.role = normalizeRole(options.role);
+    this.role = normalizeSyncRole(options.role);
     this.instanceId = String(options.instanceId || createSyncInstanceId());
     this.publish = typeof options.publish === 'function' ? options.publish : null;
     this.onReceive = typeof options.onReceive === 'function' ? options.onReceive : null;
@@ -310,7 +229,7 @@ export default class SyncEngine {
   }
 
   setRole(role) {
-    this.role = normalizeRole(role);
+    this.role = normalizeSyncRole(role);
   }
 
   setInstanceId(instanceId) {
@@ -517,15 +436,17 @@ export default class SyncEngine {
           return false;
         }
 
-        console.log('[SyncEngine] Published batch', {
-          role: this.role,
-          instanceId: this.instanceId,
-          queuedCount: mergedEntries.length,
-          packageType: batch.packageType || 'delta',
-          originalMessageType: batch.originalMessageType || batch.messageType,
-          section: batch.section || null,
-          payloadKeys: Object.keys(batch.payload || batch.changes || {})
-        });
+        if (isSyncDebugEnabled()) {
+          console.debug('[SyncEngine] Published batch', {
+            role: this.role,
+            instanceId: this.instanceId,
+            queuedCount: mergedEntries.length,
+            packageType: batch.packageType || 'delta',
+            originalMessageType: batch.originalMessageType || batch.messageType,
+            section: batch.section || null,
+            payloadKeys: Object.keys(batch.payload || batch.changes || {})
+          });
+        }
 
         this.onQueueFlush?.({
           batch,
@@ -624,24 +545,28 @@ export default class SyncEngine {
       return;
     }
 
-    console.log('[SyncEngine][snapshot] timer started', {
-      instanceId: this.instanceId,
-      ownerId: this.ownerId,
-      ownerEpoch: this.ownerEpoch,
-      intervalMs: this.snapshotIntervalMs
-    });
+    if (isSyncDebugEnabled()) {
+      console.debug('[SyncEngine][snapshot] timer started', {
+        instanceId: this.instanceId,
+        ownerId: this.ownerId,
+        ownerEpoch: this.ownerEpoch,
+        intervalMs: this.snapshotIntervalMs
+      });
+    }
 
     this.snapshotTimer = window.setInterval(() => {
       if (!this.isConnected || !this.isOwner) {
         return;
       }
 
-      console.log('[SyncEngine][snapshot] due', {
-        instanceId: this.instanceId,
-        ownerId: this.ownerId,
-        ownerEpoch: this.ownerEpoch,
-        timestamp: Date.now()
-      });
+      if (isSyncDebugEnabled()) {
+        console.debug('[SyncEngine][snapshot] due', {
+          instanceId: this.instanceId,
+          ownerId: this.ownerId,
+          ownerEpoch: this.ownerEpoch,
+          timestamp: Date.now()
+        });
+      }
 
       this.onSnapshotDue?.({
         instanceId: this.instanceId,
@@ -698,10 +623,6 @@ export default class SyncEngine {
     const timestamp = Date.now();
     const published = await this.publish({
       messageType: SYNC_MESSAGE_TYPES.OWNERSHIP_HEARTBEAT,
-      source: this.role,
-      sourceRole: this.role,
-      sourceInstanceId: this.instanceId,
-      instanceId: this.instanceId,
       ownerId: this.ownerId || this.instanceId,
       ownerEpoch: this.ownerEpoch,
       timestamp
@@ -797,7 +718,9 @@ export default class SyncEngine {
       return null;
     }
 
-    console.log('[SyncEngine] Incoming message', normalized);
+    if (isSyncDebugEnabled()) {
+      console.debug('[SyncEngine] Incoming message', normalized);
+    }
 
     if (normalized?.payload && typeof normalized.payload === 'string') {
       try {
@@ -869,11 +792,13 @@ export default class SyncEngine {
 
     let changes = convertMessageToChanges(normalized);
     if (Object.keys(changes).length === 0) {
-      console.log('[SyncEngine] Incoming message ignored after normalization', {
-        messageType,
-        sourceRole,
-        sourceInstanceId
-      });
+      if (isSyncDebugEnabled()) {
+        console.debug('[SyncEngine] Incoming message ignored after normalization', {
+          messageType,
+          sourceRole,
+          sourceInstanceId
+        });
+      }
       return {
         ...normalized,
         sourceRole,
@@ -884,24 +809,28 @@ export default class SyncEngine {
       };
     }
 
-    changes = filterChangesForRecipient(this.role, sourceRole, changes);
+    changes = filterChangesForRoleRecipient(this.role, sourceRole, changes);
     if (Object.keys(changes).length === 0) {
-      console.log('[SyncEngine] Incoming message filtered out by permissions', {
-        messageType,
-        recipientRole: this.role,
-        sourceRole,
-        sourceInstanceId
-      });
+      if (isSyncDebugEnabled()) {
+        console.debug('[SyncEngine] Incoming message filtered out by permissions', {
+          messageType,
+          recipientRole: this.role,
+          sourceRole,
+          sourceInstanceId
+        });
+      }
       return null;
     }
 
-    console.log('[SyncEngine] Incoming message accepted', {
-      messageType,
-      recipientRole: this.role,
-      sourceRole,
-      sourceInstanceId,
-      changeDomains: Object.keys(changes)
-    });
+    if (isSyncDebugEnabled()) {
+      console.debug('[SyncEngine] Incoming message accepted', {
+        messageType,
+        recipientRole: this.role,
+        sourceRole,
+        sourceInstanceId,
+        changeDomains: Object.keys(changes)
+      });
+    }
 
     return {
       messageType: SYNC_MESSAGE_TYPES.DELTA_BATCH,

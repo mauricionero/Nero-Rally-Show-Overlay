@@ -7,7 +7,7 @@ A broadcast-ready rally overlay system inspired by WRC TV graphics. This is a 10
 - **Setup page** to configure pilots, stages, timing, streams, branding, and sync.
 - **Overlay page** with 4 broadcast scenes (Live Stage, Timing Tower, Leaderboard, Pilot Focus).
 - **Times page** for fast, mobile-friendly time entry that syncs with Setup.
-- **No backend required**. Data persists in localStorage and can sync via Ably WebSocket.
+- **No backend required**. State persists locally and can sync via Ably WebSocket.
 - **Multi-language** with YAML translations.
 - **VDO.Ninja** support for live camera feeds and external sources.
 
@@ -30,7 +30,7 @@ A broadcast-ready rally overlay system inspired by WRC TV graphics. This is a 10
 
 - **React 19 + React Router**
 - **Tailwind CSS + shadcn/ui**
-- **Ably WebSocket** for realtime sync
+- **Ably WebSocket** with separated channels for realtime sync
 - **localStorage** for persistence
 - **VDO.Ninja** for remote camera feeds
 - **YAML i18n** for translations
@@ -60,6 +60,34 @@ Notes:
 - The key is read in `frontend/src/utils/websocketProvider.js`.
 - If the key is missing, WebSocket mode will fail to connect.
 
+### Channel Layout
+
+Each session key (for example `1-ABC12345`) maps to 4 Ably channels:
+
+- `rally-data:{channelId}`
+  - Normal synchronized state changes.
+  - This is where the centralized `delta-batch` messages go for regular Setup and Times edits.
+  - 1 day persistence
+- `rally-snapshots:{channelId}`
+  - Full state snapshots used for bootstrap and recovery.
+  - Fresh clients load snapshots from here and then replay newer `data` / `priority` messages.
+  - 1 day persistence
+- `rally-telemetry:{channelId}`
+  - Live pilot telemetry only.
+  - Kept separate because telemetry can be frequent and should not pollute normal state history.
+  - no persistence
+- `rally-priority:{channelId}`
+  - Urgent, low-volume messages.
+  - Used for high-priority/control-style traffic such as ownership coordination and SOS-related acknowledgements.
+  - 1 day persistence
+
+The separation is intentional:
+
+- `data` stays focused on normal app state changes.
+- `snapshots` stays clean for reconnect/bootstrap.
+- `telemetry` can be noisy without affecting the rest of the sync system.
+- `priority` gives urgent traffic its own lane instead of mixing it into normal deltas.
+
 ## Build
 
 - `yarn build`
@@ -79,9 +107,22 @@ Notes:
 
 ## Data & Sync
 
-- **localStorage** is the source of truth for state.
-- **WebSocket (Ably)** is optional; used to broadcast updates between devices/pages.
+- **localStorage** is still used for local persistence/debugging, but live sync is organized around the centralized WebSocket sync engine.
+- **WebSocket (Ably)** is optional; used to synchronize updates between devices/pages.
 - Setup, Overlay, and Times pages can all share the same channel key.
+- Normal synchronized state is sent as centralized `delta-batch` packages.
+- Snapshots are published separately and used only for bootstrap/recovery.
+- Telemetry is kept in its own channel and is treated differently from normal state sync.
+
+### Sync Flow Summary
+
+- Setup owns snapshot generation for the session.
+- Normal edits are batched and published as deltas, typically at most once per second.
+- New or reconnecting clients:
+  1. Reuse recent history when possible.
+  2. Bootstrap from the latest snapshot when the local history marker is too old.
+  3. Replay newer `data` and `priority` messages after the snapshot timestamp.
+- Telemetry is live-only enough that it stays in its own lane and does not define the main snapshot/delta recovery path.
 
 ## File Structure (frontend)
 

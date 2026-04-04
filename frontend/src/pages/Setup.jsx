@@ -7,12 +7,12 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Cpu, Crown, GitBranch, Hourglass, Mail, Play, RefreshCw, VideoOff, Wifi, WifiLow, WifiOff } from 'lucide-react';
+import { Play, VideoOff, Wifi } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
-import PerformanceLed from '../components/PerformanceLed.jsx';
+import WsLedStrip from '../components/WsLedStrip.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import SosAlertStack from '../components/SosAlertStack.jsx';
-import { getLedLoadRgba, getMessagesPerMinuteLoadLevel } from '../utils/ledLoadColors.js';
+import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
 
 // app version constant
 import { VERSION } from '../config/version.js';
@@ -42,53 +42,18 @@ export default function Setup() {
     wsSentPulse,
     wsInstanceId,
     wsOwnership,
-    wsSyncState,
-    wsRole,
     connectSyncChannel,
     setClientRole
   } = useRallyWs();
   const [hideStreams, setHideStreams] = useState(false);
   const [activeTab, setActiveTab] = useState('pilots');
-  const [connectionNow, setConnectionNow] = useState(() => Date.now());
-  const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
-  const [messagesLastMinute, setMessagesLastMinute] = useState(0);
-  const [messagesThisSecond, setMessagesThisSecond] = useState(0);
-  const [receivedMessagesLastMinute, setReceivedMessagesLastMinute] = useState(0);
-  const [receivedMessagesThisSecond, setReceivedMessagesThisSecond] = useState(0);
-  const [sentMessagesLastMinute, setSentMessagesLastMinute] = useState(0);
-  const [sentMessagesThisSecond, setSentMessagesThisSecond] = useState(0);
-  const receivedMessageBucketsRef = React.useRef(new Array(60).fill(0));
-  const sentMessageBucketsRef = React.useRef(new Array(60).fill(0));
-  const messageBucketIndexRef = React.useRef(0);
-  const receivedMessageBucketTotalRef = React.useRef(0);
-  const sentMessageBucketTotalRef = React.useRef(0);
-  const messageSecondAlertRef = React.useRef(false);
+  const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
   const hasWebSocketOverlay = wsConnectionStatus === 'connected' && Boolean(wsChannelKey);
-
-  const syncMessageCounters = React.useCallback(() => {
-    const bucketIndex = messageBucketIndexRef.current;
-    const receivedThisSecondValue = receivedMessageBucketsRef.current[bucketIndex] || 0;
-    const sentThisSecondValue = sentMessageBucketsRef.current[bucketIndex] || 0;
-    const totalLastMinuteValue = receivedMessageBucketTotalRef.current + sentMessageBucketTotalRef.current;
-    const totalThisSecondValue = receivedThisSecondValue + sentThisSecondValue;
-
-    setReceivedMessagesLastMinute(receivedMessageBucketTotalRef.current);
-    setReceivedMessagesThisSecond(receivedThisSecondValue);
-    setSentMessagesLastMinute(sentMessageBucketTotalRef.current);
-    setSentMessagesThisSecond(sentThisSecondValue);
-    setMessagesLastMinute(totalLastMinuteValue);
-    setMessagesThisSecond(totalThisSecondValue);
-
-    if (!messageSecondAlertRef.current && totalThisSecondValue >= 100) {
-      messageSecondAlertRef.current = true;
-      toast.error(
-        <span className="text-white">
-          Too many messages in 1 second:{' '}
-          <strong className="text-red-400">{totalThisSecondValue}</strong>
-        </span>
-      );
-    }
-  }, []);
+  const wsActivity = useWsActivityCounters({
+    enabled: true,
+    wsReceivedPulse,
+    wsSentPulse
+  });
 
   useEffect(() => {
     document.title = `${t('header.title')} - ${t('header.subtitle')}`;
@@ -100,20 +65,24 @@ export default function Setup() {
   }, [setClientRole]);
 
   useEffect(() => {
-    if (autoConnectAttempted) return;
-
     const wsKey = searchParams.get('ws');
-    if (wsKey && wsConnectionStatus !== 'connected' && wsConnectionStatus !== 'connecting') {
-      setAutoConnectAttempted(true);
+    if (!wsKey || wsConnectionStatus === 'connected' || wsConnectionStatus === 'connecting') {
+      return undefined;
+    }
+
+    const now = Date.now();
+    const retryDelayMs = lastAutoConnectAttemptAt > 0 ? 3000 : 0;
+    const elapsedMs = now - Number(lastAutoConnectAttemptAt || 0);
+    const remainingDelayMs = Math.max(0, retryDelayMs - elapsedMs);
+
+    const timeoutId = window.setTimeout(() => {
+      setLastAutoConnectAttemptAt(Date.now());
       console.log('[Setup] Auto-connecting with URL key:', wsKey);
       connectSyncChannel(wsKey, { role: 'setup' });
-      return;
-    }
+    }, remainingDelayMs);
 
-    if (!wsKey) {
-      setAutoConnectAttempted(true);
-    }
-  }, [autoConnectAttempted, connectSyncChannel, searchParams, wsConnectionStatus]);
+    return () => window.clearTimeout(timeoutId);
+  }, [connectSyncChannel, lastAutoConnectAttemptAt, searchParams, wsConnectionStatus]);
 
   useEffect(() => {
     if (wsConnectionStatus !== 'connected' || !wsChannelKey) {
@@ -130,82 +99,12 @@ export default function Setup() {
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams, wsChannelKey, wsConnectionStatus]);
 
-  useEffect(() => {
-    if (!wsEnabled) return undefined;
-    const interval = setInterval(() => setConnectionNow(Date.now()), 3000);
-    return () => clearInterval(interval);
-  }, [wsEnabled]);
-
-  useEffect(() => {
-    if (!wsEnabled) {
-      return undefined;
-    }
-
-    const tick = () => {
-      const len = receivedMessageBucketsRef.current.length;
-      const currentIndex = messageBucketIndexRef.current;
-      const nextIndex = (currentIndex + 1) % len;
-      const removedReceived = receivedMessageBucketsRef.current[nextIndex];
-      const removedSent = sentMessageBucketsRef.current[nextIndex];
-
-      if (removedReceived) {
-        receivedMessageBucketTotalRef.current -= removedReceived;
-      }
-
-      if (removedSent) {
-        sentMessageBucketTotalRef.current -= removedSent;
-      }
-
-      receivedMessageBucketsRef.current[nextIndex] = 0;
-      sentMessageBucketsRef.current[nextIndex] = 0;
-      messageBucketIndexRef.current = nextIndex;
-      messageSecondAlertRef.current = false;
-      syncMessageCounters();
-    };
-
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [syncMessageCounters, wsEnabled]);
-
-  useEffect(() => {
-    if (!wsReceivedPulse) return;
-    const index = messageBucketIndexRef.current;
-    receivedMessageBucketsRef.current[index] += 1;
-    receivedMessageBucketTotalRef.current += 1;
-    syncMessageCounters();
-  }, [syncMessageCounters, wsReceivedPulse]);
-
-  useEffect(() => {
-    if (!wsSentPulse) return;
-    const index = messageBucketIndexRef.current;
-    sentMessageBucketsRef.current[index] += 1;
-    sentMessageBucketTotalRef.current += 1;
-    syncMessageCounters();
-  }, [syncMessageCounters, wsSentPulse]);
-
   const latestActivityAt = Math.max(
     Number(wsLastReceivedAt || 0),
     Number(wsLastSentAt || 0),
     Number(wsLastMessageAt || 0)
   ) || null;
-  const wsMessageAgeMs = latestActivityAt ? Math.max(0, connectionNow - latestActivityAt) : null;
-  const connectionBadge = (() => {
-    if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: WifiOff };
-    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', Icon: WifiLow };
-    if (wsConnectionStatus === 'connected') return { color: 'bg-[#22C55E] text-black border-transparent', Icon: Wifi };
-    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316] text-black border-transparent', Icon: WifiLow };
-    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', Icon: WifiOff };
-    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: WifiOff };
-  })();
-  const activityProgress = wsEnabled && wsConnectionStatus === 'connected' && wsMessageAgeMs !== null
-    ? Math.max(0, 1 - (wsMessageAgeMs / 30000))
-    : 0;
-  const activityLevel = getMessagesPerMinuteLoadLevel(messagesLastMinute);
-  const activityFill = activityProgress > 0
-    ? getLedLoadRgba(activityLevel, 0.2 + (0.8 * activityProgress))
-    : 'rgba(63, 63, 70, 0.45)';
-  const statusBadgeClassName = 'flex items-center justify-center gap-1 px-1 py-0 rounded text-[10px] font-bold uppercase tracking-wide border min-w-[20px] h-[16px]';
-  const ConnectionIcon = connectionBadge.Icon;
+  const wsMessageAgeMs = latestActivityAt ? Math.max(0, wsActivity.connectionNow - latestActivityAt) : null;
   const ownershipState = wsOwnership || {};
   const isPrimaryOwnership = !!ownershipState?.ownerId
     && !!wsInstanceId
@@ -215,27 +114,6 @@ export default function Setup() {
     : isPrimaryOwnership || ownershipState?.hasOwnership
       ? t('header.ownershipPrimary')
       : t('header.ownershipReplica');
-  const OwnershipIcon = isPrimaryOwnership || ownershipState?.hasOwnership ? Crown : GitBranch;
-  const ownershipBadgeClassName = isPrimaryOwnership || ownershipState?.hasOwnership
-    ? 'bg-[#FACC15] text-black border-transparent'
-    : 'bg-zinc-800 text-zinc-400 border-zinc-700';
-  const syncBadge = (() => {
-    if (!wsEnabled || wsConnectionStatus !== 'connected') {
-      return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: RefreshCw, spin: false, label: 'Idle', description: 'No sync activity.' };
-    }
-    if (wsSyncState === 'waiting_snapshot') {
-      return { color: 'bg-[#F97316] text-black border-transparent', Icon: Hourglass, spin: false, label: 'Waiting Snapshot', description: 'Waiting for a snapshot before this session becomes current.' };
-    }
-    if (wsSyncState === 'syncing_snapshot') {
-      return { color: 'bg-[#FACC15] text-black border-transparent', Icon: RefreshCw, spin: true, label: 'Syncing', description: 'Applying snapshot data now.' };
-    }
-    if (wsSyncState === 'current') {
-      return { color: 'bg-[#22C55E] text-black border-transparent', Icon: RefreshCw, spin: false, label: 'Current', description: 'Snapshot sync is complete.' };
-    }
-    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', Icon: RefreshCw, spin: false, label: 'Idle', description: 'No sync activity.' };
-  })();
-  const SyncIcon = syncBadge.Icon;
-
   const handleGoLive = (url) => {
     window.open(url, '_blank');
     toast.success('Overlay page opened in new tab');
@@ -246,90 +124,19 @@ export default function Setup() {
       <SosAlertStack offsetClassName="top-14" />
       <div className="fixed top-0.5 right-0.5 z-50">
         <div className="flex items-center gap-2 rounded-md border border-zinc-800/80 bg-[#111113]/88 backdrop-blur px-1.5 py-1 shadow-lg shadow-black/35">
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={`${statusBadgeClassName} ${ownershipBadgeClassName}`}>
-                  <OwnershipIcon className="w-3 h-3" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                <div className="text-xs">
-                  <div className="font-semibold">{t('header.ownershipTitle')}</div>
-                  <div>{t('header.ownershipStatus')}: {ownershipLabel}</div>
-                  <div>{t('header.ownershipDescription')}</div>
-                  <div className="text-zinc-400">{t('header.ownershipOwnerId')}: {ownershipState?.ownerId || 'none'}</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={`${statusBadgeClassName} ${syncBadge.color}`}>
-                  <SyncIcon className={`w-3 h-3 ${syncBadge.spin ? 'animate-spin' : ''}`} />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                <div className="text-xs">
-                  <div className="font-semibold">WebSocket Sync</div>
-                  <div>Status: {syncBadge.label}</div>
-                  <div>{syncBadge.description}</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={`${statusBadgeClassName} ${connectionBadge.color}`}>
-                  <ConnectionIcon className="w-3 h-3" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                <div className="text-xs">
-                  <div className="font-semibold">WebSocket Connection</div>
-                  <div>Status: {wsConnectionStatus}</div>
-                  <div>State badge only reflects socket connection state.</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
-                  className={`${statusBadgeClassName} border-zinc-700 transition-all duration-500`}
-                  style={{ backgroundColor: activityFill }}
-                >
-                  <Mail className={`w-3 h-3 ${activityProgress > 0 ? 'text-black/80' : 'text-zinc-400'}`} />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                <div className="text-xs">
-                  <div className="font-semibold">Message Activity</div>
-                  {wsMessageAgeMs !== null ? (
-                    <>
-                      <div>Last message: {Math.round(wsMessageAgeMs / 1000)}s ago</div>
-                      <div className="flex items-center gap-1"><Mail className="w-3 h-3" /> Messages last minute: {messagesLastMinute}</div>
-                      <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3" /> Received last minute: {receivedMessagesLastMinute}</div>
-                      <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3" /> Sent last minute: {sentMessagesLastMinute}</div>
-                      <div className="flex items-center gap-1"><Mail className="w-3 h-3" /> Messages this second: {messagesThisSecond}</div>
-                      <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3" /> Received this second: {receivedMessagesThisSecond}</div>
-                      <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3" /> Sent this second: {sentMessagesThisSecond}</div>
-                      <div>LED fades from full brightness to off over 30 seconds.</div>
-                    </>
-                  ) : (
-                    <div>No WebSocket messages received yet.</div>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <PerformanceLed
-            icon={Cpu}
-            className={`${statusBadgeClassName} border-zinc-700`}
-            iconClassName="w-3 h-3 text-black/80"
+          <WsLedStrip
+            wsEnabled={wsEnabled}
+            wsConnectionStatus={wsConnectionStatus}
+            activityAgeMs={wsMessageAgeMs}
+            counts={wsActivity}
+            ownership={{
+              isPrimary: isPrimaryOwnership || ownershipState?.hasOwnership,
+              title: t('header.ownershipTitle'),
+              label: ownershipLabel,
+              description: t('header.ownershipDescription'),
+              ownerId: ownershipState?.ownerId || 'none'
+            }}
+            size="compact"
           />
         </div>
       </div>
