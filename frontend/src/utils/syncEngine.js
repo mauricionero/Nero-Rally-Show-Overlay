@@ -415,10 +415,8 @@ export default class SyncEngine {
         }
 
         const batch = {
-          source: this.role,
           sourceRole: this.role,
           sourceInstanceId: this.instanceId,
-          instanceId: this.instanceId,
           timestamp: Date.now(),
           ...mergedMessage
         };

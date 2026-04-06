@@ -216,6 +216,35 @@ const normalizeStageSosLevel = (value) => {
   return Math.min(3, Math.max(1, Math.trunc(numericValue)));
 };
 
+const normalizeConnectionStrength = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === '') {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(4, Math.trunc(numericValue)));
+};
+
+const normalizeConnectionType = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return '';
+  }
+
+  return String(value).trim();
+};
+
 const writeCurrentSessionMetaToStorage = (nextMeta = null) => {
   if (typeof window === 'undefined' || !window.localStorage) {
     return;
@@ -3018,6 +3047,14 @@ export const RallyProvider = ({ children }) => {
           immediateTelemetry.heading = normalizedData.heading;
         }
 
+        if (normalizedData.connectionStrength !== undefined) {
+          immediateTelemetry.connectionStrength = normalizeConnectionStrength(normalizedData.connectionStrength);
+        }
+
+        if (normalizedData.connectionType !== undefined) {
+          immediateTelemetry.connectionType = normalizeConnectionType(normalizedData.connectionType);
+        }
+
         mergePilotTelemetryEntries([[pilotId, immediateTelemetry]], {
           suppressSync: true,
           deferState: true
@@ -4742,6 +4779,8 @@ export const RallyProvider = ({ children }) => {
       delete nextUpdates.lastTelemetryAt;
       delete nextUpdates.speed;
       delete nextUpdates.heading;
+      delete nextUpdates.connectionStrength;
+      delete nextUpdates.connectionType;
 
       return { ...pilot, ...nextUpdates };
     }));
@@ -4772,6 +4811,14 @@ export const RallyProvider = ({ children }) => {
 
     if (telemetry.heading !== undefined) {
       normalizedTelemetry.heading = telemetry.heading;
+    }
+
+    if (telemetry.connectionStrength !== undefined) {
+      normalizedTelemetry.connectionStrength = normalizeConnectionStrength(telemetry.connectionStrength);
+    }
+
+    if (telemetry.connectionType !== undefined) {
+      normalizedTelemetry.connectionType = normalizeConnectionType(telemetry.connectionType);
     }
 
     if (telemetry.lastTelemetryAt !== undefined) {

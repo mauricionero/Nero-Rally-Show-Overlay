@@ -200,8 +200,8 @@ export const buildSyncPackageParts = ({
 
   const baseMessage = {
     messageType: deltaMessageType,
-    originalMessageType: normalizedPackageType === 'snapshot' ? 'full-snapshot' : deltaMessageType,
     packageType: normalizedPackageType,
+    ...(normalizedPackageType === 'snapshot' ? { originalMessageType: 'full-snapshot' } : {}),
     timestamp,
     ...(highPriority ? {
       highPriority: true,

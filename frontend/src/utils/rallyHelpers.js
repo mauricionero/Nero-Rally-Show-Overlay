@@ -1,5 +1,6 @@
 import { sortPilotsByDisplayOrder } from './displayOrder.js';
-import { clampTimeDecimals, formatDurationSeconds } from './timeFormat.js';
+import { clampTimeDecimals, formatDurationMs, formatDurationSeconds } from './timeFormat.js';
+import { isLapRaceStageType } from './stageTypes.js';
 
 // Helper functions for pilot status and timing
 
@@ -257,8 +258,14 @@ export const parseTime = (timeStr) => {
   
   try {
     const parts = timeStr.split(':');
-    if (parts.length >= 2) {
-      const minutes = parseInt(parts[0]) || 0;
+    if (parts.length === 3) {
+      const hours = parseInt(parts[0], 10) || 0;
+      const minutes = parseInt(parts[1], 10) || 0;
+      const seconds = parseFloat(parts[2]) || 0;
+      return (hours * 3600) + (minutes * 60) + seconds;
+    }
+    if (parts.length === 2) {
+      const minutes = parseInt(parts[0], 10) || 0;
       const seconds = parseFloat(parts[1]) || 0;
       return minutes * 60 + seconds;
     }
@@ -266,6 +273,174 @@ export const parseTime = (timeStr) => {
   } catch (e) {
     return 0;
   }
+};
+
+export const getPilotStageStartTime = (pilotId, stage, startTimes = {}) => (
+  startTimes?.[pilotId]?.[stage?.id] || stage?.startTime || ''
+);
+
+export const getLapRaceLapDurations = (lapEntries = [], startTime = '') => {
+  const safeLapEntries = Array.isArray(lapEntries) ? lapEntries : [];
+  let previousSeconds = Number.isFinite(parseTime(startTime)) ? parseTime(startTime) : null;
+
+  return safeLapEntries.map((lapTime) => {
+    if (!lapTime || !String(lapTime).trim()) {
+      return null;
+    }
+
+    const currentSeconds = parseTime(lapTime);
+    if (!Number.isFinite(currentSeconds)) {
+      previousSeconds = currentSeconds;
+      return null;
+    }
+
+    if (!Number.isFinite(previousSeconds)) {
+      previousSeconds = currentSeconds;
+      return null;
+    }
+
+    const durationMs = Math.max(0, (currentSeconds - previousSeconds) * 1000);
+    previousSeconds = currentSeconds;
+    return durationMs;
+  });
+};
+
+export const getLapRacePilotStageInfo = ({
+  pilotId,
+  stage,
+  startTimes = {},
+  times = {},
+  lapTimes = {},
+  retiredStages = {},
+  now = new Date(),
+  timeDecimals = 3
+} = {}) => {
+  const safeStage = stage || {};
+  const stageId = safeStage.id;
+  const startTime = getPilotStageStartTime(pilotId, safeStage, startTimes);
+  const finishTime = times?.[pilotId]?.[stageId] || '';
+  const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
+  const pilotLaps = Array.isArray(lapTimes?.[pilotId]?.[stageId]) ? lapTimes[pilotId][stageId] : [];
+  const completedLapEntries = pilotLaps.filter((lapTime) => Boolean(String(lapTime || '').trim()));
+  const completedLaps = completedLapEntries.length;
+  const totalLaps = Number(safeStage.numberOfLaps || 0) || 0;
+  const startPassed = startTime ? hasStageDateTimePassed(startTime, safeStage.date, now) : false;
+  const isFinished = Boolean(finishTime) || (totalLaps > 0 ? completedLaps >= totalLaps : completedLaps > 0);
+  const status = retired
+    ? 'retired'
+    : isFinished
+      ? 'finished'
+      : startPassed
+        ? 'racing'
+        : 'not_started';
+
+  const startSeconds = Number.isFinite(parseTime(startTime)) ? parseTime(startTime) : null;
+  const lastLapClock = completedLapEntries.length > 0 ? completedLapEntries[completedLapEntries.length - 1] : '';
+  const lastLapSeconds = Number.isFinite(parseTime(lastLapClock)) ? parseTime(lastLapClock) : null;
+  const recordedStageMs = (() => {
+    if (finishTime) {
+      return Math.max(0, parseTime(finishTime) * 1000);
+    }
+    if (Number.isFinite(startSeconds) && Number.isFinite(lastLapSeconds)) {
+      return Math.max(0, (lastLapSeconds - startSeconds) * 1000);
+    }
+    return 0;
+  })();
+  const runningStageMs = (() => {
+    if (status !== 'racing') {
+      return 0;
+    }
+    const startDateTime = getStageDateTime(safeStage.date, startTime);
+    if (!startDateTime) {
+      return 0;
+    }
+    return Math.max(0, now.getTime() - startDateTime.getTime());
+  })();
+  const stageTotalMs = status === 'finished'
+    ? recordedStageMs
+    : status === 'racing'
+      ? runningStageMs
+      : recordedStageMs;
+  const stageTotalText = stageTotalMs > 0
+    ? formatDurationMs(stageTotalMs, timeDecimals, { fallback: '' })
+    : '';
+
+  return {
+    pilotId,
+    stage: safeStage,
+    startTime,
+    finishTime,
+    retired,
+    status,
+    isFinished,
+    isRacing: status === 'racing',
+    hasStarted: startPassed,
+    completedLaps,
+    totalLaps,
+    pilotLaps,
+    lapDurations: getLapRaceLapDurations(pilotLaps, startTime),
+    recordedStageMs,
+    stageTotalMs,
+    stageTotalText,
+    hasTime: stageTotalMs > 0 || completedLaps > 0 || status === 'racing'
+  };
+};
+
+export const buildLapRaceLeaderboard = ({
+  pilots = [],
+  stage,
+  lapTimes = {},
+  stagePilots = {},
+  startTimes = {},
+  times = {},
+  retiredStages = {},
+  now = new Date(),
+  timeDecimals = 3,
+  fallbackOrderByPilotId = new Map()
+} = {}) => {
+  if (!stage?.id || !isLapRaceStageType(stage.type)) {
+    return [];
+  }
+
+  const selectedPilotIds = stagePilots?.[stage.id] || pilots.map((pilot) => pilot.id);
+  const selectedPilots = pilots.filter((pilot) => selectedPilotIds.includes(pilot.id));
+
+  return selectedPilots
+    .map((pilot) => ({
+      pilot,
+      ...getLapRacePilotStageInfo({
+        pilotId: pilot.id,
+        stage,
+        startTimes,
+        times,
+        lapTimes,
+        retiredStages,
+        now,
+        timeDecimals
+      })
+    }))
+    .sort((left, right) => {
+      if (left.retired !== right.retired) {
+        return left.retired ? 1 : -1;
+      }
+
+      if (right.completedLaps !== left.completedLaps) {
+        return right.completedLaps - left.completedLaps;
+      }
+
+      const leftSortMs = left.stageTotalMs > 0 ? left.stageTotalMs : Number.MAX_SAFE_INTEGER;
+      const rightSortMs = right.stageTotalMs > 0 ? right.stageTotalMs : Number.MAX_SAFE_INTEGER;
+      if (leftSortMs !== rightSortMs) {
+        return leftSortMs - rightSortMs;
+      }
+
+      return (fallbackOrderByPilotId.get(left.pilot.id) ?? Number.MAX_SAFE_INTEGER)
+        - (fallbackOrderByPilotId.get(right.pilot.id) ?? Number.MAX_SAFE_INTEGER);
+    })
+    .map((entry, index) => ({
+      ...entry,
+      position: index + 1
+    }));
 };
 
 export const sortPilotsByStatus = (pilots, categories, stageId, startTimes, times, retiredStages, stageDate, now = new Date()) => {
