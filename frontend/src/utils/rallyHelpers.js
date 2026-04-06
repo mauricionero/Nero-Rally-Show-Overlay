@@ -280,6 +280,44 @@ export const getPilotStageStartTime = (pilotId, stage, startTimes = {}) => (
   startTimes?.[pilotId]?.[stage?.id] || stage?.startTime || ''
 );
 
+export const getLapRaceTotalTimeMode = (stage) => (
+  stage?.lapRaceTotalTimeMode || 'cumulative'
+);
+
+export const getLapRaceConfiguredLapCount = (stage) => {
+  const value = Number(stage?.numberOfLaps || 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+};
+
+export const getLapRaceVisibleLapCount = (stage) => {
+  const configuredLapCount = getLapRaceConfiguredLapCount(stage);
+  return configuredLapCount > 0 ? configuredLapCount : 1;
+};
+
+export const getLapRaceStageMetaParts = ({
+  stage,
+  lapsLabel = 'laps',
+  maxTimeLabel = 'Max Time'
+} = {}) => {
+  if (!stage || !isLapRaceStageType(stage.type)) {
+    return [];
+  }
+
+  const parts = [];
+  const configuredLapCount = getLapRaceConfiguredLapCount(stage);
+  const maxTimeMinutes = Number(stage.lapRaceMaxTimeMinutes || 0);
+
+  if (configuredLapCount > 0) {
+    parts.push(`${configuredLapCount} ${lapsLabel}`);
+  }
+
+  if (Number.isFinite(maxTimeMinutes) && maxTimeMinutes > 0) {
+    parts.push(`${maxTimeLabel}: ${maxTimeMinutes} min`);
+  }
+
+  return parts;
+};
+
 export const getLapRaceLapDurations = (lapEntries = [], startTime = '') => {
   const safeLapEntries = Array.isArray(lapEntries) ? lapEntries : [];
   let previousSeconds = Number.isFinite(parseTime(startTime)) ? parseTime(startTime) : null;
@@ -316,6 +354,39 @@ export const getLastFilledLapIndex = (lapEntries = []) => {
   return -1;
 };
 
+export const getLapRaceStoredTotalTimeSeconds = ({
+  lapEntries = [],
+  startTime = '',
+  mode = 'cumulative'
+} = {}) => {
+  const safeLapEntries = Array.isArray(lapEntries) ? lapEntries : [];
+  const lapDurations = getLapRaceLapDurations(safeLapEntries, startTime)
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (lapDurations.length === 0) {
+    return null;
+  }
+
+  if (mode === 'bestLap') {
+    return Math.min(...lapDurations) / 1000;
+  }
+
+  const lastFilledLapIndex = getLastFilledLapIndex(safeLapEntries);
+  if (lastFilledLapIndex < 0) {
+    return null;
+  }
+
+  const startSeconds = Number.isFinite(parseTime(startTime)) ? parseTime(startTime) : null;
+  const lastLapClock = safeLapEntries[lastFilledLapIndex] || '';
+  const lastLapSeconds = Number.isFinite(parseTime(lastLapClock)) ? parseTime(lastLapClock) : null;
+
+  if (!Number.isFinite(startSeconds) || !Number.isFinite(lastLapSeconds)) {
+    return null;
+  }
+
+  return Math.max(0, lastLapSeconds - startSeconds);
+};
+
 export const getLapRacePilotStageInfo = ({
   pilotId,
   stage,
@@ -328,15 +399,16 @@ export const getLapRacePilotStageInfo = ({
 } = {}) => {
   const safeStage = stage || {};
   const stageId = safeStage.id;
+  const totalTimeMode = getLapRaceTotalTimeMode(safeStage);
   const startTime = getPilotStageStartTime(pilotId, safeStage, startTimes);
   const finishTime = times?.[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
   const pilotLaps = Array.isArray(lapTimes?.[pilotId]?.[stageId]) ? lapTimes[pilotId][stageId] : [];
   const lastFilledLapIndex = getLastFilledLapIndex(pilotLaps);
   const completedLaps = lastFilledLapIndex >= 0 ? lastFilledLapIndex + 1 : 0;
-  const totalLaps = Number(safeStage.numberOfLaps || 0) || 0;
+  const totalLaps = getLapRaceConfiguredLapCount(safeStage);
   const startPassed = startTime ? hasStageDateTimePassed(startTime, safeStage.date, now) : false;
-  const isFinished = Boolean(finishTime) || (totalLaps > 0 ? lastFilledLapIndex === totalLaps - 1 : completedLaps > 0);
+  const isFinished = Boolean(finishTime) || (totalLaps > 0 ? lastFilledLapIndex === totalLaps - 1 : false);
   const status = retired
     ? 'retired'
     : isFinished
@@ -379,6 +451,7 @@ export const getLapRacePilotStageInfo = ({
   return {
     pilotId,
     stage: safeStage,
+    totalTimeMode,
     startTime,
     finishTime,
     retired,
@@ -453,10 +526,11 @@ export const getPilotStageTimingInfo = ({
       : String(lapInfo.completedLaps || 0);
 
     let displayText = '';
+    const resolvedTotalTimeText = lapInfo.finishTime || lapInfo.stageTotalText || '';
     if (lapInfo.status === 'not_started' || (lapInfo.retired && !lapInfo.stageTotalText)) {
       displayText = startInfo.text || '';
     } else {
-      displayText = lapInfo.stageTotalText || startInfo.text || '';
+      displayText = resolvedTotalTimeText || startInfo.text || '';
     }
 
     return {
@@ -466,7 +540,8 @@ export const getPilotStageTimingInfo = ({
       displayText,
       lapSummaryText,
       totalTimeMs: lapInfo.stageTotalMs,
-      totalTimeText: lapInfo.stageTotalText
+      totalTimeText: resolvedTotalTimeText,
+      totalTimeMode: lapInfo.totalTimeMode
     };
   }
 

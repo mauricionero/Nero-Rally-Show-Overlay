@@ -47,6 +47,7 @@ export const TIMING_SECTION_KEYS = [
 export const SNAPSHOT_CORE_SECTION_KEYS = ['meta', 'pilots', 'categories', 'stages'];
 
 export const TIMES_ROLE_TIMING_SECTION_KEYS = [
+  'stages',
   'times',
   'arrivalTimes',
   'startTimes',
@@ -186,7 +187,7 @@ export const canReceiveDomainForRoles = (recipientRole, sourceRole, domain) => {
   }
 
   if (source === SYNC_ROLES.TIMES) {
-    return TIMING_SECTION_SET.has(normalizedDomain);
+    return TIMING_SECTION_SET.has(normalizedDomain) || normalizedDomain === 'stages';
   }
 
   if (source === SYNC_ROLES.MOBILE) {

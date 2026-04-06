@@ -8,6 +8,7 @@ import { Label } from '../ui/label';
 import { TimeInput } from '../TimeInput.jsx';
 import { CheckSquare, Square, Clock, X } from 'lucide-react';
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
+import { getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
 
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = (timeDecimals) => formatClockFromDate(new Date(), timeDecimals);
@@ -48,6 +49,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     togglePilotInStage,
     selectAllPilotsInStage,
     deselectAllPilotsInStage,
+    times,
     timeDecimals
   } = useRallyTiming();
   const { updateStage } = useRallyMeta();
@@ -104,9 +106,21 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
       });
   }, [sortedPilots, categoryMap, categoryOrderById, t]);
 
-  const lapsArray = Array.from({ length: stage.numberOfLaps || 5 }, (_, i) => i);
+  const visibleLapCount = useMemo(() => {
+    const configuredLapCount = getLapRaceVisibleLapCount(stage);
+    const recordedLapCount = selectedPilots.reduce((maxCount, pilot) => {
+      const pilotLapCount = Math.max(getPilotLapTimes(pilot.id, stage.id)?.length || 0, 0);
+      return Math.max(maxCount, pilotLapCount);
+    }, 0);
+
+    return Math.max(configuredLapCount, recordedLapCount, 1);
+  }, [getPilotLapTimes, selectedPilots, stage]);
+  const lapsArray = Array.from({ length: visibleLapCount }, (_, i) => i);
   const allSelected = selectedPilotIds.length === pilots.length;
   const noneSelected = selectedPilotIds.length === 0;
+  const totalTimeLabel = stage.lapRaceTotalTimeMode === 'bestLap'
+    ? t('times.bestLapTime')
+    : t('times.cumulativeTime');
 
   return (
     <div className="space-y-4">
@@ -204,13 +218,17 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                     <div className="text-xs text-zinc-400 font-normal">{t('times.time')} / {t('times.duration')}</div>
                   </th>
                 ))}
+                <th className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  <div>{totalTimeLabel}</div>
+                  <div className="text-xs text-zinc-400 font-normal">{t('times.totalTime')}</div>
+                </th>
               </tr>
             </thead>
             <tbody>
               {categoryBuckets.map((bucket) => (
                 <React.Fragment key={bucket.id}>
                   <tr className="bg-zinc-900/60">
-                    <td colSpan={lapsArray.length + 1} className="p-2 border-b border-zinc-800">
+                    <td colSpan={lapsArray.length + 2} className="p-2 border-b border-zinc-800">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bucket.color }} />
                         <span className="text-zinc-300 text-xs uppercase font-semibold">
@@ -276,6 +294,13 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                             </td>
                           );
                         })}
+                        <td className="p-2">
+                          <div className="text-center">
+                            <span className="text-white font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                              {times[pilot.id]?.[stage.id] || '-'}
+                            </span>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                 </React.Fragment>

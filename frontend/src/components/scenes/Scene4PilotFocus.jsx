@@ -223,9 +223,11 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           startLabel: t('status.start'),
           retiredLabel: t('status.retired')
         });
-        const displayTime = lapStageInfo.completedLaps > 0 || lapStageInfo.isFinished
-          ? `${t('times.lap')} ${lapStageInfo.lapSummaryText}${lapStageInfo.totalTimeText ? ` • ${lapStageInfo.totalTimeText}` : ''}`
-          : (lapStageInfo.displayText || lapStageInfo.timeInfo?.text || '-');
+        const displayTime = lapStageInfo.isFinished
+          ? `${lapStageInfo.totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${lapStageInfo.totalTimeText || ''}`
+          : (lapStageInfo.completedLaps > 0
+            ? `${t('times.lap')} ${lapStageInfo.lapSummaryText}${lapStageInfo.totalTimeText ? ` • ${lapStageInfo.totalTimeText}` : ''}`
+            : (lapStageInfo.displayText || lapStageInfo.timeInfo?.text || '-'));
         
         return {
           stage,

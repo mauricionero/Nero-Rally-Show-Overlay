@@ -15,6 +15,7 @@ import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/s
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
 import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
+import { getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
 import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw, Check, CheckCheck, CircleX } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
 import {
@@ -1420,6 +1421,13 @@ export default function TimesTab({
   ), [pilots, categoryOrderById]);
   const categoryMap = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
   const pilotById = useMemo(() => new Map(pilots.map((pilot) => [pilot.id, pilot])), [pilots]);
+  const getLapRaceMetaText = useCallback((stage) => (
+    getLapRaceStageMetaParts({
+      stage,
+      lapsLabel: t('scene3.laps').toLowerCase(),
+      maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
+    }).join(' • ')
+  ), [t]);
 
   const sortedStages = useMemo(() => {
     const visibleStages = showCompetitiveStagesOnly
@@ -1518,8 +1526,8 @@ export default function TimesTab({
                       )}
                       {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
                       <span className="truncate">{stage.name}</span>
-                      {isLapRaceStageType(stage.type) && (
-                        <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})</span>
+                      {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && (
+                        <span className="text-sm text-zinc-400 font-normal">({getLapRaceMetaText(stage)})</span>
                       )}
                     </CardTitle>
                     {!isLapRaceStageType(stage.type) && getDisplayedStageSchedule(stage) && (
