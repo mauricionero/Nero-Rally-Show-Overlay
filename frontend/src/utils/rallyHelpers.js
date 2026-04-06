@@ -1,6 +1,7 @@
 import { sortPilotsByDisplayOrder } from './displayOrder.js';
 import { clampTimeDecimals, formatDurationMs, formatDurationSeconds } from './timeFormat.js';
-import { isLapRaceStageType } from './stageTypes.js';
+import { getPilotScheduledEndTime, getPilotScheduledStartTime } from './pilotSchedule.js';
+import { isLapRaceStageType, isSpecialStageType, isTransitStageType } from './stageTypes.js';
 
 // Helper functions for pilot status and timing
 
@@ -305,6 +306,16 @@ export const getLapRaceLapDurations = (lapEntries = [], startTime = '') => {
   });
 };
 
+export const getLastFilledLapIndex = (lapEntries = []) => {
+  const safeLapEntries = Array.isArray(lapEntries) ? lapEntries : [];
+  for (let index = safeLapEntries.length - 1; index >= 0; index -= 1) {
+    if (String(safeLapEntries[index] || '').trim()) {
+      return index;
+    }
+  }
+  return -1;
+};
+
 export const getLapRacePilotStageInfo = ({
   pilotId,
   stage,
@@ -321,11 +332,11 @@ export const getLapRacePilotStageInfo = ({
   const finishTime = times?.[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
   const pilotLaps = Array.isArray(lapTimes?.[pilotId]?.[stageId]) ? lapTimes[pilotId][stageId] : [];
-  const completedLapEntries = pilotLaps.filter((lapTime) => Boolean(String(lapTime || '').trim()));
-  const completedLaps = completedLapEntries.length;
+  const lastFilledLapIndex = getLastFilledLapIndex(pilotLaps);
+  const completedLaps = lastFilledLapIndex >= 0 ? lastFilledLapIndex + 1 : 0;
   const totalLaps = Number(safeStage.numberOfLaps || 0) || 0;
   const startPassed = startTime ? hasStageDateTimePassed(startTime, safeStage.date, now) : false;
-  const isFinished = Boolean(finishTime) || (totalLaps > 0 ? completedLaps >= totalLaps : completedLaps > 0);
+  const isFinished = Boolean(finishTime) || (totalLaps > 0 ? lastFilledLapIndex === totalLaps - 1 : completedLaps > 0);
   const status = retired
     ? 'retired'
     : isFinished
@@ -335,7 +346,7 @@ export const getLapRacePilotStageInfo = ({
         : 'not_started';
 
   const startSeconds = Number.isFinite(parseTime(startTime)) ? parseTime(startTime) : null;
-  const lastLapClock = completedLapEntries.length > 0 ? completedLapEntries[completedLapEntries.length - 1] : '';
+  const lastLapClock = lastFilledLapIndex >= 0 ? (pilotLaps[lastFilledLapIndex] || '') : '';
   const lastLapSeconds = Number.isFinite(parseTime(lastLapClock)) ? parseTime(lastLapClock) : null;
   const recordedStageMs = (() => {
     if (finishTime) {
@@ -347,7 +358,7 @@ export const getLapRacePilotStageInfo = ({
     return 0;
   })();
   const runningStageMs = (() => {
-    if (status !== 'racing') {
+    if (status !== 'racing' || completedLaps > 0) {
       return 0;
     }
     const startDateTime = getStageDateTime(safeStage.date, startTime);
@@ -359,7 +370,7 @@ export const getLapRacePilotStageInfo = ({
   const stageTotalMs = status === 'finished'
     ? recordedStageMs
     : status === 'racing'
-      ? runningStageMs
+      ? (completedLaps > 0 ? recordedStageMs : runningStageMs)
       : recordedStageMs;
   const stageTotalText = stageTotalMs > 0
     ? formatDurationMs(stageTotalMs, timeDecimals, { fallback: '' })
@@ -377,12 +388,143 @@ export const getLapRacePilotStageInfo = ({
     hasStarted: startPassed,
     completedLaps,
     totalLaps,
+    lastFilledLapIndex,
     pilotLaps,
     lapDurations: getLapRaceLapDurations(pilotLaps, startTime),
     recordedStageMs,
     stageTotalMs,
     stageTotalText,
     hasTime: stageTotalMs > 0 || completedLaps > 0 || status === 'racing'
+  };
+};
+
+export const getPilotStageTimingInfo = ({
+  pilotId,
+  pilot = null,
+  stage,
+  startTimes = {},
+  times = {},
+  lapTimes = {},
+  retiredStages = {},
+  now = new Date(),
+  timeDecimals = 3,
+  includeLabel = true,
+  startLabel = 'Start',
+  retiredLabel = 'Retired'
+} = {}) => {
+  if (!pilotId || !stage?.id) {
+    return {
+      stageType: '',
+      status: 'not_started',
+      displayText: '',
+      hasTime: false,
+      isFinished: false,
+      isRacing: false,
+      retired: false
+    };
+  }
+
+  if (isLapRaceStageType(stage.type)) {
+    const lapInfo = getLapRacePilotStageInfo({
+      pilotId,
+      stage,
+      startTimes,
+      times,
+      lapTimes,
+      retiredStages,
+      now,
+      timeDecimals
+    });
+
+    const startInfo = getStartInformationFromValues({
+      startTime: lapInfo.startTime,
+      finishTime: '',
+      retired: lapInfo.retired,
+      stageDate: stage.date,
+      now,
+      decimals: timeDecimals,
+      includeLabel,
+      startLabel,
+      retiredLabel
+    });
+
+    const lapSummaryText = lapInfo.totalLaps > 0
+      ? `${lapInfo.completedLaps}/${lapInfo.totalLaps}`
+      : String(lapInfo.completedLaps || 0);
+
+    let displayText = '';
+    if (lapInfo.status === 'not_started' || (lapInfo.retired && !lapInfo.stageTotalText)) {
+      displayText = startInfo.text || '';
+    } else {
+      displayText = lapInfo.stageTotalText || startInfo.text || '';
+    }
+
+    return {
+      ...lapInfo,
+      stageType: 'lap',
+      timeInfo: startInfo,
+      displayText,
+      lapSummaryText,
+      totalTimeMs: lapInfo.stageTotalMs,
+      totalTimeText: lapInfo.stageTotalText
+    };
+  }
+
+  if (isSpecialStageType(stage.type)) {
+    const startInfo = startInformationTime({
+      pilotId,
+      stageId: stage.id,
+      startTimes,
+      times,
+      retiredStages,
+      stageDate: stage.date,
+      now,
+      decimals: timeDecimals,
+      includeLabel,
+      startLabel,
+      retiredLabel
+    });
+
+    return {
+      ...startInfo,
+      stageType: 'special',
+      displayText: startInfo.text || '',
+      totalTimeMs: startInfo.finishTime ? Math.max(0, parseTime(startInfo.finishTime) * 1000) : 0,
+      totalTimeText: startInfo.timer || '',
+      hasTime: Boolean(startInfo.finishTime || startInfo.startTime),
+      isFinished: startInfo.status === 'finished',
+      isRacing: startInfo.status === 'racing'
+    };
+  }
+
+  const startTime = startTimes?.[pilotId]?.[stage.id] || getPilotScheduledStartTime(stage, pilot) || '';
+  const endTime = getPilotScheduledEndTime(stage, pilot) || '';
+  const retired = isPilotRetiredForStage(pilotId, stage.id, retiredStages);
+
+  let status = 'not_started';
+  if (retired) {
+    status = 'retired';
+  } else if (endTime && hasStageDateTimePassed(endTime, stage.date, now)) {
+    status = 'finished';
+  } else if (startTime && hasStageDateTimePassed(startTime, stage.date, now)) {
+    status = 'racing';
+  }
+
+  const displayText = `${startTime || ''}${startTime || endTime ? ' -> ' : ''}${endTime || ''}`.trim() || '-';
+
+  return {
+    stageType: isTransitStageType(stage.type) ? 'transit' : 'other',
+    status,
+    displayText,
+    startTime,
+    endTime,
+    retired,
+    hasTime: Boolean(startTime || endTime),
+    isFinished: status === 'finished',
+    isRacing: status === 'racing',
+    totalTimeMs: 0,
+    totalTimeText: '',
+    timeInfo: null
   };
 };
 
@@ -408,15 +550,17 @@ export const buildLapRaceLeaderboard = ({
   return selectedPilots
     .map((pilot) => ({
       pilot,
-      ...getLapRacePilotStageInfo({
+      ...getPilotStageTimingInfo({
         pilotId: pilot.id,
+        pilot,
         stage,
         startTimes,
         times,
         lapTimes,
         retiredStages,
         now,
-        timeDecimals
+        timeDecimals,
+        includeLabel: false
       })
     }))
     .sort((left, right) => {
@@ -439,7 +583,10 @@ export const buildLapRaceLeaderboard = ({
     })
     .map((entry, index) => ({
       ...entry,
-      position: index + 1
+      position: index + 1,
+      sortTime: entry.stageTotalMs > 0 ? entry.stageTotalMs : Number.MAX_SAFE_INTEGER,
+      totalTimeMs: entry.stageTotalMs,
+      totalTimeText: entry.stageTotalText
     }));
 };
 

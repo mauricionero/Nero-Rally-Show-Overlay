@@ -11,7 +11,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import StatusPill from '../StatusPill.jsx';
-import { getReferenceNow, hasStageDateTimePassed, startInformationTime, isJumpStartForStage } from '../../utils/rallyHelpers';
+import { getPilotStageTimingInfo, getReferenceNow, hasStageDateTimePassed, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { Flag, RotateCcw, Car, Timer, Video, Map as MapIcon } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -210,85 +210,63 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
       const isSS = isSpecialStageType(stage.type);
       
       if (isLap) {
-        // Lap Race data
-        const pilotLaps = lapTimes[focusPilot.id]?.[stage.id] || [];
-        const completedLaps = pilotLaps.filter(t => t && t.trim() !== '').length;
-        const numberOfLaps = stage.numberOfLaps || 5;
-        const isFinished = completedLaps >= numberOfLaps;
-        const isRacing = completedLaps > 0 && !isFinished;
-        
-        // Calculate total time
-        let totalTimeMs = 0;
-        pilotLaps.forEach(lapTime => {
-          if (!lapTime) return;
-          const parts = lapTime.split(':');
-          if (parts.length >= 2) {
-            const hours = parts.length === 3 ? parseInt(parts[0]) || 0 : 0;
-            const mins = parts.length === 3 ? parseInt(parts[1]) || 0 : parseInt(parts[0]) || 0;
-            const secsStr = parts.length === 3 ? parts[2] : parts[1];
-            const [secs, ms] = (secsStr || '0').split('.');
-            totalTimeMs += (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
-          }
+        const lapStageInfo = getPilotStageTimingInfo({
+          pilotId: focusPilot.id,
+          pilot: focusPilot,
+          stage,
+          startTimes,
+          times,
+          lapTimes,
+          retiredStages,
+          now: sceneNow,
+          timeDecimals,
+          startLabel: t('status.start'),
+          retiredLabel: t('status.retired')
         });
-        
-        // Calculate individual lap durations
-        const lapDurations = pilotLaps.map((lapTime, idx) => {
-          if (!lapTime) return null;
-          const prevLapTime = idx > 0 ? pilotLaps[idx - 1] : null;
-          return calculateLapDuration(lapTime, prevLapTime, stage.startTime);
-        });
-        
-        let displayTime = '-';
-        let status = 'not_started';
-        
-        if (isFinished) {
-          displayTime = formatDurationMs(totalTimeMs, timeDecimals);
-          status = 'finished';
-        } else if (isRacing) {
-          displayTime = `Lap ${completedLaps}/${numberOfLaps}`;
-          status = 'racing';
-        }
+        const displayTime = lapStageInfo.completedLaps > 0 || lapStageInfo.isFinished
+          ? `${t('times.lap')} ${lapStageInfo.lapSummaryText}${lapStageInfo.totalTimeText ? ` • ${lapStageInfo.totalTimeText}` : ''}`
+          : (lapStageInfo.displayText || lapStageInfo.timeInfo?.text || '-');
         
         return {
           stage,
           time: displayTime,
-          status,
+          timeInfo: lapStageInfo.timeInfo,
+          status: lapStageInfo.status,
           isLapRace: true,
-          completedLaps,
-          numberOfLaps,
-          totalTimeMs,
-          pilotLaps,
-          lapDurations
+          completedLaps: lapStageInfo.completedLaps,
+          numberOfLaps: lapStageInfo.totalLaps || stage.numberOfLaps || 0,
+          totalTimeMs: lapStageInfo.totalTimeMs || 0,
+          pilotLaps: lapStageInfo.pilotLaps,
+          lapDurations: lapStageInfo.lapDurations
         };
       } else if (isSS) {
-        // SS Stage data
-        const timeInfo = startInformationTime({
+        const stageTimingInfo = getPilotStageTimingInfo({
           pilotId: focusPilot.id,
-          stageId: stage.id,
+          pilot: focusPilot,
+          stage,
           startTimes,
           times,
           retiredStages,
-          stageDate: stage.date,
           now: sceneNow,
-          decimals: timeDecimals,
+          timeDecimals,
           startLabel: t('status.start'),
           retiredLabel: t('status.retired')
         });
-        const displayTime = getScene4SpecialStageDisplay(timeInfo, sceneNow, timeDecimals);
-        const displayInfo = displayTime !== (timeInfo.text || '')
+        const displayTime = getScene4SpecialStageDisplay(stageTimingInfo, sceneNow, timeDecimals);
+        const displayInfo = displayTime !== (stageTimingInfo.text || '')
           ? {
-              ...timeInfo,
+              ...stageTimingInfo,
               label: '',
               signal: null,
               text: displayTime
             }
-          : timeInfo;
+          : stageTimingInfo;
 
         return {
           stage,
           time: displayTime,
           timeInfo: displayInfo,
-          status: timeInfo.status,
+          status: stageTimingInfo.status,
           isLapRace: false
         };
       } else {

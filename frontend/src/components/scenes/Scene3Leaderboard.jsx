@@ -11,9 +11,11 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { LiveOverallTimeValue } from '../LiveOverallTimeValue.jsx';
 import {
+  buildLapRaceLeaderboard,
   getReferenceNow,
   getStageDateTime,
   isJumpStartForStage,
+  getPilotStageTimingInfo,
   isPilotRetiredForStage,
   parseTime,
   startInformationTime
@@ -29,63 +31,6 @@ import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatDurationMs, formatDurationSeconds, formatSecondsValue } from '../../utils/timeFormat.js';
 
 const SCENE_3_CONFIG_KEY = 'scene3Config';
-
-// Helper to calculate Lap Race positions and data
-const calculateLapRaceLeaderboard = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
-  const selectedPilotIds = stagePilots[stageId] || pilots.map(p => p.id);
-  const selectedPilots = pilots.filter(p => selectedPilotIds.includes(p.id));
-  
-  const pilotData = selectedPilots.map(pilot => {
-    const pilotLaps = lapTimes[pilot.id]?.[stageId] || [];
-    const completedLaps = pilotLaps.filter(t => t && t.trim() !== '').length;
-    
-    let totalTimeMs = 0;
-    pilotLaps.forEach(lapTime => {
-      if (!lapTime) return;
-      const parts = lapTime.split(':');
-      if (parts.length >= 2) {
-        const hours = parts.length === 3 ? parseInt(parts[0]) || 0 : 0;
-        const mins = parts.length === 3 ? parseInt(parts[1]) || 0 : parseInt(parts[0]) || 0;
-        const secsStr = parts.length === 3 ? parts[2] : parts[1];
-        const [secs, ms] = (secsStr || '0').split('.');
-        totalTimeMs += (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
-      }
-    });
-    
-    const isFinished = completedLaps >= numberOfLaps;
-    const isRacing = completedLaps > 0 && !isFinished;
-    
-    return { 
-      ...pilot,
-      completedLaps, 
-      totalTimeMs,
-      isFinished,
-      isRacing,
-      hasTime: completedLaps > 0,
-      sortTime: isFinished ? totalTimeMs : (isRacing ? totalTimeMs + 999999999 : Infinity)
-    };
-  });
-
-  // Sort: finished first (by time), then racing (by laps desc, time asc), then not started
-  pilotData.sort((a, b) => {
-    // Both finished - sort by total time
-    if (a.isFinished && b.isFinished) return a.totalTimeMs - b.totalTimeMs;
-    // Finished comes before racing
-    if (a.isFinished && !b.isFinished) return -1;
-    if (!a.isFinished && b.isFinished) return 1;
-    // Both racing - sort by laps (desc), then time (asc)
-    if (a.isRacing && b.isRacing) {
-      if (b.completedLaps !== a.completedLaps) return b.completedLaps - a.completedLaps;
-      return a.totalTimeMs - b.totalTimeMs;
-    }
-    // Racing comes before not started
-    if (a.isRacing && !b.isRacing) return -1;
-    if (!a.isRacing && b.isRacing) return 1;
-    return 0;
-  });
-
-  return pilotData;
-};
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals } = useRally();
@@ -223,35 +168,60 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     // If a specific stage is selected
     if (selectedStageId && selectedStage) {
       if (isLapRaceStageType(selectedStage.type)) {
-        // Lap Race leaderboard
-        return calculateLapRaceLeaderboard(pilots, selectedStageId, lapTimes, stagePilots, selectedStage.numberOfLaps || 5);
+        return buildLapRaceLeaderboard({
+          pilots,
+          stage: selectedStage,
+          lapTimes,
+          stagePilots,
+          startTimes,
+          times,
+          retiredStages,
+          now: sceneNow,
+          timeDecimals,
+          fallbackOrderByPilotId: displayOrderByPilotId
+        }).map((entry) => ({
+          ...entry.pilot,
+          completedLaps: entry.completedLaps,
+          totalLaps: entry.totalLaps,
+          totalTimeMs: entry.totalTimeMs,
+          totalTimeText: entry.totalTimeText,
+          position: entry.position,
+          hasTime: entry.hasTime,
+          isFinished: entry.isFinished,
+          isRacing: entry.isRacing,
+          isRetired: entry.retired,
+          retired: entry.retired,
+          status: entry.status,
+          sortTime: entry.sortTime,
+          displayText: entry.displayText
+        }));
       } else if (isSpecialStageType(selectedStage.type)) {
         // Single special stage leaderboard
         return sortByRetirementAndTime(pilots.map(pilot => {
-          const startTime = startTimes[pilot.id]?.[selectedStageId] || '';
-          const finishTime = times[pilot.id]?.[selectedStageId] || '';
-          const retired = !!retiredStages?.[pilot.id]?.[selectedStageId];
-          const timeInfo = startInformationTime({
+          const stageTimingInfo = getPilotStageTimingInfo({
             pilotId: pilot.id,
-            stageId: selectedStageId,
+            pilot,
+            stage: selectedStage,
             startTimes,
             times,
             retiredStages,
-            stageDate: selectedStage.date,
             now: sceneNow,
-            decimals: timeDecimals,
+            timeDecimals,
             startLabel: t('status.start'),
             retiredLabel: t('status.retired')
           });
+          const startTime = stageTimingInfo.startTime || '';
+          const finishTime = stageTimingInfo.finishTime || '';
+          const retired = !!stageTimingInfo.retired;
           const stageStartDateTime = getStageDateTime(selectedStage.date, startTime);
           const status = finishTime
             ? 'finished'
             : retired
               ? 'retired'
-              : timeInfo.status === 'racing'
+              : stageTimingInfo.status === 'racing'
                 ? 'racing'
                 : 'not_started';
-          const displayTime = timeInfo.text || '-';
+          const displayTime = stageTimingInfo.displayText || '-';
           const timeColor = status === 'retired'
             ? 'text-red-400'
             : status === 'finished'
@@ -278,7 +248,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           return {
             ...pilot,
             displayTime,
-            timeInfo,
+            timeInfo: stageTimingInfo,
             timeColor,
             sortTime,
             overallTime,
@@ -325,7 +295,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         isRetired
       };
     }));
-  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, referenceSpecialStage, timeDecimals, displayOrderByPilotId, sceneNow, t]);
+  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, referenceSpecialStage, ssStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t]);
 
   const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
   const leaderboardStatusItems = useMemo(() => (
@@ -333,7 +303,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       ...pilot,
       key: pilot.id,
       statusKey: isLapRaceSelected
-        ? (pilot.isFinished ? 'finished' : (pilot.isRacing ? 'racing' : 'not_started'))
+        ? (pilot.isRetired ? 'retired' : (pilot.isFinished ? 'finished' : (pilot.isRacing ? 'racing' : 'not_started')))
         : (pilot.isRetired ? 'retired' : (pilot.status || (pilot.hasTime ? 'finished' : 'not_started')))
     }))
   ), [isLapRaceSelected, leaderboard]);
@@ -495,13 +465,13 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 let gap = '-';
                 if (displayLeader && pilot.id !== displayLeader.id && pilot.hasTime) {
                   if (isLapRaceSelected) {
-                    if (pilot.isFinished && displayLeader.isFinished) {
-                      const gapMs = pilot.totalTimeMs - displayLeader.totalTimeMs;
-                      gap = '+' + formatDurationMs(gapMs, timeDecimals);
-                    } else if (pilot.isRacing || pilot.isFinished) {
+                    if (pilot.isRacing || pilot.isFinished) {
                       const lapDiff = (displayLeader.completedLaps || 0) - (pilot.completedLaps || 0);
                       if (lapDiff > 0) {
                         gap = `+${lapDiff} ${t('scene3.laps').toLowerCase()}`;
+                      } else if (displayLeader.totalTimeMs && pilot.totalTimeMs) {
+                        const gapMs = pilot.totalTimeMs - displayLeader.totalTimeMs;
+                        gap = '+' + formatDurationMs(gapMs, timeDecimals);
                       }
                     }
                   } else {
@@ -603,6 +573,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                       <>
                         <td className="p-4 text-center">
                           <span className={`text-xl font-mono ${
+                            pilot.isRetired ? 'text-red-400' :
                             pilot.isFinished ? 'text-[#22C55E]' : 
                             pilot.isRacing ? 'text-[#FACC15]' : 
                             'text-zinc-500'
@@ -612,6 +583,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                         </td>
                         <td className="p-4 text-right">
                           <span className={`text-2xl font-mono ${
+                            pilot.isRetired ? 'text-red-400' :
                             pilot.isFinished ? 'text-[#22C55E]' : 
                             pilot.isRacing ? 'text-[#FACC15]' : 
                             'text-zinc-500'
