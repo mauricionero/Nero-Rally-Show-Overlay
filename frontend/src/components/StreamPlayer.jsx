@@ -73,93 +73,21 @@ const getStreamProvider = (streamUrl) => {
   return 'generic';
 };
 
-const normalizeLoudnessValue = (value) => {
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-
-  if (value <= 0) {
-    return Math.max(0, Math.min(1, (value + 80) / 80));
-  }
-
-  if (value <= 1) {
-    return value;
-  }
-
-  if (value <= 100) {
-    return value / 100;
-  }
-
-  return Math.max(0, Math.min(1, value / 255));
-};
-
-const collectNumericValues = (value) => {
-  if (Array.isArray(value)) {
-    return value.flatMap(collectNumericValues);
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.values(value).flatMap(collectNumericValues);
-  }
-
-  return Number.isFinite(value) ? [value] : [];
-};
-
-const extractLoudnessLevels = (payload) => {
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-
-  const leftCandidates = [
-    payload.left,
-    payload.l,
-    payload.leftLevel,
-    payload.leftRms,
-    payload.leftPeak
-  ];
-  const rightCandidates = [
-    payload.right,
-    payload.r,
-    payload.rightLevel,
-    payload.rightRms,
-    payload.rightPeak
-  ];
-
-  const left = leftCandidates.map(normalizeLoudnessValue).find((value) => value !== null);
-  const right = rightCandidates.map(normalizeLoudnessValue).find((value) => value !== null);
-
-  if (left !== undefined && left !== null && right !== undefined && right !== null) {
-    return { left, right };
-  }
-
-  const fallbackValues = collectNumericValues(payload)
-    .map(normalizeLoudnessValue)
-    .filter((value) => value !== null);
-
-  if (fallbackValues.length === 0) {
-    return null;
-  }
-
-  const averageLevel = fallbackValues.reduce((sum, value) => sum + value, 0) / fallbackValues.length;
-  return { left: averageLevel, right: averageLevel };
-};
-
 export const StreamPlayer = ({ 
   pilotId, 
   streamUrl, 
   name, 
   className = '', 
   showControls = false,
-  showMeter = false, // Show VDO.Ninja built-in audio meter
   showMuteIndicator = true, // Show/hide the mute icon
   forceUnmute = false, // Force unmute (for inline expanded streams)
-  forceMute = false, // Force mute (for small preview streams)
-  size = 'normal', // 'small', 'normal', 'large'
-  onAudioLevelsChange = null
+  forceMute = false // Force mute (for small preview streams)
 }) => {
   const { getStreamConfig, streamConfigs, globalAudio } = useRally();
   const iframeRef = useRef(null);
   const youtubePlayerRef = useRef(null);
+  const effectiveVolumeRef = useRef(0);
+  const isEffectivelyMutedRef = useRef(false);
   
   // Get the current stream config
   const config = getStreamConfig(pilotId);
@@ -174,6 +102,8 @@ export const StreamPlayer = ({
   
   // Calculate effective volume (individual * global)
   const effectiveVolume = Math.round((config.volume / 100) * (globalAudio.volume / 100) * 100);
+  effectiveVolumeRef.current = effectiveVolume;
+  isEffectivelyMutedRef.current = isEffectivelyMuted;
   
   // Build CSS filter string for video adjustments
   const filterStyle = {
@@ -191,6 +121,16 @@ export const StreamPlayer = ({
     try {
       const url = new URL(streamUrl);
 
+      if (supportsVdoIframeApi) {
+        url.searchParams.set('cleanoutput', '1');
+        url.searchParams.set('cleanviewer', '1');
+
+        if (!showControls) {
+          url.searchParams.set('nomouseevents', '1');
+          url.searchParams.set('nocursor', '1');
+        }
+      }
+
       if (supportsYouTubeIframeApi) {
         url.searchParams.set('enablejsapi', '1');
 
@@ -199,62 +139,11 @@ export const StreamPlayer = ({
         }
       }
 
-      if (supportsVdoIframeApi && showMeter) {
-        url.searchParams.set('meter', '1');
-      }
-
-      if (supportsVdoIframeApi && onAudioLevelsChange) {
-        url.searchParams.set('pushloudness', '1');
-      }
-
       return url.toString();
     } catch {
       return streamUrl;
     }
-  }, [streamUrl, showMeter, onAudioLevelsChange, supportsVdoIframeApi, supportsYouTubeIframeApi]);
-
-  useEffect(() => {
-    if (!supportsVdoIframeApi || !onAudioLevelsChange || !streamUrl) {
-      return undefined;
-    }
-
-    const handleMessage = (event) => {
-      if (event.source !== iframeRef.current?.contentWindow) {
-        return;
-      }
-
-      if (event.data?.action !== 'loudness' || !event.data.loudness) {
-        return;
-      }
-
-      const nextLevels = extractLoudnessLevels(event.data.loudness);
-      if (nextLevels) {
-        onAudioLevelsChange(nextLevels);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [onAudioLevelsChange, streamUrl, supportsVdoIframeApi]);
-
-  useEffect(() => {
-    if (!onAudioLevelsChange) {
-      return undefined;
-    }
-
-    onAudioLevelsChange(null);
-
-    return () => {
-      onAudioLevelsChange(null);
-      if (supportsVdoIframeApi) {
-        try {
-          iframeRef.current?.contentWindow?.postMessage({ getLoudness: false }, '*');
-        } catch {
-          // Ignore postMessage cleanup failures
-        }
-      }
-    };
-  }, [onAudioLevelsChange, streamUrl, supportsVdoIframeApi]);
+  }, [showControls, streamUrl, supportsVdoIframeApi, supportsYouTubeIframeApi]);
 
   useEffect(() => {
     if (!supportsYouTubeIframeApi || !streamUrl || !iframeRef.current) {
@@ -276,11 +165,11 @@ export const StreamPlayer = ({
                 return;
               }
 
-              if (isEffectivelyMuted) {
+              if (isEffectivelyMutedRef.current) {
                 youtubePlayerRef.current.mute();
               } else {
                 youtubePlayerRef.current.unMute();
-                youtubePlayerRef.current.setVolume(effectiveVolume);
+                youtubePlayerRef.current.setVolume(effectiveVolumeRef.current);
               }
             }
           }
@@ -378,15 +267,6 @@ export const StreamPlayer = ({
             }
           }
 
-          if (!supportsVdoIframeApi || !onAudioLevelsChange) {
-            return;
-          }
-
-          try {
-            iframeRef.current?.contentWindow?.postMessage({ getLoudness: true }, '*');
-          } catch {
-            // Ignore postMessage failures on initial load
-          }
         }}
       />
       {isEffectivelyMuted && showMuteIndicator && (

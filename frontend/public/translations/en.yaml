@@ -305,6 +305,9 @@ debug:
   activeDate: "Active Debug Date"
   usingRealDate: "Using real current date"
   syncNote: "This value is saved locally and synced by WebSocket, but it is not included in exports."
+  latestSnapshotKnown: "Latest Snapshot Known"
+  lastSnapshotGeneratedAt: "Last Snapshot Generated At"
+  lastSnapshotGotAt: "Last Snapshot Got At"
 
 # ===========================================
 # OVERLAY PAGE - SCENES
@@ -415,6 +418,15 @@ status:
   sos: "SOS"
   sosLabel: "SOS"
   sosTooltip: "Manual SOS for this pilot in this stage. It has the potential to stop or interrupt the stage!"
+  sosIncomingTitle: "Incoming SOS"
+  sosIncomingDescription: "Acknowledge after the alert has been seen."
+  sosIncomingStage: "Stage"
+  confirmSosSeen: "Confirm Seen"
+  sosConfirmationNeedsConnection: "Reconnect to send the confirmation."
+  sosDeliverySending: "SOS sending..."
+  sosDeliverySent: "SOS sent."
+  sosDeliveryAcked: "SOS acknowledged."
+  sosDeliveryError: "SOS failed to send."
   info: "i"
   jumpStart: "⚡"
   start: "Start"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -16,13 +16,19 @@ export default function LiveSyncTab() {
     wsConnectionStatus,
     wsError,
     lastTimesSyncAt,
-    connectWebSocket,
-    disconnectWebSocket,
+    connectSyncChannel,
+    disconnectSyncChannel,
     generateNewChannelKey
   } = useRallyWs();
 
   const [copied, setCopied] = useState(false);
   const [newKey, setNewKey] = useState('');
+
+  useEffect(() => {
+    if (wsChannelKey && wsChannelKey !== newKey) {
+      setNewKey(wsChannelKey);
+    }
+  }, [newKey, wsChannelKey]);
 
   const handleGenerateKey = () => {
     const key = generateNewChannelKey();
@@ -35,7 +41,7 @@ export default function LiveSyncTab() {
       toast.error('Please generate or enter a channel key');
       return;
     }
-    const success = await connectWebSocket(newKey, { role: 'setup' });
+    const success = await connectSyncChannel(newKey, { role: 'setup' });
     if (success) {
       toast.success('Connected to WebSocket channel');
     } else {
@@ -125,7 +131,7 @@ export default function LiveSyncTab() {
                 Last times sync: {lastTimesSyncAt ? new Date(lastTimesSyncAt).toLocaleTimeString() : '--'}
               </div>
               <Button
-                onClick={disconnectWebSocket}
+                onClick={disconnectSyncChannel}
                 variant="destructive"
                 className="w-full"
               >

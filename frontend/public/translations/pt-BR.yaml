@@ -49,6 +49,13 @@ header:
   websocket: "Websocket"
   websocketSetupHint: "Conecte na aba Live sync > Live sync (websocket): gere uma chave, conecte e então este botão será habilitado."
   websocketReadyHint: "Abre o overlay com a chave ativa da conexão websocket."
+  ownershipTitle: "Propriedade do Setup"
+  ownershipStatus: "Status"
+  ownershipDescription: "O setup primária publica snapshots e controla o lease do heartbeat."
+  ownershipOwnerId: "ID do dono"
+  ownershipOffline: "Offline"
+  ownershipPrimary: "Primária"
+  ownershipReplica: "Réplica"
 
 # ===========================================
 # PÁGINA SETUP - ABAS
@@ -305,6 +312,9 @@ debug:
   activeDate: "Data Debug Ativa"
   usingRealDate: "Usando data atual real"
   syncNote: "Este valor e salvo localmente e sincronizado por WebSocket, mas nao entra na exportacao."
+  latestSnapshotKnown: "Ultimo Snapshot Conhecido"
+  lastSnapshotGeneratedAt: "Ultimo Snapshot Gerado Em"
+  lastSnapshotGotAt: "Ultimo Snapshot Recebido Em"
 
 # ===========================================
 # PÁGINA OVERLAY - CENAS
@@ -416,6 +426,15 @@ status:
   sos: "SOS"
   sosLabel: "SOS"
   sosTooltip: "SOS manual para esse piloto nesse estagio. Isso tem o potencial de parar ou interromper a etapa!"
+  sosIncomingTitle: "SOS recebido"
+  sosIncomingDescription: "Confirme depois de ver o alerta."
+  sosIncomingStage: "Etapa"
+  confirmSosSeen: "Confirmar visualizacao"
+  sosConfirmationNeedsConnection: "Reconecte para enviar a confirmacao."
+  sosDeliverySending: "Enviando SOS..."
+  sosDeliverySent: "SOS enviado."
+  sosDeliveryAcked: "SOS confirmado."
+  sosDeliveryError: "Falha ao enviar SOS."
   info: "i"
   jumpStart: "⚡"
   start: "Largada"

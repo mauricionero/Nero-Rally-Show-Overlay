@@ -5,9 +5,17 @@
  * a fully frontend application.
  * 
  * Key format: 1-{channelId} (keeping prefix for future extensibility)
+ * 
+ * Channel layout:
+ * - rally-data:{channelId}
+ * - rally-snapshots:{channelId}
+ * - rally-telemetry:{channelId}
+ * - rally-priority:{channelId}
  */
 
 import Ably from 'ably';
+import { isTransportDebugEnabled } from './debugFlags.js';
+import SyncConnectionService from './sync/SyncConnectionService.js';
 
 // Provider identifier (keeping for future extensibility)
 export const PROVIDER_ID = '1';
@@ -40,6 +48,121 @@ export const parseChannelKey = (fullKey) => {
   return { valid: true, channelId };
 };
 
+const normalizeIncomingEnvelope = (data, channelType, channelName) => {
+  let normalizedData = data;
+
+  if (typeof normalizedData === 'string') {
+    try {
+      normalizedData = JSON.parse(normalizedData);
+    } catch (error) {
+      return {
+        raw: data,
+        channelType,
+        channelName
+      };
+    }
+  }
+
+  if (normalizedData && typeof normalizedData === 'object' && !Array.isArray(normalizedData)) {
+    return {
+      ...normalizedData,
+      channelType,
+      channelName
+    };
+  }
+
+  return {
+    value: normalizedData,
+    channelType,
+    channelName
+  };
+};
+
+const getHistoryMessageData = (message) => {
+  const data = message?.data;
+
+  if (!data || typeof data !== 'string') {
+    return (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+  }
+
+  try {
+    const parsed = JSON.parse(data);
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+};
+
+const getLogChannelLabel = (channelType) => {
+  switch (String(channelType || '').trim()) {
+    case 'snapshots':
+      return 'snapshots';
+    case 'telemetry':
+      return 'telemetry';
+    case 'priority':
+      return 'priority';
+    default:
+      return 'data';
+  }
+};
+
+const getLogMessageLabel = (data = {}) => {
+  const messageType = String(data?.messageType || '').trim();
+  const packageType = String(data?.packageType || '').trim();
+  const controlType = String(data?.controlType || '').trim();
+  const originalMessageType = String(data?.originalMessageType || '').trim();
+  const snapshotKind = String(data?.snapshotKind || '').trim();
+  const payload = data?.payload && typeof data.payload === 'object' ? data.payload : null;
+  const payloadKeys = payload ? Object.keys(payload) : [];
+
+  if (messageType === 'ownership-heartbeat') {
+    return 'heartbeat';
+  }
+
+  if (messageType === 'ownership-claim') {
+    return 'ownership-claim';
+  }
+
+  if (messageType === 'ownership-release') {
+    return 'ownership-release';
+  }
+
+  if (messageType === 'pilot-telemetry' || payloadKeys.includes('pilotTelemetry')) {
+    return 'telemetry';
+  }
+
+  if (packageType === 'control' && controlType) {
+    return controlType;
+  }
+
+  if (packageType === 'snapshot' || originalMessageType === 'full-snapshot') {
+    return snapshotKind || 'snapshot';
+  }
+
+  if (payloadKeys.includes('stageSos')) {
+    return 'sos';
+  }
+
+  if (payloadKeys.length === 1) {
+    return String(payloadKeys[0] || 'data');
+  }
+
+  if (messageType === 'delta-batch') {
+    return 'data';
+  }
+
+  return messageType || 'data';
+};
+
+const buildWebSocketLogPrefix = (direction, eventName, channelType, data) => {
+  const emoji = direction === 'send'
+    ? '⬆️'
+    : direction === 'echo'
+      ? '🪞'
+      : '⬇️';
+  return `[WebSocket][${emoji}][${eventName}][${getLogChannelLabel(channelType)}][${getLogMessageLabel(data)}]`;
+};
+
 /**
  * WebSocket Provider Class - Ably Implementation
  */
@@ -47,33 +170,495 @@ class WebSocketProvider {
   constructor() {
     this.client = null;
     this.channel = null;
+    this.dataChannel = null;
+    this.snapshotChannel = null;
+    this.telemetryChannel = null;
+    this.priorityChannel = null;
     this.channelId = null;
+    this.channelNames = {
+      data: null,
+      snapshots: null,
+      telemetry: null,
+      priority: null
+    };
     this.onMessageCallback = null;
     this.onStatusCallback = null;
-    this.onSnapshotRequestCallback = null;
-    this.onTimesSyncRequestCallback = null;
-    this.onTimesLineRequestCallback = null;
-    this.onTimesLineResponseCallback = null;
     this.onReceiveActivityCallback = null;
     this.onSendActivityCallback = null;
+    this.onSendMessageCallback = null;
+    this.onEchoMessageCallback = null;
+    this.channelSubscriptions = [];
     this.isConnected = false;
     this.connectionState = 'disconnected';
     this.historyBootstrapLoadedSnapshot = false;
-    this.historyBootstrapNeedsSnapshot = false;
+    this.waitingForSnapshotBootstrap = false;
+    this.bootstrapState = {
+      mode: 'none',
+      messages: [],
+      snapshotMessages: [],
+      priorityMessages: [],
+      snapshotTimestamp: 0,
+      snapshotVersion: 0,
+      historyComplete: false,
+      hasSnapshotBootstrap: false
+    };
+    this.lastProjectMarker = null;
+    this.needsRecoveryAfterReconnect = false;
+    this.connectionService = null;
   }
 
-  async loadChannelHistory(limit = 50) {
-    if (!this.channel) {
+  getChannelNames(channelId = this.channelId) {
+    if (!channelId) {
+      return {
+        data: null,
+        snapshots: null,
+        telemetry: null,
+        priority: null
+      };
+    }
+
+    return {
+      data: `rally-data:${channelId}`,
+      snapshots: `rally-snapshots:${channelId}`,
+      telemetry: `rally-telemetry:${channelId}`,
+      priority: `rally-priority:${channelId}`
+    };
+  }
+
+  async loadChannelHistory(limit = 50, channel = this.channel) {
+    if (!channel) {
       return [];
     }
 
     try {
-      const history = await this.channel.history({ limit, direction: 'backwards' });
+      const history = await channel.history({ limit, direction: 'backwards' });
       return Array.isArray(history?.items) ? history.items : [];
     } catch (error) {
       console.warn('[WebSocket] Failed to load channel history:', error);
       return [];
     }
+  }
+
+  getMessageTimestamp(message) {
+    const messageData = getHistoryMessageData(message);
+    const payloadTimestamp = Number(messageData?.timestamp || 0);
+    const transportTimestamp = Number(message?.timestamp || 0);
+    return Math.max(payloadTimestamp, transportTimestamp, 0);
+  }
+
+  isUpdateHistoryMessage(message) {
+    return message?.name === 'update';
+  }
+
+  isSnapshotBatchMessage(message) {
+    const messageData = getHistoryMessageData(message);
+    return (
+      this.isUpdateHistoryMessage(message)
+      && messageData?.messageType === 'delta-batch'
+      && messageData?.packageType === 'snapshot'
+    );
+  }
+
+  getMessageOrderParts(message) {
+    const messageData = getHistoryMessageData(message);
+    return {
+      timestamp: this.getMessageTimestamp(message),
+      snapshotId: String(messageData?.snapshotId || '').trim(),
+      partIndex: Number.isFinite(messageData?.partIndex) ? Number(messageData.partIndex) : 0
+    };
+  }
+
+  isMessageAfterMarker(message, marker = null) {
+    if (!marker) {
+      return true;
+    }
+
+    const messageParts = this.getMessageOrderParts(message);
+    const markerTimestamp = Number(marker?.timestamp || 0);
+    const markerSnapshotId = String(marker?.snapshotId || '').trim();
+    const markerPartIndex = Number.isFinite(marker?.partIndex) ? Number(marker.partIndex) : 0;
+
+    if (messageParts.timestamp > markerTimestamp) {
+      return true;
+    }
+
+    if (messageParts.timestamp < markerTimestamp) {
+      return false;
+    }
+
+    if (markerSnapshotId) {
+      if (messageParts.snapshotId !== markerSnapshotId) {
+        return messageParts.snapshotId > markerSnapshotId;
+      }
+      return messageParts.partIndex > markerPartIndex;
+    }
+
+    return messageParts.partIndex > markerPartIndex;
+  }
+
+  getBootstrapState() {
+    return {
+      ...this.bootstrapState,
+      messages: Array.isArray(this.bootstrapState?.messages) ? [...this.bootstrapState.messages] : [],
+      snapshotMessages: Array.isArray(this.bootstrapState?.snapshotMessages) ? [...this.bootstrapState.snapshotMessages] : [],
+      priorityMessages: Array.isArray(this.bootstrapState?.priorityMessages) ? [...this.bootstrapState.priorityMessages] : []
+    };
+  }
+
+  shouldTrackProjectMarker(details = {}) {
+    const channelType = String(details?.channelType || '').trim();
+    if (!details || channelType === 'telemetry') {
+      return false;
+    }
+
+    const packageType = String(details?.packageType || '').trim();
+    const messageType = String(details?.messageType || '').trim();
+    if (
+      messageType === 'ownership-heartbeat'
+      || messageType === 'ownership-claim'
+      || messageType === 'ownership-release'
+    ) {
+      return false;
+    }
+    return (
+      packageType === 'snapshot'
+      || packageType === 'delta'
+      || packageType === 'control'
+      || channelType === 'data'
+      || channelType === 'snapshots'
+      || channelType === 'priority'
+    );
+  }
+
+  updateProjectMarker(details = {}) {
+    if (!this.shouldTrackProjectMarker(details)) {
+      return;
+    }
+
+    const timestamp = Number(details?.timestamp || Date.now());
+    const partIndex = Number.isFinite(details?.partIndex) ? Number(details.partIndex) : 0;
+    this.lastProjectMarker = {
+      timestamp,
+      snapshotId: String(details?.snapshotId || '').trim(),
+      partIndex,
+      channelType: String(details?.channelType || '').trim() || null,
+      channelName: String(details?.channelName || '').trim() || null,
+      messageType: String(details?.messageType || '').trim() || null,
+      packageType: String(details?.packageType || '').trim() || null,
+      controlType: String(details?.controlType || '').trim() || null,
+      section: String(details?.section || '').trim() || null
+    };
+  }
+
+  hasChannelSubscription(channelType) {
+    return this.channelSubscriptions.some((subscription) => (
+      (channelType === 'data' && subscription.channel === this.dataChannel)
+      || (channelType === 'snapshots' && subscription.channel === this.snapshotChannel)
+      || (channelType === 'telemetry' && subscription.channel === this.telemetryChannel)
+      || (channelType === 'priority' && subscription.channel === this.priorityChannel)
+    ));
+  }
+
+  async dispatchMessagesInChunks(messages = [], mapper = (message) => message, source = 'history', batchSize = 25) {
+    const safeMessages = Array.isArray(messages) ? messages : [];
+
+    for (let index = 0; index < safeMessages.length; index += batchSize) {
+      const chunk = safeMessages.slice(index, index + batchSize);
+
+      chunk.forEach((message) => {
+        const routedData = mapper(message);
+        this.notifyReceive('update', Number(message?.timestamp || Date.now()), source, routedData);
+        this.onMessageCallback?.(routedData);
+      });
+
+      if (index + batchSize < safeMessages.length) {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+    }
+  }
+
+  async loadBootstrapHistory(options = {}) {
+    const dataChannel = this.dataChannel || this.channel;
+    const snapshotChannel = this.snapshotChannel || this.channel;
+    const priorityChannel = this.priorityChannel || null;
+
+    if (!dataChannel && !snapshotChannel && !priorityChannel) {
+      this.bootstrapState = {
+        mode: 'none',
+        messages: [],
+        snapshotMessages: [],
+        priorityMessages: [],
+        snapshotTimestamp: 0,
+        snapshotVersion: 0,
+        historyComplete: false,
+        hasSnapshotBootstrap: false
+      };
+      return {
+        messages: [],
+        snapshotMessages: [],
+        priorityMessages: [],
+        snapshotTimestamp: 0,
+        snapshotVersion: 0,
+        historyComplete: false,
+        hasSnapshotBootstrap: false,
+        mode: 'none'
+      };
+    }
+
+    const pageSize = Number(options.limit || 250);
+    const maxPages = Number.isFinite(Number(options.maxPages))
+      ? Number(options.maxPages)
+      : Number.POSITIVE_INFINITY;
+    const requireSnapshotBootstrap = options.requireSnapshotBootstrap === true;
+    const lastReceivedAt = Number(options.lastReceivedAt || 0);
+    const lastReceivedMarker = options.lastReceivedMarker && typeof options.lastReceivedMarker === 'object'
+      ? options.lastReceivedMarker
+      : null;
+    const snapshotStalenessMs = Number(options.snapshotStalenessMs || (5 * 60 * 1000));
+    const shouldUseSnapshot = requireSnapshotBootstrap || !Number.isFinite(lastReceivedAt) || lastReceivedAt <= 0
+      ? true
+      : (Date.now() - lastReceivedAt) > snapshotStalenessMs;
+    const boundaryMarker = lastReceivedMarker || (lastReceivedAt > 0 ? { timestamp: lastReceivedAt, partIndex: 0 } : null);
+
+    const latestSnapshotMeta = snapshotChannel
+      ? await snapshotChannel.history({ limit: 50, direction: 'backwards' })
+      : null;
+    const latestSnapshotItems = Array.isArray(latestSnapshotMeta?.items) ? latestSnapshotMeta.items : [];
+    const latestSnapshotMessage = latestSnapshotItems.find((message) => this.isSnapshotBatchMessage(message)) || null;
+    const latestSnapshotData = latestSnapshotMessage ? getHistoryMessageData(latestSnapshotMessage) : {};
+    const latestAvailableSnapshotTimestamp = latestSnapshotMessage ? this.getMessageTimestamp(latestSnapshotMessage) : 0;
+    const latestAvailableSnapshotVersion = Number(latestSnapshotData?.snapshotVersion || 0);
+
+    const loadPagedHistory = async (channel, stopWhen) => {
+      const collected = [];
+      let page = await channel.history({ limit: pageSize, direction: 'backwards' });
+      let pageCount = 0;
+
+      while (page) {
+        const items = Array.isArray(page?.items) ? page.items : [];
+        collected.push(...items);
+        pageCount += 1;
+
+        if (stopWhen?.(collected, items, page, pageCount) === true) {
+          break;
+        }
+
+        if (!page.hasNext() || pageCount >= maxPages) {
+          break;
+        }
+
+        page = await page.next();
+      }
+
+      return collected;
+    };
+
+    const snapshotCollected = shouldUseSnapshot && snapshotChannel
+      ? await loadPagedHistory(snapshotChannel, (collected) => {
+          const snapshotItems = collected.filter((message) => this.isSnapshotBatchMessage(message));
+          if (snapshotItems.length === 0) {
+            return false;
+          }
+
+          const latestSnapshotTimestamp = Math.max(...snapshotItems.map((message) => this.getMessageTimestamp(message)));
+          const oldestLoadedTimestamp = Math.min(
+            ...collected.map((message) => this.getMessageTimestamp(message)).filter((value) => Number.isFinite(value) && value > 0)
+          );
+
+          return Number.isFinite(oldestLoadedTimestamp) && oldestLoadedTimestamp > 0 && oldestLoadedTimestamp < latestSnapshotTimestamp;
+        })
+      : [];
+
+    const snapshotMessages = shouldUseSnapshot
+      ? snapshotCollected
+        .filter((message) => this.isSnapshotBatchMessage(message))
+        .sort((a, b) => {
+          const aTimestamp = this.getMessageTimestamp(a);
+          const bTimestamp = this.getMessageTimestamp(b);
+          if (aTimestamp !== bTimestamp) return aTimestamp - bTimestamp;
+          const aIndex = Number.isFinite(a?.data?.partIndex) ? a.data.partIndex : 0;
+          const bIndex = Number.isFinite(b?.data?.partIndex) ? b.data.partIndex : 0;
+          if (aIndex !== bIndex) return aIndex - bIndex;
+          return String(a?.id || '').localeCompare(String(b?.id || ''));
+        })
+      : [];
+
+    const snapshotTimestamp = snapshotMessages.length > 0
+      ? Math.max(...snapshotMessages.map((message) => this.getMessageTimestamp(message)))
+      : latestAvailableSnapshotTimestamp;
+
+    if (requireSnapshotBootstrap && snapshotMessages.length === 0) {
+      this.bootstrapState = {
+        mode: 'await-snapshot',
+        messages: [],
+        snapshotMessages: [],
+        priorityMessages: [],
+        snapshotTimestamp: 0,
+        snapshotVersion: 0,
+        historyComplete: false,
+        hasSnapshotBootstrap: false
+      };
+
+      if (isTransportDebugEnabled()) {
+        console.debug('[WebSocket][RX][bootstrap] Waiting for snapshot bootstrap', {
+          shouldUseSnapshot,
+          requireSnapshotBootstrap,
+          totalReadCount: snapshotCollected.length,
+          snapshotHistoryReadCount: snapshotCollected.length
+        });
+      }
+
+      return {
+        messages: [],
+        snapshotMessages: [],
+        priorityMessages: [],
+        snapshotTimestamp: 0,
+        snapshotVersion: 0,
+        historyComplete: false,
+        hasSnapshotBootstrap: false,
+        mode: 'await-snapshot'
+      };
+    }
+
+    const dataCollected = dataChannel
+      ? await loadPagedHistory(dataChannel, (collected) => {
+          const oldestLoadedTimestamp = Math.min(
+            ...collected.map((message) => this.getMessageTimestamp(message)).filter((value) => Number.isFinite(value) && value > 0)
+          );
+
+          if (shouldUseSnapshot) {
+            return snapshotTimestamp > 0 && Number.isFinite(oldestLoadedTimestamp) && oldestLoadedTimestamp > 0 && oldestLoadedTimestamp < snapshotTimestamp;
+          }
+
+          return boundaryMarker
+            && Number.isFinite(oldestLoadedTimestamp)
+            && oldestLoadedTimestamp > 0
+            && oldestLoadedTimestamp <= Number(boundaryMarker.timestamp || 0);
+        })
+      : [];
+
+    const priorityCollected = priorityChannel
+      ? await loadPagedHistory(priorityChannel, (collected) => {
+          const oldestLoadedTimestamp = Math.min(
+            ...collected.map((message) => this.getMessageTimestamp(message)).filter((value) => Number.isFinite(value) && value > 0)
+          );
+
+          if (shouldUseSnapshot) {
+            return snapshotTimestamp > 0 && Number.isFinite(oldestLoadedTimestamp) && oldestLoadedTimestamp > 0 && oldestLoadedTimestamp < snapshotTimestamp;
+          }
+
+          return boundaryMarker
+            && Number.isFinite(oldestLoadedTimestamp)
+            && oldestLoadedTimestamp > 0
+            && oldestLoadedTimestamp <= Number(boundaryMarker.timestamp || 0);
+        })
+      : [];
+
+    const updateMessages = dataCollected.filter((message) => this.isUpdateHistoryMessage(message));
+    const selectedSnapshotData = snapshotMessages.length > 0
+      ? getHistoryMessageData(snapshotMessages[0])
+      : latestSnapshotData;
+    const snapshotVersion = Number(selectedSnapshotData?.snapshotVersion || latestAvailableSnapshotVersion || 0);
+    const selectedSnapshotId = String(selectedSnapshotData?.snapshotId || '').trim();
+    const selectedSnapshotIdentity = snapshotVersion > 0
+      ? { type: 'version', value: snapshotVersion }
+      : selectedSnapshotId
+        ? { type: 'id', value: selectedSnapshotId }
+        : snapshotTimestamp > 0
+          ? { type: 'timestamp', value: snapshotTimestamp }
+          : { type: 'none', value: null };
+
+    const messages = updateMessages
+      .filter((message) => {
+        if (shouldUseSnapshot) {
+          if (this.isSnapshotBatchMessage(message)) {
+            if (snapshotMessages.length === 0) {
+              return false;
+            }
+
+            if (selectedSnapshotIdentity.type === 'version') {
+              return Number(getHistoryMessageData(message)?.snapshotVersion || 0) !== selectedSnapshotIdentity.value;
+            }
+
+            if (selectedSnapshotIdentity.type === 'id') {
+              return String(getHistoryMessageData(message)?.snapshotId || '').trim() !== selectedSnapshotIdentity.value;
+            }
+
+            return this.getMessageTimestamp(message) !== selectedSnapshotIdentity.value;
+          }
+
+          if (snapshotTimestamp > 0) {
+            return this.getMessageTimestamp(message) > snapshotTimestamp;
+          }
+
+          return true;
+        }
+
+        return this.isMessageAfterMarker(message, boundaryMarker);
+      })
+      .sort((a, b) => {
+        const aTimestamp = this.getMessageTimestamp(a);
+        const bTimestamp = this.getMessageTimestamp(b);
+        if (aTimestamp !== bTimestamp) return aTimestamp - bTimestamp;
+        const aIndex = Number.isFinite(a?.data?.partIndex) ? a.data.partIndex : 0;
+        const bIndex = Number.isFinite(b?.data?.partIndex) ? b.data.partIndex : 0;
+        if (aIndex !== bIndex) return aIndex - bIndex;
+        return String(a?.id || '').localeCompare(String(b?.id || ''));
+      });
+
+    const priorityMessages = priorityCollected
+      .filter((message) => this.isUpdateHistoryMessage(message))
+      .filter((message) => (
+        shouldUseSnapshot
+          ? this.getMessageTimestamp(message) > snapshotTimestamp
+          : this.isMessageAfterMarker(message, boundaryMarker)
+      ))
+      .sort((a, b) => {
+        const aTimestamp = this.getMessageTimestamp(a);
+        const bTimestamp = this.getMessageTimestamp(b);
+        if (aTimestamp !== bTimestamp) return aTimestamp - bTimestamp;
+        const aIndex = Number.isFinite(a?.data?.partIndex) ? a.data.partIndex : 0;
+        const bIndex = Number.isFinite(b?.data?.partIndex) ? b.data.partIndex : 0;
+        if (aIndex !== bIndex) return aIndex - bIndex;
+        return String(a?.id || '').localeCompare(String(b?.id || ''));
+      });
+
+    this.bootstrapState = {
+      mode: shouldUseSnapshot && snapshotMessages.length > 0 ? 'snapshot' : 'replay',
+      messages,
+      snapshotMessages,
+      priorityMessages,
+      snapshotTimestamp,
+      snapshotVersion,
+      historyComplete: true,
+      hasSnapshotBootstrap: snapshotMessages.length > 0
+    };
+
+    if (isTransportDebugEnabled()) {
+      console.debug('[WebSocket][RX][bootstrap] History applied', {
+        mode: this.bootstrapState.mode,
+        shouldUseSnapshot,
+        totalReadCount: dataCollected.length + snapshotCollected.length + priorityCollected.length,
+        snapshotHistoryReadCount: snapshotCollected.length,
+        usedSnapshotCount: snapshotMessages.length,
+        usedReplayCount: messages.length,
+        usedPriorityCount: priorityMessages.length,
+        droppedCount: Math.max(0, (dataCollected.length + snapshotCollected.length + priorityCollected.length) - snapshotMessages.length - messages.length - priorityMessages.length),
+        snapshotTimestamp,
+        snapshotVersion
+      });
+    }
+
+    return {
+      messages,
+      snapshotMessages,
+      priorityMessages,
+      snapshotTimestamp,
+      snapshotVersion,
+      historyComplete: true,
+      hasSnapshotBootstrap: snapshotMessages.length > 0,
+      mode: shouldUseSnapshot && snapshotMessages.length > 0 ? 'snapshot' : 'replay'
+    };
   }
 
   /**
@@ -89,16 +674,34 @@ class WebSocketProvider {
     this.channelId = channelId;
     this.onMessageCallback = onMessage;
     this.onStatusCallback = onStatus;
-    this.onSnapshotRequestCallback = options.onSnapshotRequest || null;
-    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
-    this.onTimesLineRequestCallback = options.onTimesLineRequest || null;
-    this.onTimesLineResponseCallback = options.onTimesLineResponse || null;
-    this.onTimesSyncAckCallback = options.onTimesSyncAck || null;
-    this.onTimesSyncRequestCallback = options.onTimesSyncRequest || null;
     this.onReceiveActivityCallback = options.onReceiveActivity || null;
     this.onSendActivityCallback = options.onSendActivity || null;
+    this.onSendMessageCallback = options.onSendMessage || null;
+    this.onEchoMessageCallback = options.onEchoMessage || null;
+    if (this.client) {
+      this.disconnect();
+    }
     this.historyBootstrapLoadedSnapshot = false;
-    this.historyBootstrapNeedsSnapshot = false;
+    this.waitingForSnapshotBootstrap = false;
+    this.lastProjectMarker = options.lastReceivedMarker && typeof options.lastReceivedMarker === 'object'
+      ? {
+          ...options.lastReceivedMarker,
+          timestamp: Number(options.lastReceivedMarker?.timestamp || options.lastReceivedAt || 0)
+        }
+      : (Number(options.lastReceivedAt || 0) > 0
+        ? { timestamp: Number(options.lastReceivedAt || 0), partIndex: 0 }
+        : null);
+    this.needsRecoveryAfterReconnect = false;
+    this.bootstrapState = {
+      mode: 'none',
+      messages: [],
+      snapshotMessages: [],
+      priorityMessages: [],
+      snapshotTimestamp: 0,
+      snapshotVersion: 0,
+      historyComplete: false,
+      hasSnapshotBootstrap: false
+    };
 
     const apiKey = process.env.REACT_APP_ABLY_KEY;
     if (!apiKey) {
@@ -115,194 +718,76 @@ class WebSocketProvider {
           cb(true);
         }
       });
+      const activeClient = this.client;
       
       // Wait for connection
       await new Promise((resolve, reject) => {
+        const settle = (fn, value) => {
+          clearTimeout(timeout);
+          activeClient.connection.off?.('connected', handleConnected);
+          activeClient.connection.off?.('failed', handleFailed);
+          fn(value);
+        };
+
+        const handleConnected = () => {
+          if (this.client !== activeClient) {
+            return;
+          }
+          settle(resolve);
+        };
+
+        const handleFailed = (stateChange) => {
+          if (this.client !== activeClient) {
+            return;
+          }
+          settle(reject, new Error(stateChange.reason?.message || 'Connection failed'));
+        };
+
         const timeout = setTimeout(() => {
+          activeClient.connection.off?.('connected', handleConnected);
+          activeClient.connection.off?.('failed', handleFailed);
           reject(new Error('Connection timeout'));
         }, 15000);
-        
-        this.client.connection.on('connected', () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-        
-        this.client.connection.on('failed', (stateChange) => {
-          clearTimeout(timeout);
-          reject(new Error(stateChange.reason?.message || 'Connection failed'));
-        });
+
+        if (activeClient.connection.state === 'connected') {
+          settle(resolve);
+          return;
+        }
+
+        if (activeClient.connection.state === 'failed') {
+          settle(reject, new Error(activeClient.connection.errorReason?.message || 'Connection failed'));
+          return;
+        }
+
+        activeClient.connection.on('connected', handleConnected);
+        activeClient.connection.on('failed', handleFailed);
       });
 
-      // Subscribe to channel
-      this.channel = this.client.channels.get(`rally-${channelId}`);
+      const channelNames = this.getChannelNames(channelId);
+      this.channelNames = channelNames;
+      this.dataChannel = activeClient.channels.get(channelNames.data);
+      this.snapshotChannel = activeClient.channels.get(channelNames.snapshots);
+      this.telemetryChannel = activeClient.channels.get(channelNames.telemetry);
+      this.priorityChannel = activeClient.channels.get(channelNames.priority);
+      this.channel = this.dataChannel;
 
-      const getMessageTimestamp = (message) => {
-        const payloadTimestamp = Number(message?.data?.timestamp || 0);
-        const transportTimestamp = Number(message?.timestamp || 0);
-        return Math.max(payloadTimestamp, transportTimestamp, 0);
-      };
-
+      const activeConnectionId = String(activeClient?.connection?.id || '').trim();
       const isOwnMessage = (message) => {
         const messageConnectionId = String(message?.connectionId || '').trim();
-        const localConnectionId = String(this.client?.connection?.id || '').trim();
-        return !!messageConnectionId && !!localConnectionId && messageConnectionId === localConnectionId;
+        return !!messageConnectionId && !!activeConnectionId && messageConnectionId === activeConnectionId;
       };
-
-      // Load the latest published full snapshot and then replay newer
-      // incremental updates from history so reconnecting clients can
-      // rebuild the freshest known state before live subscription starts.
-      if (options.readHistory !== false) {
-        const historyItems = await this.loadChannelHistory(1000);
-        const updateMessages = historyItems.filter((message) => message?.name === 'update');
-        const sessionManifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
-        const latestSnapshotVersion = Number(sessionManifestMessage?.data?.latestSnapshotVersion || 0);
-        const latestUpdateMessage = updateMessages[0];
-
-        if (latestSnapshotVersion > 0) {
-          const snapshotMessages = updateMessages
-            .filter((message) => {
-              const messageVersion = Number(message?.data?.snapshotVersion || 0);
-              return message?.data?.messageType === 'full-snapshot' && messageVersion === latestSnapshotVersion;
-            })
-            .sort((a, b) => {
-              const aIndex = Number.isFinite(a?.data?.partIndex) ? a.data.partIndex : 0;
-              const bIndex = Number.isFinite(b?.data?.partIndex) ? b.data.partIndex : 0;
-              return aIndex - bIndex;
-            });
-
-          if (snapshotMessages.length > 0) {
-            this.historyBootstrapLoadedSnapshot = true;
-            console.log('[WebSocket][RX][history] Loaded latest full snapshot from history');
-            snapshotMessages.forEach((message) => {
-              this.notifyReceive('update', getMessageTimestamp(message), 'history');
-              this.onMessageCallback?.(message.data);
-            });
-
-            const snapshotTimestamp = Math.max(
-              ...snapshotMessages.map((message) => getMessageTimestamp(message))
-            );
-            const replayMessages = updateMessages
-              .filter((message) => (
-                getMessageTimestamp(message) > snapshotTimestamp
-                && message?.data?.messageType !== 'full-snapshot'
-              ))
-              .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-
-            if (replayMessages.length > 0) {
-              console.log('[WebSocket][RX][history] Replayed incremental updates after snapshot', {
-                count: replayMessages.length
-              });
-              replayMessages.forEach((message) => {
-                this.notifyReceive('update', getMessageTimestamp(message), 'history');
-                this.onMessageCallback?.(message.data);
-              });
-            }
-          } else {
-            if (latestUpdateMessage?.data) {
-              console.log('[WebSocket][RX][history] Loaded latest update from history');
-              this.notifyReceive('update', getMessageTimestamp(latestUpdateMessage), 'history');
-              this.onMessageCallback?.(latestUpdateMessage.data);
-            }
-
-            this.historyBootstrapNeedsSnapshot = true;
-          }
-        } else {
-          if (latestUpdateMessage?.data) {
-            console.log('[WebSocket][RX][history] Loaded latest snapshot from history');
-            this.notifyReceive('update', getMessageTimestamp(latestUpdateMessage), 'history');
-            this.onMessageCallback?.(latestUpdateMessage.data);
-          }
-
-          if (latestUpdateMessage?.data?.messageType === 'full-snapshot') {
-            this.historyBootstrapLoadedSnapshot = true;
-          } else {
-            this.historyBootstrapNeedsSnapshot = true;
-          }
-        }
-      }
-      
-      // Subscribe to updates
-      await this.channel.subscribe('update', (message) => {
-        if (isOwnMessage(message)) {
-          console.log('[WebSocket][ECHO][update]', message.data);
-          return;
-        }
-
-        console.log('[WebSocket][RX][update]', message.data);
-        this.notifyReceive('update', Number(message?.timestamp || Date.now()), 'live');
-        this.onMessageCallback?.(message.data);
+      this.connectionService = new SyncConnectionService({
+        provider: this,
+        client: activeClient,
+        channelId,
+        channelNames,
+        options,
+        isOwnMessage,
+        normalizeIncomingEnvelope,
+        buildWebSocketLogPrefix
       });
 
-      await this.channel.subscribe('snapshot-request', (message) => {
-        if (isOwnMessage(message)) {
-          console.log('[WebSocket][ECHO][snapshot-request]');
-          return;
-        }
-
-        console.log('[WebSocket][RX][snapshot-request]', message?.data || {});
-        this.notifyReceive('snapshot-request');
-        this.onSnapshotRequestCallback?.(message?.data || {});
-      });
-
-      await this.channel.subscribe('times-sync-request', (message) => {
-        if (isOwnMessage(message)) {
-          console.log('[WebSocket][ECHO][times-sync-request]', message?.data);
-          return;
-        }
-
-        this.notifyReceive('times-sync-request', Number(message?.timestamp || Date.now()), 'live');
-        this.onTimesSyncRequestCallback?.(message?.data);
-      });
-
-      await this.channel.subscribe('times-line-request', (message) => {
-        if (isOwnMessage(message)) {
-          console.log('[WebSocket][ECHO][times-line-request]', message?.data);
-          return;
-        }
-
-        this.notifyReceive('times-line-request', Number(message?.timestamp || Date.now()), 'live');
-        this.onTimesLineRequestCallback?.(message?.data);
-      });
-
-      await this.channel.subscribe('times-line-response', (message) => {
-        if (isOwnMessage(message)) {
-          console.log('[WebSocket][ECHO][times-line-response]', message?.data);
-          return;
-        }
-
-        this.notifyReceive('times-line-response', Number(message?.timestamp || Date.now()), 'live');
-        this.onTimesLineResponseCallback?.(message?.data);
-      });
-
-      await this.channel.subscribe('times-sync-ack', (message) => {
-        if (isOwnMessage(message)) {
-          console.log('[WebSocket][ECHO][times-sync-ack]', message?.data);
-          return;
-        }
-
-        this.notifyReceive('times-sync-ack', Number(message?.timestamp || Date.now()), 'live');
-        this.onTimesSyncAckCallback?.(message?.data);
-      });
-
-      // Monitor connection state
-      this.client.connection.on('disconnected', () => {
-        this.updateStatus('disconnected');
-      });
-
-      this.client.connection.on('connected', () => {
-        this.updateStatus('connected');
-      });
-
-      this.client.connection.on('suspended', () => {
-        this.updateStatus('suspended');
-      });
-
-      this.client.connection.on('failed', () => {
-        this.updateStatus('failed');
-      });
-
-      this.updateStatus('connected');
-      console.log(`[WebSocket] Connected to channel: rally-${channelId}`);
+      await this.connectionService.start();
       
     } catch (error) {
       this.updateStatus('error', error.message);
@@ -319,11 +804,15 @@ class WebSocketProvider {
     this.onStatusCallback?.(state, PROVIDER_NAME, error);
   }
 
-  notifyReceive(name = 'update', timestamp = Date.now(), source = 'live') {
+  notifyReceive(name = 'update', timestamp = Date.now(), source = 'live', details = null) {
+    if (source !== 'echo' && details) {
+      this.updateProjectMarker(details);
+    }
     this.onReceiveActivityCallback?.({
       name,
       timestamp,
-      source
+      source,
+      details
     });
   }
 
@@ -334,18 +823,97 @@ class WebSocketProvider {
     });
   }
 
+  resolvePublishTarget(data = {}) {
+    const explicitChannelType = String(data?.channelType || '').trim();
+    if (explicitChannelType === 'priority') {
+      return this.priorityChannel || this.dataChannel || this.channel;
+    }
+
+    if (explicitChannelType === 'snapshots' || explicitChannelType === 'snapshot') {
+      return this.snapshotChannel || this.channel;
+    }
+
+    if (explicitChannelType === 'telemetry') {
+      return this.telemetryChannel || this.channel;
+    }
+
+    if (
+      data?.highPriority === true
+      || data?.priority === true
+      || data?.controlType === 'sos-ack'
+    ) {
+      return this.priorityChannel || this.dataChannel || this.channel;
+    }
+
+    if (
+      data?.packageType === 'snapshot'
+      || data?.originalMessageType === 'full-snapshot'
+      || data?.snapshotKind === 'initial'
+      || data?.snapshotKind === 'periodic'
+    ) {
+      return this.snapshotChannel || this.channel;
+    }
+
+    if (
+      data?.messageType === 'pilot-telemetry'
+      || data?.section === 'pilotTelemetry'
+      || (data?.payload && typeof data.payload === 'object' && data.payload.pilotTelemetry)
+    ) {
+      return this.telemetryChannel || this.channel;
+    }
+
+    return this.dataChannel || this.channel;
+  }
+
   /**
    * Publish data to the channel
    */
   async publish(data) {
-    if (!this.isConnected || !this.channel) {
+    const targetChannel = this.resolvePublishTarget(data);
+
+    if (!this.isConnected || !targetChannel) {
       console.warn('[WebSocket] Not connected, cannot publish');
       return false;
     }
 
     try {
-      await this.channel.publish('update', data);
-      console.log('[WebSocket][TX][update]', data);
+      const channelType = targetChannel === this.snapshotChannel
+        ? 'snapshots'
+        : targetChannel === this.telemetryChannel
+          ? 'telemetry'
+          : targetChannel === this.priorityChannel
+            ? 'priority'
+            : 'data';
+      const isEphemeralMessage = channelType === 'telemetry'
+        || data?.messageType === 'ownership-heartbeat';
+      const publishEnvelope = isEphemeralMessage
+        ? {
+            name: 'update',
+            data,
+            extras: {
+              ephemeral: true
+            }
+          }
+        : {
+            name: 'update',
+            data
+          };
+      if (isTransportDebugEnabled()) {
+        console.debug(buildWebSocketLogPrefix('send', 'update', channelType, data), {
+          channelName: targetChannel?.name || null,
+          channelType,
+          ephemeral: isEphemeralMessage,
+          data
+        });
+      }
+      await targetChannel.publish(publishEnvelope);
+      this.onSendMessageCallback?.({
+        ...(data || {}),
+        channelType,
+        channelName: targetChannel?.name || null,
+        ephemeral: isEphemeralMessage,
+        timestamp: Number(data?.timestamp || Date.now())
+      });
       this.notifySend('update');
       return true;
     } catch (error) {
@@ -354,154 +922,119 @@ class WebSocketProvider {
     }
   }
 
-  async requestSnapshot(data = {}) {
-    if (!this.isConnected || !this.channel) {
-      console.warn('[WebSocket] Not connected, cannot request snapshot');
+  async publishControl(controlType, data = {}) {
+    const targetChannel = data?.highPriority === true
+      ? (this.priorityChannel || this.dataChannel || this.channel)
+      : (this.dataChannel || this.channel);
+
+    if (!this.isConnected || !targetChannel) {
+      console.warn('[WebSocket] Not connected, cannot publish control package');
       return false;
     }
 
     try {
       const payload = {
-        ...(data && typeof data === 'object' ? data : {}),
-        timestamp: Number(data?.timestamp || Date.now())
+        messageType: 'delta-batch',
+        packageType: 'control',
+        controlType,
+        source: data?.source || 'client',
+        sourceRole: data?.sourceRole || data?.source || 'client',
+        sourceInstanceId: data?.sourceInstanceId || data?.instanceId || null,
+        instanceId: data?.instanceId || data?.sourceInstanceId || null,
+        timestamp: Number(data?.timestamp || Date.now()),
+        payload: data
       };
-      await this.channel.publish('snapshot-request', payload);
-      console.log('[WebSocket][TX][snapshot-request]', payload);
-      this.notifySend('snapshot-request');
+
+      const channelType = targetChannel === this.priorityChannel ? 'priority' : 'data';
+      if (isTransportDebugEnabled()) {
+        console.debug(buildWebSocketLogPrefix('send', 'update', channelType, payload), {
+          channelName: targetChannel?.name || null,
+          channelType,
+          data: payload
+        });
+      }
+      await targetChannel.publish('update', payload);
+      this.onSendMessageCallback?.({
+        ...payload,
+        channelType,
+        channelName: targetChannel?.name || null,
+        timestamp: Number(payload?.timestamp || Date.now())
+      });
+      this.notifySend('update');
       return true;
     } catch (error) {
-      console.error('[WebSocket] Snapshot request error:', error);
+      console.error('[WebSocket] Control publish error:', error);
       return false;
     }
   }
 
-  async publishTimesSyncRequest(data) {
-    if (!this.isConnected || !this.channel) {
-      console.warn('[WebSocket] Not connected, cannot request times sync');
-      return false;
-    }
+  unsubscribeChannelType(channelType) {
+    const nextSubscriptions = [];
 
-    try {
-      await this.channel.publish('times-sync-request', data);
-      console.log('[WebSocket][TX][times-sync-request]', data);
-      this.notifySend('times-sync-request');
-      return true;
-    } catch (error) {
-      console.error('[WebSocket] Times sync request error:', error);
-      return false;
-    }
+    this.channelSubscriptions.forEach((subscription) => {
+      const matches = (
+        (channelType === 'data' && subscription.channel === this.dataChannel)
+        || (channelType === 'snapshots' && subscription.channel === this.snapshotChannel)
+        || (channelType === 'telemetry' && subscription.channel === this.telemetryChannel)
+        || (channelType === 'priority' && subscription.channel === this.priorityChannel)
+      );
+
+      if (!matches) {
+        nextSubscriptions.push(subscription);
+        return;
+      }
+
+      try {
+        subscription.channel?.unsubscribe?.(subscription.eventName, subscription.handler);
+      } catch (error) {
+        console.warn('[WebSocket] Failed to unsubscribe channel handler', error);
+        nextSubscriptions.push(subscription);
+      }
+    });
+
+    this.channelSubscriptions = nextSubscriptions;
   }
-
-  async publishTimesLineRequest(data) {
-    if (!this.isConnected || !this.channel) {
-      console.warn('[WebSocket] Not connected, cannot request timing line');
-      return false;
-    }
-
-    try {
-      await this.channel.publish('times-line-request', data);
-      console.log('[WebSocket][TX][times-line-request]', data);
-      this.notifySend('times-line-request');
-      return true;
-    } catch (error) {
-      console.error('[WebSocket] Times line request error:', error);
-      return false;
-    }
-  }
-
-  async publishTimesLineResponse(data) {
-    if (!this.isConnected || !this.channel) {
-      console.warn('[WebSocket] Not connected, cannot respond with timing line');
-      return false;
-    }
-
-    try {
-      await this.channel.publish('times-line-response', data);
-      console.log('[WebSocket][TX][times-line-response]', data);
-      this.notifySend('times-line-response');
-      return true;
-    } catch (error) {
-      console.error('[WebSocket] Times line response error:', error);
-      return false;
-    }
-  }
-
-  async publishTimesSyncAck(data) {
-    if (!this.isConnected || !this.channel) {
-      console.warn('[WebSocket] Not connected, cannot ack times sync');
-      return false;
-    }
-
-    try {
-      await this.channel.publish('times-sync-ack', data);
-      console.log('[WebSocket][TX][times-sync-ack]', data);
-      this.notifySend('times-sync-ack');
-      return true;
-    } catch (error) {
-      console.error('[WebSocket] Times sync ack error:', error);
-      return false;
-    }
-  }
-
-  async publishBootstrapMarker(data) {
-    if (!this.isConnected || !this.channel) {
-      console.warn('[WebSocket] Not connected, cannot publish bootstrap marker');
-      return false;
-    }
-
-    try {
-      await this.channel.publish('bootstrap-marker', data);
-      console.log('[WebSocket][TX][bootstrap-marker]', data);
-      this.notifySend('bootstrap-marker');
-      return true;
-    } catch (error) {
-      console.error('[WebSocket] Bootstrap marker error:', error);
-      return false;
-    }
-  }
-
-  async loadBootstrapMarker() {
-    const historyItems = await this.loadChannelHistory(100);
-    const bootstrapMessage = historyItems.find((message) => message?.name === 'bootstrap-marker');
-    return bootstrapMessage?.data || null;
-  }
-
-  async publishSessionManifest(data) {
-    if (!this.isConnected || !this.channel) {
-      console.warn('[WebSocket] Not connected, cannot publish session manifest');
-      return false;
-    }
-
-    try {
-      await this.channel.publish('session-manifest', data);
-      console.log('[WebSocket][TX][session-manifest]', data);
-      this.notifySend('session-manifest');
-      return true;
-    } catch (error) {
-      console.error('[WebSocket] Session manifest error:', error);
-      return false;
-    }
-  }
-
-  async loadSessionManifest() {
-    const historyItems = await this.loadChannelHistory(500);
-    const manifestMessage = historyItems.find((message) => message?.name === 'session-manifest');
-    return manifestMessage?.data || null;
-  }
-
-  
 
   /**
    * Disconnect from the channel
    */
   disconnect() {
+    this.channelSubscriptions.forEach(({ channel, eventName, handler }) => {
+      try {
+        channel?.unsubscribe?.(eventName, handler);
+      } catch (error) {
+        console.warn('[WebSocket] Failed to unsubscribe channel handler', error);
+      }
+    });
+    this.channelSubscriptions = [];
+
     if (this.client) {
       this.client.close();
       this.client = null;
       this.channel = null;
+      this.dataChannel = null;
+      this.snapshotChannel = null;
+      this.telemetryChannel = null;
+      this.priorityChannel = null;
+      this.onSendMessageCallback = null;
+      this.onEchoMessageCallback = null;
     }
+    this.connectionService = null;
+    this.bootstrapState = {
+      mode: 'none',
+      messages: [],
+      snapshotMessages: [],
+      priorityMessages: [],
+      snapshotTimestamp: 0,
+      snapshotVersion: 0,
+      historyComplete: false,
+      hasSnapshotBootstrap: false
+    };
+    this.waitingForSnapshotBootstrap = false;
     this.updateStatus('disconnected');
-    console.log('[WebSocket] Disconnected');
+    if (isTransportDebugEnabled()) {
+      console.debug('[WebSocket] Disconnected');
+    }
   }
 
   /**

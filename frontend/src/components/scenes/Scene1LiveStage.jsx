@@ -18,6 +18,9 @@ import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../uti
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
+import { useFastClock } from '../../hooks/useFastClock.js';
+import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
+import { formatDurationMs } from '../../utils/timeFormat.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
@@ -51,58 +54,11 @@ const abbreviateTickerName = (name) => {
 };
 
 
-// Helper to calculate position for Lap Race based on lap times
-const calculateLapRacePositions = (pilots, stageId, lapTimes, stagePilots, numberOfLaps) => {
-  const selectedPilotIds = stagePilots[stageId] || pilots.map(p => p.id);
-  const selectedPilots = pilots.filter(p => selectedPilotIds.includes(p.id));
-  
-  const pilotData = selectedPilots.map(pilot => {
-    const pilotLaps = lapTimes[pilot.id]?.[stageId] || [];
-    const completedLaps = pilotLaps.filter(t => t && t.trim() !== '').length;
-    
-    // Calculate total time from lap times
-    let totalTimeMs = 0;
-    pilotLaps.forEach(lapTime => {
-      if (!lapTime) return;
-      const parts = lapTime.split(':');
-      if (parts.length >= 2) {
-        const hours = parts.length === 3 ? parseInt(parts[0]) || 0 : 0;
-        const mins = parts.length === 3 ? parseInt(parts[1]) || 0 : parseInt(parts[0]) || 0;
-        const secsStr = parts.length === 3 ? parts[2] : parts[1];
-        const [secs, ms] = (secsStr || '0').split('.');
-        totalTimeMs += (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
-      }
-    });
-    
-    const isFinished = completedLaps >= numberOfLaps;
-    
-    return { 
-      pilot, 
-      completedLaps, 
-      totalTimeMs,
-      isFinished,
-      lastLapTime: pilotLaps[pilotLaps.length - 1] || null
-    };
-  });
-
-  // Sort: most laps first, then by total time (fastest)
-  pilotData.sort((a, b) => {
-    if (b.completedLaps !== a.completedLaps) return b.completedLaps - a.completedLaps;
-    if (a.completedLaps === 0) return 0;
-    return a.totalTimeMs - b.totalTimeMs;
-  });
-
-  return pilotData.map((data, index) => ({
-    ...data,
-    position: index + 1
-  }));
-};
-
 export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
-    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, pilotTelemetryByPilotId
+    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, pilotTelemetryByPilotId, timeDecimals
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -134,6 +90,15 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
   const isLapRace = isLapRaceStageType(currentStage?.type);
   const isSSStage = isSpecialStageType(currentStage?.type);
+  const lapFastClockEnabled = Boolean(currentStageId && isLapRace && timeDecimals > 0);
+  const currentFastTime = useFastClock(lapFastClockEnabled);
+  const currentSecondAlignedTime = useSecondAlignedClock(Boolean(currentStageId && isLapRace && !lapFastClockEnabled));
+  const sceneNow = useMemo(() => (
+    rallyHelpers.getReferenceNow(
+      debugDate,
+      lapFastClockEnabled ? new Date(currentFastTime) : currentSecondAlignedTime
+    )
+  ), [currentFastTime, currentSecondAlignedTime, debugDate, lapFastClockEnabled]);
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
   const validSlotIds = useMemo(() => new Set([
     ...pilots.filter((pilot) => pilot.isActive && pilot.streamUrl).map((pilot) => pilot.id),
@@ -211,7 +176,18 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     }
     
     if (isLapRace) {
-      return calculateLapRacePositions(pilots, currentStageId, lapTimes, stagePilots, currentStage.numberOfLaps || 5);
+      return rallyHelpers.buildLapRaceLeaderboard({
+        pilots,
+        stage: currentStage,
+        lapTimes,
+        stagePilots,
+        startTimes,
+        times,
+        retiredStages,
+        now: sceneNow,
+        timeDecimals,
+        fallbackOrderByPilotId: displayOrderByPilotId
+      });
     }
 
     return orderedSpecialStageTickerItems.map((item, index) => ({
@@ -224,11 +200,16 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       finishTime: item.finishTime,
       retired: item.retired
     }));
-  }, [currentStage, currentStageId, isLapRace, lapTimes, orderedSpecialStageTickerItems, pilots, stagePilots]);
+  }, [currentStage, currentStageId, displayOrderByPilotId, isLapRace, lapTimes, orderedSpecialStageTickerItems, pilots, retiredStages, sceneNow, stagePilots, startTimes, timeDecimals, times]);
 
   const pilotStageMetaById = useMemo(() => (
     new Map(sortedPilotsWithPositions.map((data) => [data.pilot.id, data]))
   ), [sortedPilotsWithPositions]);
+  const isLapRaceStageFinished = useMemo(() => (
+    isLapRace
+      && sortedPilotsWithPositions.length > 0
+      && sortedPilotsWithPositions.every((entry) => entry.retired || entry.isFinished)
+  ), [isLapRace, sortedPilotsWithPositions]);
 
   const alertByPilotId = useMemo(() => {
     if (!currentStageId) return new Set();
@@ -394,11 +375,11 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const hasPendingLayoutChanges = draftSelectedLayout !== selectedLayout;
   const hasPendingChanges = hasPendingLayoutChanges || hasPendingSelectionChanges;
   const tickerStatusItems = useMemo(() => (
-    sortedPilotsWithPositions.map(({ pilot, position, completedLaps, isFinished, currentStatus }) => {
+    sortedPilotsWithPositions.map(({ pilot, position, completedLaps, isFinished, currentStatus, status, retired }) => {
       let statusKey = 'idle';
 
       if (isLapRace) {
-        statusKey = isFinished ? 'finished' : (completedLaps > 0 ? 'racing' : 'not_started');
+        statusKey = retired ? 'retired' : (status || (isFinished ? 'finished' : (completedLaps > 0 ? 'racing' : 'not_started')));
       } else if (isSSStage) {
         statusKey = currentStatus || 'not_started';
       }
@@ -457,11 +438,20 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const getPilotLapInfo = (pilotId) => {
     const data = pilotStageMetaById.get(pilotId);
     if (!data) return null;
+    const lastLapDurationMs = Array.isArray(data.lapDurations) && data.lapDurations.length > 0
+      ? [...data.lapDurations].reverse().find((value) => Number.isFinite(value) && value > 0)
+      : null;
     return {
       position: data.position,
       completedLaps: data.completedLaps || 0,
       isFinished: data.isFinished || false,
-      totalLaps: currentStage?.numberOfLaps || 0
+      isRacing: data.isRacing || false,
+      status: data.status || 'not_started',
+      totalLaps: currentStage?.numberOfLaps || 0,
+      totalTimeText: data.totalTimeText || data.stageTotalText || '',
+      lastLapText: lastLapDurationMs ? formatDurationMs(lastLapDurationMs, timeDecimals, { fallback: '' }) : '',
+      displayText: data.displayText || data.stageTotalText || '',
+      retired: data.retired || false
     };
   };
 
@@ -493,7 +483,25 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     return currentStage.name;
   };
 
-  const stageScheduleTime = currentStage?.startTime || '';
+  const stageScheduleTime = useMemo(() => {
+    if (!currentStage?.startTime) {
+      return '';
+    }
+
+    if (!isLapRace) {
+      return currentStage.startTime;
+    }
+
+    if (!rallyHelpers.hasStageDateTimePassed(currentStage.startTime, currentStage.date, sceneNow)) {
+      return currentStage.startTime;
+    }
+
+    if (isLapRaceStageFinished) {
+      return '';
+    }
+
+    return rallyHelpers.getRunningTime(currentStage.startTime, currentStage.date, sceneNow, timeDecimals);
+  }, [currentStage, isLapRace, isLapRaceStageFinished, sceneNow, timeDecimals]);
 
   return (
     <div className="relative w-full h-full" style={{ padding: sceneInset }} data-testid="scene-1-live-stage">
@@ -791,7 +799,17 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   </span>
                 </div>
               );
-              if (lapInfo.isFinished) {
+              if (lapInfo.retired) {
+                displayTime = t('status.retired');
+                timeColor = 'text-red-400';
+              } else if (lapInfo.displayText) {
+                displayTime = lapInfo.displayText;
+                timeColor = lapInfo.isFinished
+                  ? 'text-[#22C55E]'
+                  : lapInfo.isRacing
+                    ? 'text-[#FACC15]'
+                    : 'text-zinc-400';
+              } else if (lapInfo.isFinished) {
                 displayTime = 'FINISHED';
                 timeColor = 'text-[#22C55E]';
               }
@@ -936,6 +954,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   const pilotMetaInfo = tickerPilotMetaById.get(pilot.id) || {};
                   const category = pilotMetaInfo.category || null;
                   const pilotMeta = pilotMetaInfo.pilotMeta || '';
+                  const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
                   const alert = currentStageId ? alertByPilotId.has(pilot.id) : false;
                   const jumpStart = currentStageId ? jumpStartByPilotId.has(pilot.id) : false;
                   const startTime = currentStageId ? (startTimes[pilot.id]?.[currentStageId] || '') : '';
@@ -954,8 +973,11 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                       timeColor = 'text-[#22C55E]';
                     } else if (completedLaps > 0) {
                       borderColor = 'border-[#FACC15]';
-                      timeDisplay = `Lap ${completedLaps}/${currentStage?.numberOfLaps || 0}`;
+                      timeDisplay = `Lap ${completedLaps}/${currentStage?.numberOfLaps || 0}${lapInfo?.lastLapText ? ` • ${lapInfo.lastLapText}` : ''}`;
                       timeColor = 'text-[#FACC15]';
+                    } else if (lapInfo?.displayText) {
+                      timeDisplay = lapInfo.displayText;
+                      timeColor = 'text-zinc-400';
                     }
                   } else if (isSSStage) {
                     showLiveTime = true;
