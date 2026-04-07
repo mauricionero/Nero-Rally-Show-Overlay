@@ -22,7 +22,7 @@ import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../utils/stageSchedule.js';
 import { isLapRaceStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
 import { formatDurationSeconds } from '../utils/timeFormat.js';
-import { getLapRaceStoredTotalTimeSeconds } from '../utils/rallyHelpers.js';
+import { getLapRaceActualStartTime, getLapRaceStoredTotalTimeSeconds } from '../utils/rallyHelpers.js';
 import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId, normalizePilotId } from '../utils/pilotIdentity.js';
 import { isSyncDebugEnabled, isTelemetryDebugEnabled } from '../utils/debugFlags.js';
@@ -5008,7 +5008,7 @@ export const RallyProvider = ({ children }) => {
 
     const totalSeconds = getLapRaceStoredTotalTimeSeconds({
       lapEntries,
-      startTime: stage.startTime || '',
+      startTime: getLapRaceActualStartTime(stage),
       mode: stage.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE
     });
 
@@ -5029,6 +5029,7 @@ export const RallyProvider = ({ children }) => {
       return;
     }
 
+    const changedPilotIds = [];
     setTimes((prev) => {
       let didChange = false;
       const next = { ...prev };
@@ -5044,6 +5045,7 @@ export const RallyProvider = ({ children }) => {
         }
 
         didChange = true;
+        changedPilotIds.push(pilotId);
         next[pilotId] = {
           ...(next[pilotId] || {}),
           [stageId]: nextValue
@@ -5052,8 +5054,13 @@ export const RallyProvider = ({ children }) => {
 
       return didChange ? next : prev;
     });
-    markTimingSectionDirty('times');
-  }, [computeLapRaceStoredTimeValue, markTimingSectionDirty, pilots, setTimes, stages]);
+    if (changedPilotIds.length > 0) {
+      markTimingSectionDirty('times');
+      changedPilotIds.forEach((pilotId) => {
+        markTimingLineDirty('times', pilotId, stageId);
+      });
+    }
+  }, [computeLapRaceStoredTimeValue, markTimingLineDirty, markTimingSectionDirty, pilots, setTimes, stages]);
 
   const addStage = (stage) => {
     const newStage = {
@@ -5064,6 +5071,7 @@ export const RallyProvider = ({ children }) => {
       date: stage.date || '',
       distance: stage.distance || '',
       startTime: stage.startTime || '', // For SS/Super Prime/Liaison/Service Park: schedule time. For Lap Race: race start time
+      realStartTime: stage.realStartTime || '',
       endTime: stage.endTime || '',
       mapPlacemarkId: stage.mapPlacemarkId || '',
       numberOfLaps: stage.numberOfLaps ?? '',
@@ -5093,13 +5101,19 @@ export const RallyProvider = ({ children }) => {
       return nextStage;
     }));
 
+    if (nextStage && clientRole === 'times') {
+      markTimingSectionDirty('stages');
+      markTimingLineDirty('stages', null, id);
+    }
+
     if (nextStage && isLapRaceStageType(nextStage.type) && (
       Object.prototype.hasOwnProperty.call(updates, 'startTime')
+      || Object.prototype.hasOwnProperty.call(updates, 'realStartTime')
       || Object.prototype.hasOwnProperty.call(updates, 'lapRaceTotalTimeMode')
     )) {
       recalculateLapRaceStoredTimesForStage(id, nextStage);
     }
-  }, [recalculateLapRaceStoredTimesForStage, setStages]);
+  }, [clientRole, markTimingLineDirty, markTimingSectionDirty, recalculateLapRaceStoredTimesForStage, setStages]);
 
   const deleteStage = (id) => {
     setStages(prev => prev.filter(s => s.id !== id));
@@ -5245,13 +5259,6 @@ export const RallyProvider = ({ children }) => {
   // Lap times functions
   const setLapTime = useCallback((pilotId, stageId, lapIndex, time) => {
     const stage = stages.find((entry) => entry.id === stageId);
-    const shouldGrowVariableLapRace = !!(
-      stage
-      && isLapRaceStageType(stage.type)
-      && stage.lapRaceVariableLaps
-      && String(time || '').trim()
-      && lapIndex >= Math.max(1, Number(stage.numberOfLaps || 0) || 0) - 1
-    );
 
     setLapTimes(prev => {
       const pilotLaps = prev[pilotId] || {};
@@ -5279,28 +5286,9 @@ export const RallyProvider = ({ children }) => {
         }
       };
     });
-
-    if (shouldGrowVariableLapRace) {
-      const currentVisibleLapCount = Math.max(1, Number(stage?.numberOfLaps || 0) || 0);
-      const nextLapCount = currentVisibleLapCount + 1;
-      setStages((prev) => (
-        Array.isArray(prev)
-          ? prev.map((entry) => (
-              entry?.id === stageId
-                ? { ...entry, numberOfLaps: nextLapCount }
-                : entry
-            ))
-          : prev
-      ));
-      if (clientRole === 'times') {
-        markTimingSectionDirty('stages');
-        markTimingLineDirty('stages', null, stageId);
-      }
-    }
-
     markTimingSectionDirty('lapTimes');
     markTimingLineDirty('lapTimes', pilotId, stageId);
-  }, [clientRole, computeLapRaceStoredTimeValue, markTimingLineDirty, markTimingSectionDirty, setLapTimes, setStages, setTimes, stages]);
+  }, [computeLapRaceStoredTimeValue, markTimingLineDirty, markTimingSectionDirty, setLapTimes, setTimes, stages]);
 
   const getLapTime = useCallback((pilotId, stageId, lapIndex) => (
     lapTimes[pilotId]?.[stageId]?.[lapIndex] || ''

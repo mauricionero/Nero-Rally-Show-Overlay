@@ -108,7 +108,7 @@ export default function TheRaceTab() {
 
   const defaultStageDate = getDefaultStageDate(stages);
 
-  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
+  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
   const [editingStage, setEditingStage] = useState(null);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
 
@@ -118,7 +118,7 @@ export default function TheRaceTab() {
       return;
     }
     addStage(newStage);
-    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
+    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
     toast.success('Stage added successfully');
   };
 

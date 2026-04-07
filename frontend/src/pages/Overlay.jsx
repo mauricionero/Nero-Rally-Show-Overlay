@@ -209,14 +209,6 @@ export default function Overlay() {
     Number(wsLastMessageAt || 0)
   ) || null;
   const wsMessageAgeMs = latestActivityAt ? Math.max(0, wsActivity.connectionNow - latestActivityAt) : null;
-  const connectionBadge = (() => {
-    if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
-    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', label: t('config.connecting') };
-    if (wsConnectionStatus === 'connected') return { color: 'bg-[#22C55E] text-black border-transparent', label: 'Live' };
-    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316] text-black border-transparent', label: 'Suspended' };
-    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', label: 'Failed' };
-    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
-  })();
 
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
@@ -346,19 +338,13 @@ export default function Overlay() {
                   <TooltipTrigger asChild>
                     <button
                       onClick={() => setShowWsPanel(!showWsPanel)}
-                      className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${connectionBadge.color}`}
+                      className={`inline-flex items-center justify-center h-7 w-7 rounded border transition-all ${wsConnectionStatus === 'connected' ? 'bg-[#22C55E] text-black border-transparent' : wsConnectionStatus === 'connecting' ? 'bg-[#FACC15] text-black border-transparent' : wsConnectionStatus === 'suspended' ? 'bg-[#F97316] text-black border-transparent' : wsConnectionStatus === 'failed' || wsConnectionStatus === 'error' ? 'bg-[#EF4444] text-white border-transparent' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}
                       data-testid="ws-status-button"
                     >
                       {wsConnectionStatus === 'connected' ? (
-                        <>
-                          <Wifi className="w-3 h-3" />
-                          <span>{connectionBadge.label}</span>
-                        </>
+                        <Wifi className="w-3 h-3" />
                       ) : (
-                        <>
-                          <WifiOff className="w-3 h-3" />
-                          <span>{connectionBadge.label}</span>
-                        </>
+                        <WifiOff className="w-3 h-3" />
                       )}
                     </button>
                   </TooltipTrigger>
@@ -366,7 +352,7 @@ export default function Overlay() {
                     <div className="text-xs">
                       <div className="font-semibold">WebSocket Connection</div>
                       <div>Status: {wsConnectionStatus}</div>
-                      <div>State badge only reflects socket connection state.</div>
+                      <div>Click to open Live Sync.</div>
                     </div>
                   </TooltipContent>
                 </Tooltip>

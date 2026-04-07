@@ -485,24 +485,12 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   };
 
   const stageScheduleTime = useMemo(() => {
-    if (!currentStage?.startTime) {
+    if (!currentStage) {
       return '';
     }
 
-    if (!isLapRace) {
-      return currentStage.startTime;
-    }
-
-    if (!rallyHelpers.hasStageDateTimePassed(currentStage.startTime, currentStage.date, sceneNow)) {
-      return currentStage.startTime;
-    }
-
-    if (isLapRaceStageFinished) {
-      return '';
-    }
-
-    return rallyHelpers.getRunningTime(currentStage.startTime, currentStage.date, sceneNow, timeDecimals);
-  }, [currentStage, isLapRace, isLapRaceStageFinished, sceneNow, timeDecimals]);
+    return currentStage.startTime || '';
+  }, [currentStage]);
 
   return (
     <div className="relative w-full h-full" style={{ padding: sceneInset }} data-testid="scene-1-live-stage">

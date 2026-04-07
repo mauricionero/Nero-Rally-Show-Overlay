@@ -7,7 +7,7 @@ import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import StatusPill from '../StatusPill.jsx';
-import { buildLapRaceLeaderboard, getLapRaceStageMetaParts, getReferenceNow, getRunningTime, hasStageDateTimePassed, parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
+import { buildLapRaceLeaderboard, getLapRaceStageMetaParts, getReferenceNow, parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video, Map as MapIcon } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -167,24 +167,12 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       && sortedLapRacePilotsData.every((entry) => entry.retired || entry.isFinished)
   ), [isLapRace, sortedLapRacePilotsData]);
   const stageHeaderTime = useMemo(() => {
-    if (!currentStage?.startTime) {
+    if (!currentStage) {
       return '';
     }
 
-    if (!isLapRace) {
-      return currentStage.startTime;
-    }
-
-    if (!hasStageDateTimePassed(currentStage.startTime, currentStage.date, sceneNow)) {
-      return currentStage.startTime;
-    }
-
-    if (isLapRaceStageFinished) {
-      return '';
-    }
-
-    return getRunningTime(currentStage.startTime, currentStage.date, sceneNow, timeDecimals);
-  }, [currentStage, isLapRace, isLapRaceStageFinished, sceneNow, timeDecimals]);
+    return currentStage.startTime || '';
+  }, [currentStage]);
 
   const specialStageBaseItems = useMemo(() => {
     if (!currentStageId || !currentStage || isLapRace) {
@@ -694,7 +682,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 {isLapRace && currentStageLapMeta && ` (${currentStageLapMeta})`}
               </span>
               {stageHeaderTime && (
-                <span className={`text-xs font-bold font-mono ${isLapRace && hasStageDateTimePassed(currentStage.startTime, currentStage.date, sceneNow) ? 'text-[#FACC15]' : 'text-zinc-300'}`}>
+                <span className={`text-xs font-bold font-mono ${isLapRace ? 'text-[#FACC15]' : 'text-zinc-300'}`}>
                   {stageHeaderTime}
                 </span>
               )}

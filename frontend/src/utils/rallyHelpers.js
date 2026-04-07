@@ -284,6 +284,28 @@ export const getLapRaceTotalTimeMode = (stage) => (
   stage?.lapRaceTotalTimeMode || 'cumulative'
 );
 
+export const getLapRaceActualStartTime = (stage) => (
+  stage?.realStartTime || ''
+);
+
+export const getLapRaceStageClockText = ({
+  stage,
+  now = new Date(),
+  decimals = 3,
+  isFinished = false
+} = {}) => {
+  const actualStartTime = getLapRaceActualStartTime(stage);
+  if (!actualStartTime || isFinished) {
+    return '';
+  }
+
+  if (!hasStageDateTimePassed(actualStartTime, stage?.date, now)) {
+    return actualStartTime;
+  }
+
+  return getRunningTime(actualStartTime, stage?.date, now, decimals);
+};
+
 export const getLapRaceConfiguredLapCount = (stage) => {
   const value = Number(stage?.numberOfLaps || 0);
   return Number.isFinite(value) && value > 0 ? value : 0;
@@ -400,7 +422,8 @@ export const getLapRacePilotStageInfo = ({
   const safeStage = stage || {};
   const stageId = safeStage.id;
   const totalTimeMode = getLapRaceTotalTimeMode(safeStage);
-  const startTime = getPilotStageStartTime(pilotId, safeStage, startTimes);
+  const scheduledStartTime = getPilotStageStartTime(pilotId, safeStage, startTimes);
+  const startTime = getLapRaceActualStartTime(safeStage);
   const finishTime = times?.[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
   const pilotLaps = Array.isArray(lapTimes?.[pilotId]?.[stageId]) ? lapTimes[pilotId][stageId] : [];
@@ -453,6 +476,7 @@ export const getLapRacePilotStageInfo = ({
     stage: safeStage,
     totalTimeMode,
     startTime,
+    scheduledStartTime,
     finishTime,
     retired,
     status,
@@ -510,7 +534,7 @@ export const getPilotStageTimingInfo = ({
     });
 
     const startInfo = getStartInformationFromValues({
-      startTime: lapInfo.startTime,
+      startTime: lapInfo.startTime || '',
       finishTime: '',
       retired: lapInfo.retired,
       stageDate: stage.date,
@@ -528,7 +552,7 @@ export const getPilotStageTimingInfo = ({
     let displayText = '';
     const resolvedTotalTimeText = lapInfo.finishTime || lapInfo.stageTotalText || '';
     if (lapInfo.status === 'not_started' || (lapInfo.retired && !lapInfo.stageTotalText)) {
-      displayText = startInfo.text || '';
+      displayText = startInfo.text || '-';
     } else {
       displayText = resolvedTotalTimeText || startInfo.text || '';
     }
@@ -539,10 +563,10 @@ export const getPilotStageTimingInfo = ({
       timeInfo: startInfo,
       displayText,
       lapSummaryText,
-      totalTimeMs: lapInfo.stageTotalMs,
-      totalTimeText: resolvedTotalTimeText,
-      totalTimeMode: lapInfo.totalTimeMode
-    };
+    totalTimeMs: lapInfo.stageTotalMs,
+    totalTimeText: resolvedTotalTimeText,
+    totalTimeMode: lapInfo.totalTimeMode
+  };
   }
 
   if (isSpecialStageType(stage.type)) {

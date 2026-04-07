@@ -199,6 +199,7 @@ times:
   pilotsInRace: "Pilotos nesta corrida"
   selectPilots: "Selecione pilotos para registrar tempos de volta"
   lap: "Volta"
+  addLap: "Adicionar Volta"
   duration: "Duração"
   time: "Tempo"
   scheduled: "Programado"

@@ -6,9 +6,9 @@ import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { TimeInput } from '../TimeInput.jsx';
-import { CheckSquare, Square, Clock, X } from 'lucide-react';
+import { CheckSquare, Square, Clock, Plus, X } from 'lucide-react';
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
-import { getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
+import { getLapRaceActualStartTime, getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
 
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = (timeDecimals) => formatClockFromDate(new Date(), timeDecimals);
@@ -39,7 +39,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime, timeDe
   return formatDurationMs(diffMs, timeDecimals, { fallback: '' });
 };
 
-export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, comparePilotsForTimes, isReadOnly = false }) {
+export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, isReadOnly = false }) {
   const { t } = useTranslation();
   const {
     setLapTime,
@@ -57,19 +57,8 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
   const selectedPilotIds = getStagePilots(stage.id);
   const selectedPilotIdSet = useMemo(() => new Set(selectedPilotIds), [selectedPilotIds]);
   const selectedPilots = useMemo(() => (
-    sortedPilots
-      .filter((pilot) => selectedPilotIdSet.has(pilot.id))
-      .sort((a, b) => {
-        const pilotAHasTime = getPilotLapTimes(a.id, stage.id).some((lapTime) => Boolean((lapTime || '').trim()));
-        const pilotBHasTime = getPilotLapTimes(b.id, stage.id).some((lapTime) => Boolean((lapTime || '').trim()));
-
-        if (pilotAHasTime !== pilotBHasTime) {
-          return pilotAHasTime ? -1 : 1;
-        }
-
-        return comparePilotsForTimes(a, b, categoryOrderById);
-      })
-  ), [sortedPilots, selectedPilotIdSet, getPilotLapTimes, stage.id, categoryOrderById, comparePilotsForTimes]);
+    sortedPilots.filter((pilot) => selectedPilotIdSet.has(pilot.id))
+  ), [sortedPilots, selectedPilotIdSet]);
 
   const categoryBuckets = useMemo(() => {
     const buckets = new Map();
@@ -116,11 +105,28 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     return Math.max(configuredLapCount, recordedLapCount, 1);
   }, [getPilotLapTimes, selectedPilots, stage]);
   const lapsArray = Array.from({ length: visibleLapCount }, (_, i) => i);
+  const lastLapIndex = Math.max(0, lapsArray.length - 1);
+  const hasVariableLapCount = !!stage.lapRaceVariableLaps;
+  const totalColumnWidth = 140;
+  const nowColumnWidth = 104;
+  const addLapColumnWidth = 56;
+  const nowStickyRight = totalColumnWidth;
+  const addLapStickyRight = totalColumnWidth + nowColumnWidth;
   const allSelected = selectedPilotIds.length === pilots.length;
   const noneSelected = selectedPilotIds.length === 0;
   const totalTimeLabel = stage.lapRaceTotalTimeMode === 'bestLap'
     ? t('times.bestLapTime')
     : t('times.cumulativeTime');
+  const handleAddLap = () => {
+    if (isReadOnly) {
+      return;
+    }
+
+    const nextLapCount = Math.max(1, visibleLapCount + 1);
+    updateStage(stage.id, {
+      numberOfLaps: nextLapCount
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -134,10 +140,18 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
           className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
           readOnly={isReadOnly}
         />
+        <Label className="text-white whitespace-nowrap">{t('times.realStartTime')}:</Label>
+        <Input
+          value={stage.realStartTime || ''}
+          onChange={(e) => updateStage(stage.id, { realStartTime: e.target.value })}
+          placeholder="HH:MM:SS"
+          className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
+          readOnly={isReadOnly}
+        />
         <Button
           size="sm"
           variant="outline"
-          onClick={() => updateStage(stage.id, { startTime: getCurrentTimeString().slice(0, 8) })}
+          onClick={() => updateStage(stage.id, { realStartTime: getCurrentTimeString().slice(0, 8) })}
           className="border-zinc-700 text-white"
           disabled={isReadOnly}
         >
@@ -218,7 +232,32 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                     <div className="text-xs text-zinc-400 font-normal">{t('times.time')} / {t('times.duration')}</div>
                   </th>
                 ))}
-                <th className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {hasVariableLapCount && (
+                  <th
+                    className="text-center text-white uppercase font-bold p-2 bg-[#18181B] z-20"
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', width: `${addLapColumnWidth}px`, minWidth: `${addLapColumnWidth}px`, position: 'sticky', right: `${addLapStickyRight}px` }}
+                  >
+                    <button
+                      onClick={handleAddLap}
+                      className="inline-flex items-center justify-center h-8 w-8 rounded bg-zinc-800 text-zinc-400 hover:text-[#FF4500] hover:bg-zinc-700 transition-colors"
+                      title={t('times.addLap')}
+                      disabled={isReadOnly}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </th>
+                )}
+                <th
+                  className="text-center text-white uppercase font-bold p-2 bg-[#18181B] z-20"
+                  style={{ fontFamily: 'Barlow Condensed, sans-serif', width: `${nowColumnWidth}px`, minWidth: `${nowColumnWidth}px`, position: 'sticky', right: `${nowStickyRight}px` }}
+                >
+                  <div>{t('times.now')}</div>
+                  <div className="text-xs text-zinc-400 font-normal">&nbsp;</div>
+                </th>
+                <th
+                  className="text-center text-white uppercase font-bold p-2 bg-[#18181B] z-20"
+                  style={{ fontFamily: 'Barlow Condensed, sans-serif', width: `${totalColumnWidth}px`, minWidth: `${totalColumnWidth}px`, position: 'sticky', right: 0 }}
+                >
                   <div>{totalTimeLabel}</div>
                   <div className="text-xs text-zinc-400 font-normal">{t('times.totalTime')}</div>
                 </th>
@@ -228,7 +267,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
               {categoryBuckets.map((bucket) => (
                 <React.Fragment key={bucket.id}>
                   <tr className="bg-zinc-900/60">
-                    <td colSpan={lapsArray.length + 2} className="p-2 border-b border-zinc-800">
+                    <td colSpan={lapsArray.length + 2 + (hasVariableLapCount ? 1 : 0)} className="p-2 border-b border-zinc-800">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bucket.color }} />
                         <span className="text-zinc-300 text-xs uppercase font-semibold">
@@ -242,10 +281,13 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                   .map((pilot) => (
                     <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
                         <td className="p-2 sticky left-0 bg-[#18181B] z-10">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <div className="w-1 h-6 rounded" style={{ backgroundColor: bucket.color }} />
-                            <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                            <span className="text-white font-bold text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                            <span className="text-zinc-500 text-xs whitespace-nowrap">#{pilot.startOrder || '?'}</span>
+                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full border border-[#FACC15]/30 bg-[#FACC15]/10 text-[#FACC15] text-[11px] font-bold whitespace-nowrap">
+                              {pilot.carNumber || '?'}
+                            </span>
+                            <span className="text-white font-bold text-sm truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               {pilot.name}
                             </span>
                           </div>
@@ -253,7 +295,8 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                         {lapsArray.map((lapIndex) => {
                           const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
                           const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, stage.id, lapIndex - 1) : null;
-                          const lapDuration = calculateLapDuration(lapTime, prevLapTime, stage.startTime, timeDecimals);
+                          const actualStartTime = getLapRaceActualStartTime(stage);
+                          const lapDuration = calculateLapDuration(lapTime, prevLapTime, actualStartTime, timeDecimals);
 
                           return (
                             <td key={lapIndex} className="p-2">
@@ -268,14 +311,6 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                                     className="bg-[#09090B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                                     readOnly={isReadOnly}
                                   />
-                                  <button
-                                    onClick={() => setLapTime(pilot.id, stage.id, lapIndex, getCurrentTimeString(timeDecimals))}
-                                    className="text-zinc-400 hover:text-[#FF4500] transition-colors p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded"
-                                    title={t('times.now')}
-                                    disabled={isReadOnly}
-                                  >
-                                    <Clock className="w-4 h-4" />
-                                  </button>
                                   <button
                                     onClick={() => setLapTime(pilot.id, stage.id, lapIndex, '')}
                                     className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
@@ -294,7 +329,36 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                             </td>
                           );
                         })}
-                        <td className="p-2">
+                        {hasVariableLapCount && (
+                          <td
+                            className="p-2 text-center bg-[#18181B] z-10"
+                            style={{ width: `${addLapColumnWidth}px`, minWidth: `${addLapColumnWidth}px`, position: 'sticky', right: `${addLapStickyRight}px` }}
+                          >
+                            <span className="block h-8" />
+                          </td>
+                        )}
+                        <td
+                          className="p-2 text-center bg-[#18181B] z-10"
+                          style={{ width: `${nowColumnWidth}px`, minWidth: `${nowColumnWidth}px`, position: 'sticky', right: `${nowStickyRight}px` }}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300 text-[11px] font-bold whitespace-nowrap">
+                              {pilot.carNumber || '?'}
+                            </span>
+                            <button
+                              onClick={() => setLapTime(pilot.id, stage.id, lastLapIndex, getCurrentTimeString(timeDecimals))}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded bg-zinc-800 text-zinc-400 hover:text-[#FF4500] hover:bg-zinc-700 transition-colors"
+                              title={`${t('times.now')} (${t('times.lap')} ${lastLapIndex + 1})`}
+                              disabled={isReadOnly}
+                            >
+                              <Clock className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                        <td
+                          className="p-2 bg-[#18181B] z-20"
+                          style={{ width: `${totalColumnWidth}px`, minWidth: `${totalColumnWidth}px`, position: 'sticky', right: 0 }}
+                        >
                           <div className="text-center">
                             <span className="text-white font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                               {times[pilot.id]?.[stage.id] || '-'}
