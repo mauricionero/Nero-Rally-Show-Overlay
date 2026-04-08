@@ -79,6 +79,7 @@ export const buildPilotMapMarkers = (pilots = [], categories = [], pilotTelemetr
         color: category?.color || '#FF4500',
         speed: toFiniteNumber(telemetry.speed),
         heading: toFiniteNumber(telemetry.heading),
+        gpsPrecision: toFiniteNumber(telemetry.gpsPrecision),
         lastUpdatedAt: Number(
           telemetry.lastLatLongUpdatedAt
           || telemetry.latlongTimestamp

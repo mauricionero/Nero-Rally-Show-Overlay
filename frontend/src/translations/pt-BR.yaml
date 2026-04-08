@@ -23,6 +23,7 @@ common:
   all: "Todos"
   apply: "Aplicar"
   custom: "Personalizado"
+  send: "Enviar"
   yes: "Sim"
   no: "Não"
 
@@ -39,6 +40,8 @@ header:
   title: "NRS Control Zone"
   subtitle: "Configuração"
   goLive: "Ao Vivo"
+  hide: "Ocultar"
+  stream: "Stream"
   hideStreams: "Ocultar Streams"
   connect: "Conectar"
   disconnect: "Desconectar"
@@ -54,6 +57,7 @@ header:
   ownershipOffline: "Offline"
   ownershipPrimary: "Primária"
   ownershipReplica: "Réplica"
+  debugLogs: "Logs de Debug"
 
 # ===========================================
 # PÁGINA SETUP - ABAS
@@ -84,6 +88,7 @@ pilots:
   telemetry: "Telemetria"
   speed: "Velocidade"
   heading: "Direção"
+  gpsPrecision: "Precisão do GPS"
   now: "Agora"
   telemetryHint: "Usado pelo app Android para enviar atualizações de posição em tempo real."
   lastLatLongUpdatedAt: "Última Atualização da Posição"
@@ -477,7 +482,10 @@ bulkLoad:
   importStages: "Importar Etapas"
   importTimes: "Importar Tempos"
   importKml: "Importar KML"
+  importAllAsOneMap: "Importar todos os pontos como 1 mapa"
+  importAllAsOneMapDesc: "Use quando cada ponto da rota foi exportado como um placemark separado."
   clearMaps: "Limpar Mapas"
+  deletePlacemark: "Excluir placemark"
   rejectedRows: "Linhas Rejeitadas"
   noErrors: "Nenhuma linha rejeitada."
   noImportYet: "Nenhuma importacao executada ainda"

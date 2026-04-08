@@ -435,7 +435,7 @@ export default class SyncEngine {
         }
 
         if (isSyncDebugEnabled()) {
-          console.debug('[SyncEngine] Published batch', {
+          console.log('[SyncEngine] Published batch', {
             role: this.role,
             instanceId: this.instanceId,
             queuedCount: mergedEntries.length,
@@ -544,7 +544,7 @@ export default class SyncEngine {
     }
 
     if (isSyncDebugEnabled()) {
-      console.debug('[SyncEngine][snapshot] timer started', {
+      console.log('[SyncEngine][snapshot] timer started', {
         instanceId: this.instanceId,
         ownerId: this.ownerId,
         ownerEpoch: this.ownerEpoch,
@@ -558,7 +558,7 @@ export default class SyncEngine {
       }
 
       if (isSyncDebugEnabled()) {
-        console.debug('[SyncEngine][snapshot] due', {
+        console.log('[SyncEngine][snapshot] due', {
           instanceId: this.instanceId,
           ownerId: this.ownerId,
           ownerEpoch: this.ownerEpoch,
@@ -717,7 +717,7 @@ export default class SyncEngine {
     }
 
     if (isSyncDebugEnabled()) {
-      console.debug('[SyncEngine] Incoming message', normalized);
+      console.log('[SyncEngine] Incoming message', normalized);
     }
 
     if (normalized?.payload && typeof normalized.payload === 'string') {
@@ -791,7 +791,7 @@ export default class SyncEngine {
     let changes = convertMessageToChanges(normalized);
     if (Object.keys(changes).length === 0) {
       if (isSyncDebugEnabled()) {
-        console.debug('[SyncEngine] Incoming message ignored after normalization', {
+        console.log('[SyncEngine] Incoming message ignored after normalization', {
           messageType,
           sourceRole,
           sourceInstanceId
@@ -810,7 +810,7 @@ export default class SyncEngine {
     changes = filterChangesForRoleRecipient(this.role, sourceRole, changes);
     if (Object.keys(changes).length === 0) {
       if (isSyncDebugEnabled()) {
-        console.debug('[SyncEngine] Incoming message filtered out by permissions', {
+        console.log('[SyncEngine] Incoming message filtered out by permissions', {
           messageType,
           recipientRole: this.role,
           sourceRole,
@@ -821,7 +821,7 @@ export default class SyncEngine {
     }
 
     if (isSyncDebugEnabled()) {
-      console.debug('[SyncEngine] Incoming message accepted', {
+      console.log('[SyncEngine] Incoming message accepted', {
         messageType,
         recipientRole: this.role,
         sourceRole,

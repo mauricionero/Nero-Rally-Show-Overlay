@@ -25,10 +25,8 @@ export default function LiveSyncTab() {
   const [newKey, setNewKey] = useState('');
 
   useEffect(() => {
-    if (wsChannelKey && wsChannelKey !== newKey) {
-      setNewKey(wsChannelKey);
-    }
-  }, [newKey, wsChannelKey]);
+    setNewKey(wsChannelKey || '');
+  }, [wsChannelKey]);
 
   const handleGenerateKey = () => {
     const key = generateNewChannelKey();
@@ -131,7 +129,7 @@ export default function LiveSyncTab() {
                 Last times sync: {lastTimesSyncAt ? new Date(lastTimesSyncAt).toLocaleTimeString() : '--'}
               </div>
               <Button
-                onClick={disconnectSyncChannel}
+                onClick={() => disconnectSyncChannel({ manual: true })}
                 variant="destructive"
                 className="w-full"
               >

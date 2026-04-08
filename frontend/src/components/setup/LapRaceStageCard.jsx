@@ -1,14 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRallyMeta, useRallyTiming } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog.jsx';
 import { TimeInput } from '../TimeInput.jsx';
-import { CheckSquare, Square, Clock, Plus, X } from 'lucide-react';
+import { CheckSquare, Square, Clock, Plus, X, TriangleAlert } from 'lucide-react';
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceActualStartTime, getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
+import PilotStatusBadges from '../PilotStatusBadges.jsx';
 
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = (timeDecimals) => formatClockFromDate(new Date(), timeDecimals);
@@ -49,10 +51,15 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     togglePilotInStage,
     selectAllPilotsInStage,
     deselectAllPilotsInStage,
+    setStageAlert,
+    setStageSos,
+    stageAlerts,
+    stageSos,
     times,
     timeDecimals
   } = useRallyTiming();
   const { updateStage } = useRallyMeta();
+  const [pendingSosToggle, setPendingSosToggle] = useState(null);
 
   const selectedPilotIds = getStagePilots(stage.id);
   const selectedPilotIdSet = useMemo(() => new Set(selectedPilotIds), [selectedPilotIds]);
@@ -117,6 +124,28 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
   const totalTimeLabel = stage.lapRaceTotalTimeMode === 'bestLap'
     ? t('times.bestLapTime')
     : t('times.cumulativeTime');
+  const requestSosToggle = (pilotId, nextValue) => {
+    if (isReadOnly) return;
+
+    if (nextValue) {
+      setPendingSosToggle({ pilotId, stageId: stage.id, nextValue: true });
+      return;
+    }
+
+    setStageSos(pilotId, stage.id, false);
+  };
+
+  const confirmSosToggle = () => {
+    if (!pendingSosToggle) return;
+    setStageSos(
+      pendingSosToggle.pilotId,
+      pendingSosToggle.stageId,
+      pendingSosToggle.nextValue,
+      { highPriority: pendingSosToggle.nextValue === true }
+    );
+    setPendingSosToggle(null);
+  };
+
   const handleAddLap = () => {
     if (isReadOnly) {
       return;
@@ -159,6 +188,28 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
           {t('times.now')}
         </Button>
       </div>
+
+      <AlertDialog open={Boolean(pendingSosToggle)} onOpenChange={(open) => { if (!open) setPendingSosToggle(null); }}>
+        <AlertDialogContent className="bg-[#111113] border-zinc-800 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+              <TriangleAlert className="w-5 h-5 text-red-400" />
+              {t('status.sosLabel')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-300">
+              {t('status.sosTooltip')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingSosToggle(null)}>
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSosToggle} className="bg-red-600 hover:bg-red-700 text-white">
+              {t('common.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Pilot Selection */}
       <div className={`p-3 bg-[#09090B] rounded border border-zinc-700 ${isReadOnly ? 'opacity-80' : ''}`}>
@@ -278,19 +329,26 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                   </tr>
                 {selectedPilots
                   .filter((pilot) => bucket.pilots.some((p) => p.id === pilot.id))
-                  .map((pilot) => (
+                  .map((pilot) => {
+                    const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
+                    const sos = Number(stageSos?.[pilot.id]?.[stage.id] || 0) > 0;
+
+                    return (
                     <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
-                        <td className="p-2 sticky left-0 bg-[#18181B] z-10">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-1 h-6 rounded" style={{ backgroundColor: bucket.color }} />
-                            <span className="text-zinc-500 text-xs whitespace-nowrap">#{pilot.startOrder || '?'}</span>
-                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full border border-[#FACC15]/30 bg-[#FACC15]/10 text-[#FACC15] text-[11px] font-bold whitespace-nowrap">
-                              {pilot.carNumber || '?'}
-                            </span>
+                      <td className="p-2 sticky left-0 bg-[#18181B] z-10">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-1 h-6 rounded" style={{ backgroundColor: bucket.color }} />
+                          <span className="text-zinc-500 text-xs whitespace-nowrap">#{pilot.startOrder || '?'}</span>
+                          <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full border border-[#FACC15]/30 bg-[#FACC15]/10 text-[#FACC15] text-[11px] font-bold whitespace-nowrap">
+                            {pilot.carNumber || '?'}
+                          </span>
+                          <div className="min-w-0 flex items-center gap-2">
                             <span className="text-white font-bold text-sm truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               {pilot.name}
                             </span>
+                            <PilotStatusBadges pilotId={pilot.id} stageId={stage.id} compact />
                           </div>
+                        </div>
                         </td>
                         {lapsArray.map((lapIndex) => {
                           const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
@@ -341,10 +399,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                           className="p-2 text-center bg-[#18181B] z-10"
                           style={{ width: `${nowColumnWidth}px`, minWidth: `${nowColumnWidth}px`, position: 'sticky', right: `${nowStickyRight}px` }}
                         >
-                          <div className="flex items-center justify-center gap-2">
-                            <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300 text-[11px] font-bold whitespace-nowrap">
-                              {pilot.carNumber || '?'}
-                            </span>
+                          <div className="flex items-center justify-center gap-1 flex-nowrap">
                             <button
                               onClick={() => setLapTime(pilot.id, stage.id, lastLapIndex, getCurrentTimeString(timeDecimals))}
                               className="inline-flex items-center justify-center h-8 w-8 rounded bg-zinc-800 text-zinc-400 hover:text-[#FF4500] hover:bg-zinc-700 transition-colors"
@@ -353,6 +408,24 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                             >
                               <Clock className="w-4 h-4" />
                             </button>
+                            <label className={`inline-flex items-center gap-1 ${isReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                              <Checkbox
+                                checked={alert}
+                                onCheckedChange={(checked) => setStageAlert(pilot.id, stage.id, checked === true)}
+                                disabled={isReadOnly}
+                                className="h-3.5 w-3.5"
+                              />
+                              <TriangleAlert className="w-3 h-3 text-amber-400" />
+                            </label>
+                            <label className={`inline-flex items-center gap-1 ${isReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                              <Checkbox
+                                checked={sos}
+                                onCheckedChange={(checked) => requestSosToggle(pilot.id, checked === true)}
+                                disabled={isReadOnly}
+                                className="h-3.5 w-3.5"
+                              />
+                              <span className="text-[11px] text-zinc-400 uppercase">🆘</span>
+                            </label>
                           </div>
                         </td>
                         <td
@@ -365,8 +438,9 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                             </span>
                           </div>
                         </td>
-                      </tr>
-                    ))}
+                    </tr>
+                    );
+                  })}
                 </React.Fragment>
               ))}
             </tbody>

@@ -26,7 +26,30 @@ const getNodeText = (element, selector) => {
   return node?.textContent?.trim() || '';
 };
 
-export const parseKmlPlacemarks = (kmlText) => {
+const getFallbackPlacemarkName = (documentName, fileName) => {
+  const trimmedDocumentName = String(documentName || '').trim();
+  if (trimmedDocumentName) {
+    return trimmedDocumentName;
+  }
+
+  const trimmedFileName = String(fileName || '').trim();
+  if (trimmedFileName) {
+    return trimmedFileName.replace(/\.[^.]+$/, '') || trimmedFileName;
+  }
+
+  return 'Combined Points Map';
+};
+
+const createPlacemarkId = (prefix, index) => (
+  `${prefix}_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`
+);
+
+export const parseKmlPlacemarks = (kmlText, options = {}) => {
+  const {
+    importAllAsOneMap = false,
+    fileName = ''
+  } = options;
+
   if (typeof window === 'undefined' || typeof window.DOMParser === 'undefined') {
     return { placemarks: [], error: 'DOMParser is not available in this environment.' };
   }
@@ -34,13 +57,14 @@ export const parseKmlPlacemarks = (kmlText) => {
   const parser = new window.DOMParser();
   const xml = parser.parseFromString(kmlText, 'application/xml');
   const parserError = xml.querySelector('parsererror');
+  const documentName = getNodeText(xml, 'Document > name');
 
   if (parserError) {
     return { placemarks: [], error: 'Invalid KML file.' };
   }
 
   const placemarkNodes = Array.from(xml.querySelectorAll('Placemark'));
-  const placemarks = placemarkNodes.map((placemarkNode, index) => {
+  const parsedPlacemarks = placemarkNodes.map((placemarkNode, index) => {
     const name = getNodeText(placemarkNode, 'name') || `Placemark ${index + 1}`;
     const polygonNodes = Array.from(placemarkNode.querySelectorAll('Polygon coordinates'));
     const lineNodes = Array.from(placemarkNode.querySelectorAll('LineString coordinates'));
@@ -67,12 +91,34 @@ export const parseKmlPlacemarks = (kmlText) => {
     }
 
     return {
-      id: `placemark_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`,
+      sourceIndex: index,
+      id: createPlacemarkId('placemark', index),
       name,
       geometryType,
       coordinateGroups
     };
   }).filter((placemark) => placemark.geometryType && placemark.coordinateGroups.length > 0);
 
-  return { placemarks, error: null };
+  if (importAllAsOneMap) {
+    const pointPlacemarks = parsedPlacemarks.filter((placemark) => placemark.geometryType === 'point');
+
+    if (pointPlacemarks.length > 0) {
+      const mergedCoordinates = pointPlacemarks.flatMap((placemark) => placemark.coordinateGroups.flat());
+
+      return {
+        placemarks: [{
+          id: createPlacemarkId('placemark_points', pointPlacemarks[0].sourceIndex),
+          name: getFallbackPlacemarkName(documentName, fileName),
+          geometryType: 'line',
+          coordinateGroups: mergedCoordinates.length > 0 ? [mergedCoordinates] : []
+        }],
+        error: null
+      };
+    }
+  }
+
+  return {
+    placemarks: parsedPlacemarks.map(({ sourceIndex, ...placemark }) => placemark),
+    error: null
+  };
 };

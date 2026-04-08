@@ -88,6 +88,7 @@ export default function PilotsTab({ hideStreams = false }) {
         lastLatLongUpdatedAt: liveTelemetry.lastLatLongUpdatedAt ?? prev.lastLatLongUpdatedAt ?? '',
         speed: liveTelemetry.speed ?? prev.speed ?? '',
         heading: liveTelemetry.heading ?? prev.heading ?? '',
+        gpsPrecision: liveTelemetry.gpsPrecision ?? prev.gpsPrecision ?? '',
         lastTelemetryAt: liveTelemetry.lastTelemetryAt ?? prev.lastTelemetryAt ?? ''
       };
     });
@@ -123,10 +124,6 @@ export default function PilotsTab({ hideStreams = false }) {
       toast.error(t('pilots.pilotName') + ' is required');
       return;
     }
-    const nextLatLong = (editingPilot.latLong || '').trim();
-    const telemetryTimestampInput = normalizeOptionalNumberInput(
-      editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''
-    );
     const pilotData = {
       ...editingPilot,
       startOrder: parseInt(editingPilot.startOrder) || 999,
@@ -138,17 +135,35 @@ export default function PilotsTab({ hideStreams = false }) {
     delete pilotData.lastTelemetryAt;
     delete pilotData.speed;
     delete pilotData.heading;
+    delete pilotData.gpsPrecision;
     updatePilot(editingPilot.id, pilotData);
     setPilotTelemetry(editingPilot.id, {
-      latLong: nextLatLong,
-      latlongTimestamp: telemetryTimestampInput,
-      lastLatLongUpdatedAt: telemetryTimestampInput,
+      latLong: (editingPilot.latLong || '').trim(),
+      latlongTimestamp: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
+      lastLatLongUpdatedAt: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
       speed: normalizeOptionalNumberInput(editingPilot.speed),
-      heading: normalizeOptionalNumberInput(editingPilot.heading)
+      heading: normalizeOptionalNumberInput(editingPilot.heading),
+      gpsPrecision: normalizeOptionalNumberInput(editingPilot.gpsPrecision)
     });
     setEditingPilot(null);
     setPilotDialogOpen(false);
     toast.success('Pilot updated successfully');
+  };
+
+  const handleSendTelemetryOnly = () => {
+    if (!editingPilot?.id) {
+      return;
+    }
+
+    setPilotTelemetry(editingPilot.id, {
+      latLong: (editingPilot.latLong || '').trim(),
+      latlongTimestamp: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
+      lastLatLongUpdatedAt: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
+      speed: normalizeOptionalNumberInput(editingPilot.speed),
+      heading: normalizeOptionalNumberInput(editingPilot.heading),
+      gpsPrecision: normalizeOptionalNumberInput(editingPilot.gpsPrecision)
+    });
+    toast.success('Telemetry sent');
   };
 
   const sortedCategories = sortCategoriesByDisplayOrder(categories);
@@ -608,6 +623,31 @@ export default function PilotsTab({ hideStreams = false }) {
                                     placeholder="180"
                                     className="bg-[#18181B] border-zinc-700 text-white"
                                   />
+                                </div>
+                                <div>
+                                  <Label className="flex items-center gap-1 text-white">
+                                    <MapPin className="w-3 h-3 text-[#FF4500]" />
+                                    {t('pilots.gpsPrecision')}
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={editingPilot.gpsPrecision ?? ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, gpsPrecision: e.target.value })}
+                                    placeholder="5.0"
+                                    className="bg-[#18181B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <Label className="text-transparent select-none">.</Label>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                                    onClick={handleSendTelemetryOnly}
+                                  >
+                                    {t('common.send')}
+                                  </Button>
                                 </div>
                               </div>
 

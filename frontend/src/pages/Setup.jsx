@@ -27,6 +27,7 @@ import StreamsTab from '../components/setup/StreamsTab.jsx';
 import ConfigTab from '../components/setup/ConfigTab.jsx';
 import DebugTab from '../components/setup/DebugTab.jsx';
 import LiveSyncTab from '../components/setup/LiveSyncTab.jsx';
+import { shouldSuppressManualWsReconnect } from '../utils/wsAutoConnect.js';
 
 export default function Setup() {
   const { t } = useTranslation();
@@ -67,6 +68,10 @@ export default function Setup() {
   useEffect(() => {
     const wsKey = searchParams.get('ws');
     if (!wsKey || wsConnectionStatus === 'connected' || wsConnectionStatus === 'connecting') {
+      return undefined;
+    }
+
+    if (shouldSuppressManualWsReconnect(wsKey)) {
       return undefined;
     }
 

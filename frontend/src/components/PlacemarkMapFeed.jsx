@@ -343,11 +343,33 @@ const spreadProjectedMarkers = (markers = []) => {
   });
 };
 
-const PilotPositionMarker = ({ marker, now, onHover, onBlur }) => {
+const getGpsPrecisionRadius = (marker, bounds) => {
+  const precisionMeters = Number(marker?.gpsPrecision);
+  if (!Number.isFinite(precisionMeters) || precisionMeters <= 0 || !bounds) {
+    return 0;
+  }
+
+  const latRadians = (Number(marker.lat) || 0) * (Math.PI / 180);
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLng = 111_320 * Math.cos(latRadians);
+  const metersPerSvgX = metersPerDegreeLng / (bounds.width / Math.max(bounds.lngSpan, 0.000001));
+  const metersPerSvgY = metersPerDegreeLat / (bounds.height / Math.max(bounds.latSpan, 0.000001));
+  const metersPerSvgUnit = (metersPerSvgX + metersPerSvgY) / 2;
+
+  if (!Number.isFinite(metersPerSvgUnit) || metersPerSvgUnit <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, precisionMeters / metersPerSvgUnit);
+};
+
+const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick }) => {
   const freshness = getMarkerFreshness(marker.lastUpdatedAt, now);
   const style = getMarkerStyle(freshness, marker.color, marker.lastUpdatedAt, now);
   const labelLength = String(marker.label || '').trim().length;
   const fontSize = labelLength <= 2 ? 22 : 18;
+  const auraRadius = getGpsPrecisionRadius(marker, bounds);
+  const auraVisible = auraRadius > 0;
 
   return (
     <g
@@ -358,10 +380,23 @@ const PilotPositionMarker = ({ marker, now, onHover, onBlur }) => {
       onMouseLeave={() => onBlur?.()}
       onFocus={() => onHover?.(marker)}
       onBlurCapture={() => onBlur?.()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.(marker);
+      }}
       tabIndex={0}
       role="button"
       aria-label={`Pilot ${marker.carNumber || marker.label || ''}`.trim()}
     >
+      {auraVisible && (
+        <circle
+          r={Math.max(auraRadius, 12)}
+          fill="rgba(59,130,246,0.16)"
+          stroke="rgba(30,58,138,0.92)"
+          strokeWidth="2.5"
+        />
+      )}
       <circle
         r="24"
         fill={style.fillColor}
@@ -398,8 +433,8 @@ const PilotMarkerPopover = ({ marker }) => {
   const needleColor = displaySpeed !== null || heading !== null ? '#EF4444' : '#71717A';
   const needleShadow = 'rgba(0,0,0,0.82)';
   const hasTelemetry = displaySpeed !== null || heading !== null;
-  const badgeRadius = 40;
-  const badgeFontSize = 36;
+  const badgeRadius = 34;
+  const badgeFontSize = 32;
 
   return (
     <g transform={`translate(${layout.x}, ${layout.y})`} pointerEvents="none">
@@ -421,18 +456,18 @@ const PilotMarkerPopover = ({ marker }) => {
         stroke="rgba(255,255,255,0.18)"
         strokeWidth="2.5"
       />
-      <g transform={`translate(${-badgeRadius / 2 + 6} ${-badgeRadius / 2 + 6})`}>
+      <g transform={`translate(${badgeRadius - 10} ${badgeRadius - 10})`}>
         <circle
           cx="0"
           cy="0"
           r={badgeRadius}
           fill={badgeFill}
           stroke="rgba(0,0,0,0.3)"
-          strokeWidth="2"
+            strokeWidth="2"
         />
         <text
           x="0"
-          y="12"
+          y="10"
           textAnchor="middle"
           fontSize={badgeFontSize}
           fontWeight="800"
@@ -473,8 +508,8 @@ const PilotMarkerPopover = ({ marker }) => {
             <text
               x="0"
               y="20"
-              textAnchor="middle"
-              fontSize="54"
+            textAnchor="middle"
+              fontSize="60"
               fontWeight="800"
               fill={speedFill}
               stroke={needleShadow}
@@ -499,18 +534,6 @@ const PilotMarkerPopover = ({ marker }) => {
             --
           </text>
         )}
-        <text
-          x={layout.width - 18}
-          y={layout.height - 18}
-          textAnchor="end"
-          fontSize="20"
-          fontWeight="800"
-          fill={displaySpeed !== null ? needleColor : '#71717A'}
-          opacity={displaySpeed !== null ? '0.85' : '0.55'}
-          style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.12em' }}
-        >
-          km/h
-        </text>
       </g>
     </g>
   );
@@ -584,6 +607,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [markerNow, setMarkerNow] = useState(() => Date.now());
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
+  const [selectedMarkerId, setSelectedMarkerId] = useState(null);
   const dragStateRef = useRef(null);
   const projectionBounds = useMemo(
     () => buildProjectionBounds(placemark?.coordinateGroups || []),
@@ -607,6 +631,11 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
     () => projectedPilotMarkers.find((marker) => marker.id === hoveredMarkerId) || null,
     [hoveredMarkerId, projectedPilotMarkers]
   );
+  const selectedMarker = useMemo(
+    () => projectedPilotMarkers.find((marker) => marker.id === selectedMarkerId) || null,
+    [projectedPilotMarkers, selectedMarkerId]
+  );
+  const activeMarker = selectedMarker || hoveredMarker;
 
   useEffect(() => {
     if (projectedPilotMarkers.length === 0) {
@@ -670,6 +699,11 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
       onMouseLeave={() => {
         dragStateRef.current = null;
       }}
+      onClick={() => {
+        if (!selectedMarkerId) {
+          setHoveredMarkerId(null);
+        }
+      }}
       style={{ cursor: dragStateRef.current ? 'grabbing' : 'grab' }}
     >
       <div className="absolute inset-0 opacity-70" style={{
@@ -731,12 +765,25 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
           <PilotPositionMarker
             key={marker.id}
             marker={marker}
+            bounds={normalized.bounds}
             now={markerNow}
-            onHover={(nextMarker) => setHoveredMarkerId(nextMarker.id)}
-            onBlur={() => setHoveredMarkerId((current) => (current === marker.id ? null : current))}
+            onHover={(nextMarker) => {
+              if (!selectedMarkerId) {
+                setHoveredMarkerId(nextMarker.id);
+              }
+            }}
+            onBlur={() => {
+              if (!selectedMarkerId) {
+                setHoveredMarkerId((current) => (current === marker.id ? null : current));
+              }
+            }}
+            onClick={(nextMarker) => {
+              setSelectedMarkerId((current) => (current === nextMarker.id ? null : nextMarker.id));
+              setHoveredMarkerId(null);
+            }}
           />
         ))}
-        {hoveredMarker && <PilotMarkerPopover marker={hoveredMarker} />}
+        {activeMarker && <PilotMarkerPopover marker={activeMarker} />}
       </svg>
     </div>
   );
