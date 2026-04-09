@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useRallyMeta, useRallyTiming } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
-import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog.jsx';
 import { TimeInput } from '../TimeInput.jsx';
+import RollingClockInput from '../RollingClockInput.jsx';
 import { CheckSquare, Square, Clock, Plus, X, TriangleAlert } from 'lucide-react';
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceActualStartTime, getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
@@ -162,17 +162,18 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
       {/* Race Start Time */}
       <div className={`flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700 ${isReadOnly ? 'opacity-80' : ''}`}>
         <Label className="text-white whitespace-nowrap">{t('times.raceStartTime')}:</Label>
-        <Input
+        <RollingClockInput
           value={stage.startTime || ''}
-          onChange={(e) => updateStage(stage.id, { startTime: e.target.value })}
-          placeholder="HH:MM:SS"
+          onCommit={(nextValue) => updateStage(stage.id, { startTime: nextValue })}
+          showSeconds={false}
+          placeholder="HH:MM"
           className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
           readOnly={isReadOnly}
         />
         <Label className="text-white whitespace-nowrap">{t('times.realStartTime')}:</Label>
-        <Input
+        <RollingClockInput
           value={stage.realStartTime || ''}
-          onChange={(e) => updateStage(stage.id, { realStartTime: e.target.value })}
+          onCommit={(nextValue) => updateStage(stage.id, { realStartTime: nextValue })}
           placeholder="HH:MM:SS"
           className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
           readOnly={isReadOnly}
@@ -180,7 +181,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
         <Button
           size="sm"
           variant="outline"
-          onClick={() => updateStage(stage.id, { realStartTime: getCurrentTimeString().slice(0, 8) })}
+          onClick={() => updateStage(stage.id, { realStartTime: getCurrentTimeString(timeDecimals).slice(0, 8) })}
           className="border-zinc-700 text-white"
           disabled={isReadOnly}
         >

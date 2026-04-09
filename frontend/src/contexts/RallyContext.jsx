@@ -4486,10 +4486,6 @@ export const RallyProvider = ({ children }) => {
             return;
           }
 
-          if (isManualStartStageType(stage.type)) {
-            return;
-          }
-
           const derivedStartTime = getPilotScheduledStartTime(stage, pilot);
           const currentValue = nextPilotTimes[stage.id] || '';
           const previousDerivedValue = previousDerivedStartTimes?.[pilot.id]?.[stage.id] || '';

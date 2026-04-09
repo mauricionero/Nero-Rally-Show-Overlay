@@ -411,6 +411,7 @@ export const getLapRaceStoredTotalTimeSeconds = ({
 
 export const getLapRacePilotStageInfo = ({
   pilotId,
+  pilot = null,
   stage,
   startTimes = {},
   times = {},
@@ -422,7 +423,10 @@ export const getLapRacePilotStageInfo = ({
   const safeStage = stage || {};
   const stageId = safeStage.id;
   const totalTimeMode = getLapRaceTotalTimeMode(safeStage);
-  const scheduledStartTime = getPilotStageStartTime(pilotId, safeStage, startTimes);
+  const scheduledStartTime = startTimes?.[pilotId]?.[stageId]
+    || getPilotScheduledStartTime(safeStage, pilot)
+    || safeStage.startTime
+    || '';
   const startTime = getLapRaceActualStartTime(safeStage);
   const finishTime = times?.[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
@@ -524,6 +528,7 @@ export const getPilotStageTimingInfo = ({
   if (isLapRaceStageType(stage.type)) {
     const lapInfo = getLapRacePilotStageInfo({
       pilotId,
+      pilot,
       stage,
       startTimes,
       times,
