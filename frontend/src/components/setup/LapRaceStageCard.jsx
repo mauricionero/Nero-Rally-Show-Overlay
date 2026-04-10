@@ -174,14 +174,15 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
         <RollingClockInput
           value={stage.realStartTime || ''}
           onCommit={(nextValue) => updateStage(stage.id, { realStartTime: nextValue })}
-          placeholder="HH:MM:SS"
+          placeholder={getTimePlaceholder('clock', timeDecimals)}
+          decimals={timeDecimals}
           className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
           readOnly={isReadOnly}
         />
         <Button
           size="sm"
           variant="outline"
-          onClick={() => updateStage(stage.id, { realStartTime: getCurrentTimeString(timeDecimals).slice(0, 8) })}
+          onClick={() => updateStage(stage.id, { realStartTime: getCurrentTimeString(timeDecimals) })}
           className="border-zinc-700 text-white"
           disabled={isReadOnly}
         >
