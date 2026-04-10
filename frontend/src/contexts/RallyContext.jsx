@@ -1137,7 +1137,6 @@ export const RallyProvider = ({ children }) => {
   const retiredStagesRef = useRef(retiredStages);
   const stageAlertsRef = useRef(stageAlerts);
   const stageSosRef = useRef(stageSos);
-  const autoDerivedStartTimesRef = useRef({});
   const previousSetupSyncStateRef = useRef({
     meta: {
       eventName,
@@ -4464,69 +4463,6 @@ export const RallyProvider = ({ children }) => {
       value: timeDecimals
     }]);
   }, [captureSetupPatchEntries, timeDecimals, updateDataVersion]);
-
-  useEffect(() => {
-    setStartTimes((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      const previousDerivedStartTimes = autoDerivedStartTimesRef.current || {};
-      const nextDerivedStartTimes = {};
-
-      pilots.forEach((pilot) => {
-        const nextPilotTimes = { ...(next[pilot.id] || {}) };
-        let pilotChanged = false;
-        const nextPilotDerivedTimes = {};
-
-        stages.forEach((stage) => {
-          if (isLapRaceStageType(stage.type)) {
-            if (nextPilotTimes[stage.id]) {
-              delete nextPilotTimes[stage.id];
-              pilotChanged = true;
-            }
-            return;
-          }
-
-          const derivedStartTime = getPilotScheduledStartTime(stage, pilot);
-          const currentValue = nextPilotTimes[stage.id] || '';
-          const previousDerivedValue = previousDerivedStartTimes?.[pilot.id]?.[stage.id] || '';
-
-          if (derivedStartTime) {
-            nextPilotDerivedTimes[stage.id] = derivedStartTime;
-          }
-
-          if (derivedStartTime) {
-            if (!currentValue || currentValue === previousDerivedValue) {
-              if (currentValue !== derivedStartTime) {
-                nextPilotTimes[stage.id] = derivedStartTime;
-                pilotChanged = true;
-              }
-            }
-          } else if (!currentValue || currentValue === previousDerivedValue) {
-            if (currentValue) {
-              delete nextPilotTimes[stage.id];
-              pilotChanged = true;
-            }
-          }
-        });
-
-        if (Object.keys(nextPilotDerivedTimes).length > 0) {
-          nextDerivedStartTimes[pilot.id] = nextPilotDerivedTimes;
-        }
-
-        if (pilotChanged) {
-          if (Object.keys(nextPilotTimes).length > 0) {
-            next[pilot.id] = nextPilotTimes;
-          } else {
-            delete next[pilot.id];
-          }
-          changed = true;
-        }
-      });
-
-      autoDerivedStartTimesRef.current = nextDerivedStartTimes;
-      return changed ? next : prev;
-    });
-  }, [pilots, stages]);
 
   useEffect(() => {
     const repairedPilots = ensureUniqueEntityIds(pilots, 'pilot');

@@ -418,6 +418,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         ? getEffectiveIdealStartTime(stage, pilot, storedStartTimeValue)
         : getPilotScheduledStartTime(stage, pilot);
       const displayedIdealStartTimeValue = startTimeDrafts[pilot.id] ?? idealStartTimeValue;
+      const isPersistedIdealStartTime = Boolean(storedStartTimeValue)
+        && displayedIdealStartTimeValue === storedStartTimeValue;
         const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
         const displayedRealStartTimeValue = realStartTimeDrafts[pilot.id] ?? realStartTimeValue;
       const retired = !!retiredStages[pilot.id]?.[stage.id];
@@ -435,8 +437,9 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         pilot,
         category,
         totalTime,
-        arrivalTimeValue,
-        storedStartTimeValue,
+          arrivalTimeValue,
+          storedStartTimeValue,
+          isPersistedIdealStartTime,
           idealStartTimeValue,
           displayedIdealStartTimeValue,
           realStartTimeValue,
@@ -721,7 +724,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       handleRealStartTimeDraftChange(pilotId, nextValue);
     };
 
-  const getCurrentClockString = () => formatClockFromDate(new Date(), 0);
+  const getCurrentIdealClockString = () => formatClockFromDate(new Date(), 0).slice(0, 5);
+  const getCurrentRealClockString = () => formatClockFromDate(new Date(), 0);
 
   const requestSosToggle = (pilotId, nextValue) => {
     if (sosControlsReadOnly) return;
@@ -836,6 +840,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   category,
                   idealStartTimeValue,
                   displayedIdealStartTimeValue,
+                  isPersistedIdealStartTime,
                   realStartTimeValue,
                   displayedRealStartTimeValue,
                   retired,
@@ -929,12 +934,12 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                               onKeyDown={(e) => handleStartTimeKeyDown(pilot.id, displayedIdealStartTimeValue, e)}
                               onBlur={() => commitStartTimeChange(pilot.id, displayedIdealStartTimeValue)}
                               placeholder={t('times.placeholder.shortTime')}
-                              className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 w-24 ${isPersistedIdealStartTime ? 'text-white' : 'text-zinc-400'}`}
                               inputMode="numeric"
                               readOnly={isReadOnly}
                             />
                             <button
-                              onClick={() => commitStartTimeChange(pilot.id, getCurrentClockString())}
+                              onClick={() => commitStartTimeChange(pilot.id, getCurrentIdealClockString())}
                               type="button"
                               className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
                               title={t('times.now')}
@@ -957,24 +962,24 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             value={idealStartTimeValue}
                             readOnly
                             placeholder="--:--"
-                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 w-24"
                           />
                         )}
                       </div>
                     </td>
                       <td className="p-1 sm:p-2">
                         <div className="flex items-center gap-1">
-                          <Input
-                            value={displayedRealStartTimeValue}
-                            onChange={(e) => handleRealStartTimeDraftChange(pilot.id, e.target.value)}
-                            onKeyDown={(e) => handleRealStartTimeKeyDown(pilot.id, displayedRealStartTimeValue, e)}
-                            onBlur={() => commitRealStartTimeChange(pilot.id, displayedRealStartTimeValue)}
-                            placeholder={getTimePlaceholder('clock', timeDecimals)}
-                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-32"
-                            readOnly={isReadOnly}
-                          />
+                            <Input
+                              value={displayedRealStartTimeValue}
+                              onChange={(e) => handleRealStartTimeDraftChange(pilot.id, e.target.value)}
+                              onKeyDown={(e) => handleRealStartTimeKeyDown(pilot.id, displayedRealStartTimeValue, e)}
+                              onBlur={() => commitRealStartTimeChange(pilot.id, displayedRealStartTimeValue)}
+                              placeholder={getTimePlaceholder('clock', timeDecimals)}
+                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 w-32 ${displayedRealStartTimeValue === realStartTimeValue ? 'text-white' : 'text-zinc-400'}`}
+                              readOnly={isReadOnly}
+                            />
                           <button
-                            onClick={() => commitRealStartTimeChange(pilot.id, getCurrentClockString())}
+                            onClick={() => commitRealStartTimeChange(pilot.id, getCurrentRealClockString())}
                             type="button"
                             className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
                             title={t('times.now')}
@@ -1106,13 +1111,14 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       ) : (
         <div className="grid gap-2" style={pilotTimingGridStyle}>
           {displayRows.map((row) => {
-            const {
-              pilot,
-              category,
-              idealStartTimeValue,
-              displayedIdealStartTimeValue,
-              realStartTimeValue,
-              displayedRealStartTimeValue,
+                const {
+                  pilot,
+                  category,
+                  idealStartTimeValue,
+                  displayedIdealStartTimeValue,
+                  isPersistedIdealStartTime,
+                  realStartTimeValue,
+                  displayedRealStartTimeValue,
               retired,
               alert,
               sos,
@@ -1203,12 +1209,12 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                                 onKeyDown={(e) => handleStartTimeKeyDown(pilot.id, displayedIdealStartTimeValue, e)}
                                 onBlur={() => commitStartTimeChange(pilot.id, displayedIdealStartTimeValue)}
                                 placeholder={t('times.placeholder.shortTime')}
-                                className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                                className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 flex-1 ${isPersistedIdealStartTime ? 'text-white' : 'text-zinc-400'}`}
                                 inputMode="numeric"
                                 readOnly={isReadOnly}
                               />
                               <button
-                                onClick={() => commitStartTimeChange(pilot.id, getCurrentClockString())}
+                                onClick={() => commitStartTimeChange(pilot.id, getCurrentIdealClockString())}
                                 type="button"
                                 className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
                                 title={t('times.now')}
@@ -1249,7 +1255,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                               readOnly={isReadOnly}
                             />
                             <button
-                              onClick={() => commitRealStartTimeChange(pilot.id, getCurrentClockString())}
+                              onClick={() => commitRealStartTimeChange(pilot.id, getCurrentRealClockString())}
                               type="button"
                               className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
                               title={t('times.now')}
@@ -1442,7 +1448,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
                         value={inferredStartTime}
                         readOnly
                         placeholder="--:--"
-                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 w-24"
                       />
                     </td>
                     <td className="p-1 sm:p-2">
@@ -1450,7 +1456,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
                         value={inferredEndTime}
                         readOnly
                         placeholder="--:--"
-                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 w-24"
                     />
                   </td>
                 </tr>
@@ -1490,7 +1496,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
                     value={inferredStartTime}
                     readOnly
                     placeholder="--:--"
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 flex-1"
                   />
                 </div>
               </div>
