@@ -28,7 +28,7 @@ export const addMinutesToClockTime = (timeStr, minutesToAdd) => {
 };
 
 export const getPilotScheduledStartTime = (stage, pilot) => {
-  if (!stage || isLapRaceStageType(stage.type) || isManualStartStageType(stage.type) || !stage.startTime) return '';
+  if (!stage || !stage.startTime) return '';
   return addMinutesToClockTime(stage.startTime, getPilotTimeOffsetMinutes(pilot));
 };
 

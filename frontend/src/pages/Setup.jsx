@@ -27,6 +27,7 @@ import StreamsTab from '../components/setup/StreamsTab.jsx';
 import ConfigTab from '../components/setup/ConfigTab.jsx';
 import DebugTab from '../components/setup/DebugTab.jsx';
 import LiveSyncTab from '../components/setup/LiveSyncTab.jsx';
+import { shouldSuppressManualWsReconnect } from '../utils/wsAutoConnect.js';
 
 export default function Setup() {
   const { t } = useTranslation();
@@ -67,6 +68,10 @@ export default function Setup() {
   useEffect(() => {
     const wsKey = searchParams.get('ws');
     if (!wsKey || wsConnectionStatus === 'connected' || wsConnectionStatus === 'connecting') {
+      return undefined;
+    }
+
+    if (shouldSuppressManualWsReconnect(wsKey)) {
       return undefined;
     }
 
@@ -124,6 +129,9 @@ export default function Setup() {
       <SosAlertStack offsetClassName="top-14" />
       <div className="fixed top-0.5 right-0.5 z-50">
         <div className="flex items-center gap-2 rounded-md border border-zinc-800/80 bg-[#111113]/88 backdrop-blur px-1.5 py-1 shadow-lg shadow-black/35">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            v{VERSION}
+          </span>
           <WsLedStrip
             wsEnabled={wsEnabled}
             wsConnectionStatus={wsConnectionStatus}
@@ -259,10 +267,7 @@ export default function Setup() {
                   </div>
                 </TooltipProvider>
               </div>
-
             </div>
-            {/* version tag */}
-            <div className="text-xs text-zinc-500">v{VERSION}</div>
           </div>
         </div>
 

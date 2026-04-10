@@ -55,7 +55,7 @@ export class SyncOutboundService {
     }
 
     if (isOutboundDebugEnabled()) {
-      console.debug('[SyncOutbound][build][package]', {
+      console.log('[SyncOutbound][build][package]', {
         packageType,
         highPriority: isHighPriority,
         parts: packageParts.length,
@@ -70,7 +70,7 @@ export class SyncOutboundService {
       }
 
       if (isOutboundDebugEnabled()) {
-        console.debug('[SyncOutbound][TX][priority][single]', {
+        console.log('[SyncOutbound][TX][priority][single]', {
           packageType,
           parts: 1,
           domains: Object.keys(changes || {})
@@ -89,7 +89,7 @@ export class SyncOutboundService {
     await Promise.all(packageParts.map((message) => this.syncEngine.enqueue(message)));
 
     if (isOutboundDebugEnabled()) {
-      console.debug('[SyncOutbound][queue][deferred]', {
+      console.log('[SyncOutbound][queue][deferred]', {
         packageType,
         parts: packageParts.length,
         domains: Object.keys(changes || {})

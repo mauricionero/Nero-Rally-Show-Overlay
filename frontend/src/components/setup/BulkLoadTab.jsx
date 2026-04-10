@@ -8,7 +8,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Upload, AlertTriangle, Users, Flag, Timer, Map, Copy, ExternalLink } from 'lucide-react';
+import { Upload, AlertTriangle, Users, Flag, Timer, Map, Copy, ExternalLink, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   LAP_RACE_STAGE_TYPE,
@@ -213,6 +213,7 @@ export default function BulkLoadTab() {
     addStage,
     bulkImportTimingEntries,
     importMapPlacemarks,
+    removeMapPlacemark,
     clearMapPlacemarks
   } = useRally();
   const [pilotCsv, setPilotCsv] = useState('');
@@ -227,6 +228,7 @@ export default function BulkLoadTab() {
   const [timeResult, setTimeResult] = useState(createEmptyResult());
   const [mapResult, setMapResult] = useState(createEmptyResult());
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
+  const [importKmlAsOneMap, setImportKmlAsOneMap] = useState(false);
 
   const categoryMap = useMemo(() => (
     Object.fromEntries(categories.map((category) => [normalizeLookupKey(category.name), category.id]))
@@ -563,7 +565,10 @@ export default function BulkLoadTab() {
 
     try {
       const text = await file.text();
-      const parsed = parseKmlPlacemarks(text);
+      const parsed = parseKmlPlacemarks(text, {
+        importAllAsOneMap: importKmlAsOneMap,
+        fileName: file.name
+      });
 
       if (parsed.error) {
         const message = t('bulkLoad.errors.invalidKml');
@@ -914,6 +919,17 @@ export default function BulkLoadTab() {
             </div>
           </div>
 
+          <label className="flex items-start gap-3 cursor-pointer">
+            <Checkbox
+              checked={importKmlAsOneMap}
+              onCheckedChange={(checked) => setImportKmlAsOneMap(checked === true)}
+            />
+            <div>
+              <p className="text-sm text-white">{t('bulkLoad.importAllAsOneMap')}</p>
+              <p className="text-xs text-zinc-500">{t('bulkLoad.importAllAsOneMapDesc')}</p>
+            </div>
+          </label>
+
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex cursor-pointer">
               <input
@@ -963,7 +979,18 @@ export default function BulkLoadTab() {
                           {placemark.geometryType} • {placemark.coordinateGroups.reduce((total, group) => total + group.length, 0)} pts
                         </p>
                       </div>
-                      <Map className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Map className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:border-red-500 hover:text-red-400"
+                          onClick={() => removeMapPlacemark(placemark.id)}
+                          title={t('bulkLoad.deletePlacemark')}
+                          aria-label={t('bulkLoad.deletePlacemark')}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

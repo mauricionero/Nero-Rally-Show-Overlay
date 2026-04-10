@@ -9,6 +9,7 @@ import {
   isLapRaceStageType,
   SUPER_PRIME_STAGE_TYPE
 } from '../../utils/stageTypes.js';
+import { getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
 import { Car, Flag, RotateCcw, Timer } from 'lucide-react';
 
 const getStageTypeIcon = (type) => {
@@ -39,6 +40,13 @@ export default function CurrentStageCard() {
 
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   const currentStage = stages.find((stage) => stage.id === currentStageId);
+  const getLapRaceMetaText = (stage) => (
+    getLapRaceStageMetaParts({
+      stage,
+      lapsLabel: t('scene3.laps').toLowerCase(),
+      maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
+    }).join(' • ')
+  );
 
   return (
     <Card className="bg-[#18181B] border-zinc-800">
@@ -63,7 +71,7 @@ export default function CurrentStageCard() {
                   <div className="flex items-center gap-2">
                     <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
                     {getStageTitle(stage)}
-                    {isLapRaceStageType(stage.type) && ` (${stage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
+                    {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && ` (${getLapRaceMetaText(stage)})`}
                   </div>
                 </SelectItem>
               );
@@ -74,7 +82,7 @@ export default function CurrentStageCard() {
           <p className="mt-2 text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
             <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
             LIVE: {getStageTitle(currentStage)}
-            {isLapRaceStageType(currentStage.type) && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
+            {isLapRaceStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
           </p>
         )}
       </CardContent>

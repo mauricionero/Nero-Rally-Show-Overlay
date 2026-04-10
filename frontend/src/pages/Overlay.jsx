@@ -11,10 +11,11 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
-import { Wifi, WifiOff, X, VideoOff } from 'lucide-react';
+import { Wifi, X, VideoOff } from 'lucide-react';
 import WsLedStrip from '../components/WsLedStrip.jsx';
 import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
+import { DEFAULT_DEBUG_FLAGS, DEBUG_FLAGS_STORAGE_KEY, loadDebugFlags, saveDebugFlags } from '../utils/debugFlags.js';
+import { shouldSuppressManualWsReconnect } from '../utils/wsAutoConnect.js';
 
 // version constant
 import { VERSION } from '../config/version.js';
@@ -43,6 +44,7 @@ export default function Overlay() {
   const [wsKeyInput, setWsKeyInput] = useState('');
   const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
   const [hideStreams, setHideStreams] = useState(false);
+  const [overlayDebugFlags, setOverlayDebugFlags] = useState(() => loadDebugFlags());
   const defaultTransitionImageUrl = '/transition-default.png';
   const [transitionType, setTransitionType] = useState(() => {
     try {
@@ -91,10 +93,35 @@ export default function Overlay() {
     }
   }, [transitionDurationMs]);
 
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.key !== DEBUG_FLAGS_STORAGE_KEY) {
+        return;
+      }
+
+      setOverlayDebugFlags(loadDebugFlags());
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const handleToggleDebugLogs = (checked) => {
+    const nextFlags = Object.fromEntries(
+      Object.keys(DEFAULT_DEBUG_FLAGS).map((flagKey) => [flagKey, checked === true])
+    );
+    setOverlayDebugFlags(saveDebugFlags(nextFlags));
+  };
+  const debugLogsEnabled = Object.values(overlayDebugFlags || DEFAULT_DEBUG_FLAGS).every(Boolean);
+
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
     const wsKey = searchParams.get('ws');
     if (!wsKey || wsConnectionStatus === 'connected' || wsConnectionStatus === 'connecting') {
+      return undefined;
+    }
+
+    if (shouldSuppressManualWsReconnect(wsKey)) {
       return undefined;
     }
 
@@ -209,14 +236,6 @@ export default function Overlay() {
     Number(wsLastMessageAt || 0)
   ) || null;
   const wsMessageAgeMs = latestActivityAt ? Math.max(0, wsActivity.connectionNow - latestActivityAt) : null;
-  const connectionBadge = (() => {
-    if (!wsEnabled) return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
-    if (wsConnectionStatus === 'connecting') return { color: 'bg-[#FACC15] text-black border-transparent', label: t('config.connecting') };
-    if (wsConnectionStatus === 'connected') return { color: 'bg-[#22C55E] text-black border-transparent', label: 'Live' };
-    if (wsConnectionStatus === 'suspended') return { color: 'bg-[#F97316] text-black border-transparent', label: 'Suspended' };
-    if (wsConnectionStatus === 'failed' || wsConnectionStatus === 'error') return { color: 'bg-[#EF4444] text-white border-transparent', label: 'Failed' };
-    return { color: 'bg-zinc-800 text-zinc-400 border-zinc-700', label: t('header.connect') };
-  })();
 
   const handleWsConnect = async () => {
     if (!wsKeyInput.trim()) return;
@@ -283,102 +302,85 @@ export default function Overlay() {
             ))}
           </div>
           
-          <div className="flex items-center gap-4">
-            {/* version display */}
-            <div className="text-xs text-zinc-400">v{VERSION}</div>
-
-            {/* Language Selector */}
-            <LanguageSelectorCompact />
-
-            {/* Hide Streams Checkbox */}
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <Checkbox
-                checked={hideStreams}
-                onCheckedChange={setHideStreams}
-                className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
-                data-testid="hide-streams-checkbox"
-              />
-              <span className="flex items-center gap-1 text-xs text-zinc-300 font-medium">
-                <VideoOff className="w-3 h-3" />
-                {t('header.hideStreams')}
-              </span>
-            </label>
-
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-zinc-500">
-                {t('header.transition')}
-              </span>
-              <Select value={transitionType} onValueChange={setTransitionType}>
-                <SelectTrigger className="h-7 w-[120px] bg-[#09090B] border-zinc-700 text-xs text-white">
-                  <SelectValue placeholder={t('header.transition')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {transitionOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                min="0"
-                max="8000"
-                step="50"
-                value={transitionDurationMs}
-                onChange={(e) => {
-                  const numericValue = Number(e.target.value);
-                  setTransitionDurationMs(
-                    Math.min(8000, Math.max(0, Number.isFinite(numericValue) ? Math.trunc(numericValue) : 0))
-                  );
-                }}
-                className="h-7 w-[90px] bg-[#09090B] border-zinc-700 text-white text-xs"
-                placeholder={t('header.transitionDuration')}
-                data-testid="transition-duration-input"
-              />
-              <span className="text-[10px] text-zinc-500">ms</span>
-            </div>
+              {/* version display */}
+              <div className="text-xs text-zinc-400">v{VERSION}</div>
 
-            {/* WebSocket Status/Button */}
-            <div className="flex items-center gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setShowWsPanel(!showWsPanel)}
-                      className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all border ${connectionBadge.color}`}
-                      data-testid="ws-status-button"
-                    >
-                      {wsConnectionStatus === 'connected' ? (
-                        <>
-                          <Wifi className="w-3 h-3" />
-                          <span>{connectionBadge.label}</span>
-                        </>
-                      ) : (
-                        <>
-                          <WifiOff className="w-3 h-3" />
-                          <span>{connectionBadge.label}</span>
-                        </>
-                      )}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-[#111827] text-white border border-[#374151]">
-                    <div className="text-xs">
-                      <div className="font-semibold">WebSocket Connection</div>
-                      <div>Status: {wsConnectionStatus}</div>
-                      <div>State badge only reflects socket connection state.</div>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {/* Language Selector */}
+              <LanguageSelectorCompact />
+
+              {/* Hide Streams Checkbox */}
+              <label className="flex flex-row items-start gap-1 cursor-pointer select-none w-[56px]">
+                <Checkbox
+                  checked={hideStreams}
+                  onCheckedChange={setHideStreams}
+                  className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                  data-testid="hide-streams-checkbox"
+                />
+                <span className="text-[10px] leading-tight text-zinc-300 font-medium text-left whitespace-normal break-words max-w-[48px]">
+                  <span className="inline-flex items-center gap-1">
+                    <VideoOff className="w-3 h-3 flex-shrink-0" />
+                    <span className="inline-block">{t('header.hide')}</span>
+                  </span>
+                  <span className="block">{t('header.stream')}</span>
+                </span>
+              </label>
+
+              <label className="flex flex-row items-start gap-1 cursor-pointer select-none w-[56px]">
+                <Checkbox
+                  checked={debugLogsEnabled}
+                  onCheckedChange={handleToggleDebugLogs}
+                  className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                  data-testid="overlay-debug-checkbox"
+                />
+                <span className="text-[10px] leading-tight text-zinc-300 font-medium text-left whitespace-normal break-words max-w-[48px]">
+                  {t('header.debugLogs')}
+                </span>
+              </label>
+
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                  {t('header.transition')}
+                </span>
+                <Select value={transitionType} onValueChange={setTransitionType}>
+                  <SelectTrigger className="h-7 w-[92px] bg-[#09090B] border-zinc-700 text-xs text-white">
+                    <SelectValue placeholder={t('header.transition')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {transitionOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min="0"
+                  max="8000"
+                  step="50"
+                  value={transitionDurationMs}
+                  onChange={(e) => {
+                    const numericValue = Number(e.target.value);
+                    setTransitionDurationMs(
+                      Math.min(8000, Math.max(0, Number.isFinite(numericValue) ? Math.trunc(numericValue) : 0))
+                    );
+                  }}
+                  className="h-7 w-[72px] bg-[#09090B] border-zinc-700 text-white text-xs"
+                  placeholder={t('header.transitionDuration')}
+                  data-testid="transition-duration-input"
+                />
+                <span className="text-[10px] text-zinc-500 whitespace-nowrap -ml-1">ms</span>
+              </div>
+
               <WsLedStrip
                 wsEnabled={wsEnabled}
                 wsConnectionStatus={wsConnectionStatus}
                 activityAgeMs={wsMessageAgeMs}
                 counts={wsActivity}
                 size="tiny"
+                onClick={() => setShowWsPanel((prev) => !prev)}
               />
-            </div>
           </div>
         </div>
         
@@ -403,7 +405,7 @@ export default function Overlay() {
                   size="sm"
                   className="w-full"
                   onClick={() => {
-                    disconnectSyncChannel();
+                    disconnectSyncChannel({ manual: true });
                     setShowWsPanel(false);
                   }}
                 >

@@ -36,13 +36,16 @@ export const arrivalTimeToTotal = (arrivalTime, startTime, decimals = 3) => {
   if (!arrivalTime || !startTime) return '';
   
   try {
-    const [startHours, startMinutes] = startTime.split(':').map(Number);
+    const startParts = startTime.split(':');
+    const startHours = Number(startParts[0]);
+    const startMinutes = Number(startParts[1]);
+    const startSeconds = Number.parseFloat(startParts[2] || 0);
     const arrivalParts = arrivalTime.split(':');
     const arrivalHours = parseInt(arrivalParts[0]);
     const arrivalMinutes = parseInt(arrivalParts[1]);
     const arrivalSeconds = parseFloat(arrivalParts[2] || 0);
     
-    const startTotalSeconds = startHours * 3600 + startMinutes * 60;
+    const startTotalSeconds = startHours * 3600 + startMinutes * 60 + startSeconds;
     const arrivalTotalSeconds = arrivalHours * 3600 + arrivalMinutes * 60 + arrivalSeconds;
     
     let diffSeconds = arrivalTotalSeconds - startTotalSeconds;
@@ -58,12 +61,15 @@ export const totalTimeToArrival = (totalTime, startTime, decimals = 3) => {
   if (!totalTime || !startTime) return '';
   
   try {
-    const [startHours, startMinutes] = startTime.split(':').map(Number);
+    const startParts = startTime.split(':');
+    const startHours = Number(startParts[0]);
+    const startMinutes = Number(startParts[1]);
+    const startSeconds = Number.parseFloat(startParts[2] || 0);
     const totalParts = totalTime.split(':');
     const totalMinutes = parseInt(totalParts[0]);
     const totalSeconds = parseFloat(totalParts[1] || 0);
     
-    const startTotalSeconds = startHours * 3600 + startMinutes * 60;
+    const startTotalSeconds = startHours * 3600 + startMinutes * 60 + startSeconds;
     const durationSeconds = totalMinutes * 60 + totalSeconds;
     const arrivalTotalSeconds = startTotalSeconds + durationSeconds;
 

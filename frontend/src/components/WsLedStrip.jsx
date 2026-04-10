@@ -34,6 +34,7 @@ export default function WsLedStrip({
   ownership = null,
   size = 'compact',
   performanceIcon = null,
+  onClick = null,
   className = ''
 }) {
   const preset = SIZE_PRESETS[size] || SIZE_PRESETS.compact;
@@ -64,9 +65,22 @@ export default function WsLedStrip({
     : 'rgba(63, 63, 70, 0.45)';
   const ConnectionIcon = connectionBadge.Icon;
   const OwnershipIcon = ownership?.isPrimary ? Crown : GitBranch;
+  const isInteractive = typeof onClick === 'function';
 
   return (
-    <div className={`flex items-center gap-2 ${className}`.trim()}>
+    <div
+      className={`flex items-center gap-2 ${isInteractive ? 'cursor-pointer' : ''} ${className}`.trim()}
+      onClick={onClick || undefined}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      onKeyDown={isInteractive ? ((event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick?.(event);
+        }
+      }) : undefined}
+      aria-label={isInteractive ? 'Open WebSocket details' : undefined}
+    >
       {ownership && (
         <TooltipProvider delayDuration={150}>
           <Tooltip>

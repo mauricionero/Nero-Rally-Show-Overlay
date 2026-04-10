@@ -500,7 +500,7 @@ class WebSocketProvider {
       };
 
       if (isTransportDebugEnabled()) {
-        console.debug('[WebSocket][RX][bootstrap] Waiting for snapshot bootstrap', {
+        console.log('[WebSocket][RX][bootstrap] Waiting for snapshot bootstrap', {
           shouldUseSnapshot,
           requireSnapshotBootstrap,
           totalReadCount: snapshotCollected.length,
@@ -635,7 +635,7 @@ class WebSocketProvider {
     };
 
     if (isTransportDebugEnabled()) {
-      console.debug('[WebSocket][RX][bootstrap] History applied', {
+      console.log('[WebSocket][RX][bootstrap] History applied', {
         mode: this.bootstrapState.mode,
         shouldUseSnapshot,
         totalReadCount: dataCollected.length + snapshotCollected.length + priorityCollected.length,
@@ -899,7 +899,7 @@ class WebSocketProvider {
             data
           };
       if (isTransportDebugEnabled()) {
-        console.debug(buildWebSocketLogPrefix('send', 'update', channelType, data), {
+        console.log(buildWebSocketLogPrefix('send', 'update', channelType, data), {
           channelName: targetChannel?.name || null,
           channelType,
           ephemeral: isEphemeralMessage,
@@ -947,7 +947,7 @@ class WebSocketProvider {
 
       const channelType = targetChannel === this.priorityChannel ? 'priority' : 'data';
       if (isTransportDebugEnabled()) {
-        console.debug(buildWebSocketLogPrefix('send', 'update', channelType, payload), {
+        console.log(buildWebSocketLogPrefix('send', 'update', channelType, payload), {
           channelName: targetChannel?.name || null,
           channelType,
           data: payload
@@ -1033,7 +1033,7 @@ class WebSocketProvider {
     this.waitingForSnapshotBootstrap = false;
     this.updateStatus('disconnected');
     if (isTransportDebugEnabled()) {
-      console.debug('[WebSocket] Disconnected');
+      console.log('[WebSocket] Disconnected');
     }
   }
 

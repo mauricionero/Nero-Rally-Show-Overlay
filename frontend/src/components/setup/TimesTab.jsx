@@ -15,8 +15,10 @@ import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/s
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
 import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
+import { getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
 import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw, Check, CheckCheck, CircleX } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
+import RollingClockInput from '../RollingClockInput.jsx';
 import {
   getStageNumberLabel,
   isLapRaceStageType,
@@ -40,17 +42,8 @@ const getDisplayedStageSchedule = (stage) => {
   return stageDate || stageTime;
 };
 
-const formatClockInput = (value) => {
-  const digits = value.replace(/\D/g, '').slice(-4);
-
-  if (!digits) return '';
-  if (digits.length <= 2) return digits;
-  if (digits.length === 3) return `0${digits[0]}:${digits.slice(1)}`;
-
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-};
-
-const isValidClockTime = (value) => /^\d{2}:\d{2}$/.test(value);
+const isValidClockTime = (value) => /^\d{2}:\d{2}(?::\d{2})?$/.test(value);
+const isValidRealClockTime = (value) => /^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value);
 
 const SosDeliveryIndicator = ({ status, tooltipText }) => {
   if (!status) {
@@ -168,26 +161,6 @@ const PilotStatusBadges = ({ pilotId, stageId, compact = false }) => {
 const getEffectiveIdealStartTime = (stage, pilot, storedValue = '') => (
   storedValue || getPilotScheduledStartTime(stage, pilot)
 );
-
-const stepClockMinutes = (value, step = 1) => {
-  if (!isValidClockTime(value)) {
-    return '';
-  }
-
-  const [hoursText, minutesText] = value.split(':');
-  const hours = Number(hoursText);
-  const minutes = Number(minutesText);
-
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
-    return value;
-  }
-
-  const totalMinutes = (((hours * 60) + minutes + step) % 1440 + 1440) % 1440;
-  const nextHours = Math.floor(totalMinutes / 60);
-  const nextMinutes = totalMinutes % 60;
-
-  return `${String(nextHours).padStart(2, '0')}:${String(nextMinutes).padStart(2, '0')}`;
-};
 
 const parseClockTimeToSeconds = (value) => {
   if (!value) return null;
@@ -392,6 +365,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       const idealStartTimeValue = manualStartTime
         ? getEffectiveIdealStartTime(stage, pilot, storedStartTimeValue)
         : getPilotScheduledStartTime(stage, pilot);
+      const isPersistedIdealStartTime = Boolean(storedStartTimeValue)
+        && idealStartTimeValue === storedStartTimeValue;
       const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
       const retired = !!retiredStages[pilot.id]?.[stage.id];
       const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
@@ -410,9 +385,10 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         totalTime,
         arrivalTimeValue,
         storedStartTimeValue,
+        isPersistedIdealStartTime,
         idealStartTimeValue,
         realStartTimeValue,
-        retired,
+          retired,
         alert,
         sos,
         sosLevel,
@@ -558,12 +534,20 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     }
   };
 
-  const handleStartTimeChange = (pilotId, value) => {
+  const commitStartTimeChange = (pilotId, value) => {
     if (isReadOnly) return;
-    const nextStartTime = formatClockInput(value);
+    const nextStartTime = value || '';
+    const previousStoredStartTime = startTimes[pilotId]?.[stage.id] || '';
     const pilot = pilotById.get(pilotId);
     const derivedStartTime = getPilotScheduledStartTime(stage, pilot);
-    const effectiveStartTime = nextStartTime || derivedStartTime;
+    const effectiveStartTime = nextStartTime === ''
+      ? ''
+      : (isValidClockTime(nextStartTime) ? nextStartTime : previousStoredStartTime || derivedStartTime);
+
+    if (effectiveStartTime === previousStoredStartTime) {
+      return;
+    }
+
     setStartTime(pilotId, stage.id, effectiveStartTime);
 
     if (!isValidClockTime(effectiveStartTime)) {
@@ -589,24 +573,26 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     }
   };
 
-  const handleStartTimeKeyDown = (pilotId, currentValue, event) => {
-    if (isReadOnly || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+  const commitRealStartTimeChange = (pilotId, value) => {
+    if (isReadOnly) return;
+    const nextRealStartTime = value || '';
+    const previousStoredRealStartTime = realStartTimes[pilotId]?.[stage.id] || '';
+
+    if (nextRealStartTime === previousStoredRealStartTime) {
       return;
     }
 
-    event.preventDefault();
-    const baseValue = isValidClockTime(currentValue)
-      ? currentValue
-      : '00:00';
-    const step = event.shiftKey ? 5 : 1;
-    const nextValue = stepClockMinutes(baseValue, event.key === 'ArrowUp' ? step : -step);
-    handleStartTimeChange(pilotId, nextValue);
+    setRealStartTime(
+      pilotId,
+      stage.id,
+      nextRealStartTime === '' || isValidRealClockTime(nextRealStartTime)
+        ? nextRealStartTime
+        : previousStoredRealStartTime
+    );
   };
 
-  const handleRealStartTimeChange = (pilotId, value) => {
-    if (isReadOnly) return;
-    setRealStartTime(pilotId, stage.id, value);
-  };
+  const getCurrentIdealClockString = () => formatClockFromDate(new Date(), 0).slice(0, 5);
+  const getCurrentRealClockString = () => formatClockFromDate(new Date(), timeDecimals);
 
   const requestSosToggle = (pilotId, nextValue) => {
     if (sosControlsReadOnly) return;
@@ -716,12 +702,13 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
             </thead>
             <tbody>
               {displayRows.map((row) => {
-                const {
+                  const {
                   pilot,
                   category,
                   idealStartTimeValue,
+                  isPersistedIdealStartTime,
                   realStartTimeValue,
-                  retired,
+              retired,
                   alert,
                   sos,
                   sosLevel,
@@ -806,17 +793,16 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                       <div className="flex items-center gap-1">
                         {manualStartTime ? (
                           <>
-                            <Input
+                            <RollingClockInput
                               value={idealStartTimeValue}
-                              onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
-                              onKeyDown={(e) => handleStartTimeKeyDown(pilot.id, idealStartTimeValue, e)}
+                              onCommit={(nextValue) => commitStartTimeChange(pilot.id, nextValue)}
+                              showSeconds={false}
                               placeholder={t('times.placeholder.shortTime')}
-                              className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
-                              inputMode="numeric"
+                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 w-24 ${isPersistedIdealStartTime ? 'text-white' : 'text-zinc-400'}`}
                               readOnly={isReadOnly}
                             />
                             <button
-                              onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                              onClick={() => commitStartTimeChange(pilot.id, getCurrentIdealClockString())}
                               type="button"
                               className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
                               title={t('times.now')}
@@ -825,7 +811,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                               <Clock className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => handleStartTimeChange(pilot.id, '')}
+                              onClick={() => commitStartTimeChange(pilot.id, '')}
                               type="button"
                               className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                               title={t('common.clear')}
@@ -839,37 +825,37 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             value={idealStartTimeValue}
                             readOnly
                             placeholder="--:--"
-                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 w-24"
                           />
                         )}
                       </div>
                     </td>
-                    <td className="p-1 sm:p-2">
-                      <div className="flex items-center gap-1">
-                        <TimeInput
-                          value={realStartTimeValue}
-                          onChange={(val) => handleRealStartTimeChange(pilot.id, val)}
-                          placeholder={getTimePlaceholder('clock', timeDecimals)}
-                          format="clock"
-                          decimals={timeDecimals}
-                          className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-32"
-                          readOnly={isReadOnly}
-                        />
-                        <button
-                          onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString(timeDecimals))}
-                          type="button"
-                          className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
-                          title={t('times.now')}
-                          disabled={isReadOnly}
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleRealStartTimeChange(pilot.id, '')}
-                          type="button"
-                          className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
-                          title={t('common.clear')}
-                          disabled={isReadOnly}
+                      <td className="p-1 sm:p-2">
+                        <div className="flex items-center gap-1">
+                            <RollingClockInput
+                              value={realStartTimeValue}
+                              onCommit={(nextValue) => commitRealStartTimeChange(pilot.id, nextValue)}
+                              showSeconds
+                              decimals={timeDecimals}
+                              placeholder={getTimePlaceholder('clock', timeDecimals)}
+                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 w-32 ${realStartTimeValue ? 'text-white' : 'text-zinc-400'}`}
+                              readOnly={isReadOnly}
+                            />
+                          <button
+                            onClick={() => commitRealStartTimeChange(pilot.id, getCurrentRealClockString())}
+                            type="button"
+                            className={`h-7 w-7 flex-shrink-0 transition-colors bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500]'}`}
+                            title={t('times.now')}
+                            disabled={isReadOnly}
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => commitRealStartTimeChange(pilot.id, '')}
+                            type="button"
+                            className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
+                            title={t('common.clear')}
+                            disabled={isReadOnly}
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -988,11 +974,12 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       ) : (
         <div className="grid gap-2" style={pilotTimingGridStyle}>
           {displayRows.map((row) => {
-            const {
-              pilot,
-              category,
-              idealStartTimeValue,
-              realStartTimeValue,
+                const {
+                  pilot,
+                  category,
+                  idealStartTimeValue,
+                  isPersistedIdealStartTime,
+                  realStartTimeValue,
               retired,
               alert,
               sos,
@@ -1077,17 +1064,16 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         <div className="flex items-center gap-1">
                           {manualStartTime ? (
                             <>
-                              <Input
-                                value={idealStartTimeValue}
-                                onChange={(e) => handleStartTimeChange(pilot.id, e.target.value)}
-                                onKeyDown={(e) => handleStartTimeKeyDown(pilot.id, idealStartTimeValue, e)}
-                                placeholder={t('times.placeholder.shortTime')}
-                                className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                                inputMode="numeric"
-                                readOnly={isReadOnly}
-                              />
+                            <RollingClockInput
+                              value={idealStartTimeValue}
+                              onCommit={(nextValue) => commitStartTimeChange(pilot.id, nextValue)}
+                              showSeconds={false}
+                              placeholder={t('times.placeholder.shortTime')}
+                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 flex-1 ${isPersistedIdealStartTime ? 'text-white' : 'text-zinc-400'}`}
+                              readOnly={isReadOnly}
+                            />
                               <button
-                                onClick={() => handleStartTimeChange(pilot.id, new Date().toTimeString().slice(0, 5))}
+                                onClick={() => commitStartTimeChange(pilot.id, getCurrentIdealClockString())}
                                 type="button"
                                 className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
                                 title={t('times.now')}
@@ -1096,7 +1082,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                                 <Clock className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                onClick={() => handleStartTimeChange(pilot.id, '')}
+                                onClick={() => commitStartTimeChange(pilot.id, '')}
                                 type="button"
                                 className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
                                 title={t('common.clear')}
@@ -1106,42 +1092,42 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                               </button>
                             </>
                           ) : (
-                            <Input
-                              value={idealStartTimeValue}
-                              readOnly
-                              placeholder="--:--"
-                              className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7"
+                          <Input
+                            value={idealStartTimeValue}
+                            readOnly
+                            placeholder="--:--"
+                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7"
                             />
                           )}
                         </div>
                       </div>
-                      <div>
-                        <Label className="text-xs text-zinc-400">{t('times.realStartTime')}</Label>
-                        <div className="flex items-center gap-1">
-                          <TimeInput
-                            value={realStartTimeValue}
-                            onChange={(val) => handleRealStartTimeChange(pilot.id, val)}
-                            placeholder={getTimePlaceholder('clock', timeDecimals)}
-                            format="clock"
-                            decimals={timeDecimals}
-                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
-                            readOnly={isReadOnly}
-                          />
-                          <button
-                            onClick={() => handleRealStartTimeChange(pilot.id, getCurrentTimeString(timeDecimals))}
-                            type="button"
-                            className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
-                            title={t('times.now')}
-                            disabled={isReadOnly}
-                          >
-                            <Clock className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleRealStartTimeChange(pilot.id, '')}
-                            type="button"
-                            className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
-                            title={t('common.clear')}
-                            disabled={isReadOnly}
+                        <div>
+                          <Label className="text-xs text-zinc-400">{t('times.realStartTime')}</Label>
+                          <div className="flex items-center gap-1">
+                            <RollingClockInput
+                              value={realStartTimeValue}
+                              onCommit={(nextValue) => commitRealStartTimeChange(pilot.id, nextValue)}
+                              showSeconds
+                              decimals={timeDecimals}
+                              placeholder={getTimePlaceholder('clock', timeDecimals)}
+                              className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                              readOnly={isReadOnly}
+                            />
+                            <button
+                              onClick={() => commitRealStartTimeChange(pilot.id, getCurrentRealClockString())}
+                              type="button"
+                              className={`h-7 w-7 flex-shrink-0 transition-colors rounded flex items-center justify-center ${isReadOnly ? 'text-zinc-600 bg-zinc-900 cursor-not-allowed' : 'text-zinc-400 hover:text-[#FF4500] bg-zinc-800 hover:bg-zinc-700'}`}
+                              title={t('times.now')}
+                              disabled={isReadOnly}
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => commitRealStartTimeChange(pilot.id, '')}
+                              type="button"
+                              className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
+                              title={t('common.clear')}
+                              disabled={isReadOnly}
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -1321,7 +1307,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
                         value={inferredStartTime}
                         readOnly
                         placeholder="--:--"
-                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                            className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 w-24"
                       />
                     </td>
                     <td className="p-1 sm:p-2">
@@ -1329,7 +1315,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
                         value={inferredEndTime}
                         readOnly
                         placeholder="--:--"
-                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-24"
+                        className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 w-24"
                     />
                   </td>
                 </tr>
@@ -1369,7 +1355,7 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
                     value={inferredStartTime}
                     readOnly
                     placeholder="--:--"
-                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
+                    className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 flex-1"
                   />
                 </div>
               </div>
@@ -1420,6 +1406,13 @@ export default function TimesTab({
   ), [pilots, categoryOrderById]);
   const categoryMap = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
   const pilotById = useMemo(() => new Map(pilots.map((pilot) => [pilot.id, pilot])), [pilots]);
+  const getLapRaceMetaText = useCallback((stage) => (
+    getLapRaceStageMetaParts({
+      stage,
+      lapsLabel: t('scene3.laps').toLowerCase(),
+      maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
+    }).join(' • ')
+  ), [t]);
 
   const sortedStages = useMemo(() => {
     const visibleStages = showCompetitiveStagesOnly
@@ -1518,8 +1511,8 @@ export default function TimesTab({
                       )}
                       {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
                       <span className="truncate">{stage.name}</span>
-                      {isLapRaceStageType(stage.type) && (
-                        <span className="text-sm text-zinc-400 font-normal">({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})</span>
+                      {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && (
+                        <span className="text-sm text-zinc-400 font-normal">({getLapRaceMetaText(stage)})</span>
                       )}
                     </CardTitle>
                     {!isLapRaceStageType(stage.type) && getDisplayedStageSchedule(stage) && (

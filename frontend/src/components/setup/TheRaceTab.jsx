@@ -7,6 +7,7 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
+import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
@@ -41,6 +42,8 @@ const getDefaultStageDate = (stages) => {
   const lastFilledDate = [...stages].reverse().find((stage) => stage.date)?.date;
   return lastFilledDate || getTodayDateString();
 };
+
+const DEFAULT_LAP_RACE_TOTAL_TIME_MODE = 'cumulative';
 
 const formatEditableDateInput = (value) => {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -105,7 +108,7 @@ export default function TheRaceTab() {
 
   const defaultStageDate = getDefaultStageDate(stages);
 
-  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: 5 });
+  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
   const [editingStage, setEditingStage] = useState(null);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
 
@@ -115,7 +118,7 @@ export default function TheRaceTab() {
       return;
     }
     addStage(newStage);
-    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: 5 });
+    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
     toast.success('Stage added successfully');
   };
 
@@ -158,7 +161,10 @@ export default function TheRaceTab() {
     setNewStage((prev) => ({
       ...prev,
       type,
-      endTime: isTransitStageType(type) ? prev.endTime : ''
+      endTime: isTransitStageType(type) ? prev.endTime : '',
+      lapRaceTotalTimeMode: isLapRaceStageType(type)
+        ? (prev.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE)
+        : prev.lapRaceTotalTimeMode
     }));
   };
 
@@ -166,7 +172,10 @@ export default function TheRaceTab() {
     setEditingStage((prev) => prev ? ({
       ...prev,
       type,
-      endTime: isTransitStageType(type) ? (prev.endTime || '') : ''
+      endTime: isTransitStageType(type) ? (prev.endTime || '') : '',
+      lapRaceTotalTimeMode: isLapRaceStageType(type)
+        ? (prev.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE)
+        : prev.lapRaceTotalTimeMode
     }) : prev);
   };
 
@@ -184,6 +193,22 @@ export default function TheRaceTab() {
       case 'Service Park': return 'text-green-400';
       default: return 'text-zinc-400';
     }
+  };
+
+  const getLapRaceMetaParts = (stage) => {
+    const parts = [];
+    const lapCount = Number(stage?.numberOfLaps || 0);
+    const maxTime = Number(stage?.lapRaceMaxTimeMinutes || 0);
+
+    if (Number.isFinite(lapCount) && lapCount > 0) {
+      parts.push(`${lapCount} ${t('scene3.laps').toLowerCase()}`);
+    }
+
+    if (Number.isFinite(maxTime) && maxTime > 0) {
+      parts.push(`${t('theRace.lapRaceMaxTimeMinutes')}: ${maxTime}`);
+    }
+
+    return parts;
   };
 
   return (
@@ -247,118 +272,228 @@ export default function TheRaceTab() {
           </div>
 
           {/* Stage Details Form */}
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-            <div className="md:col-span-2">
-              <Label className="text-white">{t('theRace.stageName')} *</Label>
-              <Input
-                value={newStage.name}
-                onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
-                placeholder={t('theRace.placeholder.stageName')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                data-testid="input-stage-name"
-              />
+          {isLapRaceType ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+                <div className="xl:col-span-4 min-w-0">
+                  <Label className="text-white">{t('theRace.stageName')} *</Label>
+                  <Input
+                    value={newStage.name}
+                    onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
+                    placeholder={t('theRace.placeholder.stageName')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    data-testid="input-stage-name"
+                  />
+                </div>
+                <div className="xl:col-span-2 min-w-0">
+                  <Label className="text-white">{t('theRace.distance')}</Label>
+                  <Input
+                    value={newStage.distance}
+                    onChange={(e) => setNewStage({ ...newStage, distance: e.target.value })}
+                    placeholder={t('theRace.placeholder.distance')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    inputMode="decimal"
+                  />
+                </div>
+                <div className="xl:col-span-2 min-w-0">
+                  <Label className="text-white">{t('theRace.date')}</Label>
+                  <Input
+                    type="date"
+                    value={newStage.date}
+                    onChange={(e) => setNewStage({ ...newStage, date: e.target.value })}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                  />
+                </div>
+                <div className="xl:col-span-2 min-w-0">
+                  <Label className="text-white">{t('theRace.scheduledStart')}</Label>
+                  <Input
+                    value={newStage.startTime}
+                    onChange={(e) => setNewStage({ ...newStage, startTime: formatScheduledStartInput(e.target.value) })}
+                    placeholder={t('theRace.placeholder.time')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div className="xl:col-span-2 min-w-0">
+                  <Label className="text-white">{t('theRace.lapRaceTotalTimeMode')}</Label>
+                  <Select
+                    value={newStage.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE}
+                    onValueChange={(value) => setNewStage({ ...newStage, lapRaceTotalTimeMode: value })}
+                  >
+                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cumulative">{t('theRace.lapRaceTotalTimeModes.cumulative')}</SelectItem>
+                      <SelectItem value="bestLap">{t('theRace.lapRaceTotalTimeModes.bestLap')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-end">
+                <div className="xl:col-span-2 min-w-0">
+                  <Label className="text-white">{t('theRace.numberOfLaps')}</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={newStage.numberOfLaps ?? ''}
+                    onChange={(e) => setNewStage({ ...newStage, numberOfLaps: e.target.value })}
+                    placeholder={t('theRace.placeholder.laps')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div className="xl:col-span-3 min-w-0">
+                  <Label className="text-white opacity-0 select-none">.</Label>
+                  <label className="flex items-center gap-3 h-10 px-3 rounded-md border border-zinc-700 bg-[#09090B] text-white">
+                    <Checkbox
+                      checked={!!newStage.lapRaceVariableLaps}
+                      onCheckedChange={(checked) => setNewStage({ ...newStage, lapRaceVariableLaps: !!checked })}
+                    />
+                    <span className="text-sm">{t('theRace.variableNumberOfLaps')}</span>
+                  </label>
+                </div>
+                <div className="xl:col-span-2 min-w-0">
+                  <Label className="text-white">{t('theRace.lapRaceMaxTimeMinutes')}</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={newStage.lapRaceMaxTimeMinutes || ''}
+                    onChange={(e) => setNewStage({ ...newStage, lapRaceMaxTimeMinutes: e.target.value })}
+                    placeholder={t('theRace.placeholder.minutes')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div className="xl:col-span-3 min-w-0">
+                  <Label className="text-white">{t('theRace.mapPlacemark')}</Label>
+                  <Select
+                    value={newStage.mapPlacemarkId || 'none'}
+                    onValueChange={(value) => setNewStage({ ...newStage, mapPlacemarkId: value === 'none' ? '' : value })}
+                  >
+                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                      <SelectValue placeholder={t('theRace.placeholder.mapPlacemark')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                      {mapPlacemarkOptions.map((placemark) => (
+                        <SelectItem key={placemark.id} value={placemark.id}>{placemark.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="xl:col-span-2 flex items-end justify-end">
+                  <Button
+                    onClick={handleAddStage}
+                    className="w-full md:w-auto bg-[#FF4500] hover:bg-[#FF4500]/90"
+                    data-testid="button-add-stage"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t('theRace.addStage')}
+                  </Button>
+                </div>
+              </div>
             </div>
-            
-            {isSSType && (
-              <div>
-                <Label className="text-white">{t('theRace.ssNumber')}</Label>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+              <div className="md:col-span-2">
+                <Label className="text-white">{t('theRace.stageName')} *</Label>
                 <Input
-                  value={newStage.ssNumber}
-                  onChange={(e) => setNewStage({ ...newStage, ssNumber: e.target.value })}
-                  placeholder={t('theRace.placeholder.ssNumber')}
+                  value={newStage.name}
+                  onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
+                  placeholder={t('theRace.placeholder.stageName')}
+                  className="bg-[#09090B] border-zinc-700 text-white"
+                  data-testid="input-stage-name"
+                />
+              </div>
+
+              {isSSType && (
+                <div>
+                  <Label className="text-white">{t('theRace.ssNumber')}</Label>
+                  <Input
+                    value={newStage.ssNumber}
+                    onChange={(e) => setNewStage({ ...newStage, ssNumber: e.target.value })}
+                    placeholder={t('theRace.placeholder.ssNumber')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                  />
+                </div>
+              )}
+
+              <div>
+                <Label className="text-white">{t('theRace.date')}</Label>
+                <Input
+                  type="date"
+                  value={newStage.date}
+                  onChange={(e) => setNewStage({ ...newStage, date: e.target.value })}
                   className="bg-[#09090B] border-zinc-700 text-white"
                 />
               </div>
-            )}
-            
-            {isLapRaceType && (
+
               <div>
-                <Label className="text-white">{t('theRace.numberOfLaps')}</Label>
+                <Label className="text-white">{t('theRace.distance')}</Label>
                 <Input
-                  type="number"
-                  min="1"
-                  value={newStage.numberOfLaps}
-                  onChange={(e) => setNewStage({ ...newStage, numberOfLaps: parseInt(e.target.value) || 1 })}
-                  placeholder={t('theRace.placeholder.laps')}
+                  value={newStage.distance}
+                  onChange={(e) => setNewStage({ ...newStage, distance: e.target.value })}
+                  placeholder={t('theRace.placeholder.distance')}
                   className="bg-[#09090B] border-zinc-700 text-white"
+                  inputMode="decimal"
                 />
               </div>
-            )}
 
-            <div>
-              <Label className="text-white">{t('theRace.date')}</Label>
-              <Input
-                type="date"
-                value={newStage.date}
-                onChange={(e) => setNewStage({ ...newStage, date: e.target.value })}
-                className="bg-[#09090B] border-zinc-700 text-white"
-              />
-            </div>
-
-            <div>
-              <Label className="text-white">{t('theRace.distance')}</Label>
-              <Input
-                value={newStage.distance}
-                onChange={(e) => setNewStage({ ...newStage, distance: e.target.value })}
-                placeholder={t('theRace.placeholder.distance')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                inputMode="decimal"
-              />
-            </div>
-
-            <div>
-              <Label className="text-white">{t('theRace.mapPlacemark')}</Label>
-              <Select
-                value={newStage.mapPlacemarkId || 'none'}
-                onValueChange={(value) => setNewStage({ ...newStage, mapPlacemarkId: value === 'none' ? '' : value })}
-              >
-                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                  <SelectValue placeholder={t('theRace.placeholder.mapPlacemark')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
-                  {mapPlacemarkOptions.map((placemark) => (
-                    <SelectItem key={placemark.id} value={placemark.id}>{placemark.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Label className="text-white">{t('theRace.scheduledStart')}</Label>
-              <Input
-                value={newStage.startTime}
-                onChange={(e) => setNewStage({ ...newStage, startTime: formatScheduledStartInput(e.target.value) })}
-                placeholder={t('theRace.placeholder.time')}
-                className="bg-[#09090B] border-zinc-700 text-white"
-                inputMode="numeric"
-              />
-            </div>
-
-            {supportsEndTime && (
               <div>
-                <Label className="text-white">{t('theRace.endTime')}</Label>
+                <Label className="text-white">{t('theRace.mapPlacemark')}</Label>
+                <Select
+                  value={newStage.mapPlacemarkId || 'none'}
+                  onValueChange={(value) => setNewStage({ ...newStage, mapPlacemarkId: value === 'none' ? '' : value })}
+                >
+                  <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                    <SelectValue placeholder={t('theRace.placeholder.mapPlacemark')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                    {mapPlacemarkOptions.map((placemark) => (
+                      <SelectItem key={placemark.id} value={placemark.id}>{placemark.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-white">{t('theRace.scheduledStart')}</Label>
                 <Input
-                  value={newStage.endTime}
-                  onChange={(e) => setNewStage({ ...newStage, endTime: formatScheduledStartInput(e.target.value) })}
+                  value={newStage.startTime}
+                  onChange={(e) => setNewStage({ ...newStage, startTime: formatScheduledStartInput(e.target.value) })}
                   placeholder={t('theRace.placeholder.time')}
                   className="bg-[#09090B] border-zinc-700 text-white"
                   inputMode="numeric"
                 />
               </div>
-            )}
-            
-            <div className="flex items-end">
-              <Button
-                onClick={handleAddStage}
-                className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
-                data-testid="button-add-stage"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('theRace.addStage')}
-              </Button>
+
+              {supportsEndTime && (
+                <div>
+                  <Label className="text-white">{t('theRace.endTime')}</Label>
+                  <Input
+                    value={newStage.endTime}
+                    onChange={(e) => setNewStage({ ...newStage, endTime: formatScheduledStartInput(e.target.value) })}
+                    placeholder={t('theRace.placeholder.time')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    inputMode="numeric"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-end">
+                <Button
+                  onClick={handleAddStage}
+                  className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
+                  data-testid="button-add-stage"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('theRace.addStage')}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -393,9 +528,9 @@ export default function TheRaceTab() {
                       {stage.distance && <span>{stage.distance} km</span>}
                       {getDisplayedStageSchedule(stage) && <span>{getDisplayedStageSchedule(stage)}</span>}
                       {linkedPlacemark && <span>{t('theRace.mapPlacemark')}: {linkedPlacemark.name}</span>}
-                      {isLapRaceStageType(stage.type) && (
-                        <span className="text-[#FACC15]">{stage.numberOfLaps} {t('scene3.laps').toLowerCase()}</span>
-                      )}
+                      {isLapRaceStageType(stage.type) && getLapRaceMetaParts(stage).map((part) => (
+                        <span key={`${stage.id}-${part}`} className="text-[#FACC15]">{part}</span>
+                      ))}
                     </div>
                   </div>
                   <div className="flex gap-1">
@@ -452,15 +587,50 @@ export default function TheRaceTab() {
                               </div>
                             )}
                             {isLapRaceStageType(editingStage.type) && (
-                              <div>
+                              <div className="space-y-4">
                                 <Label className="text-white">{t('theRace.numberOfLaps')}</Label>
                                 <Input
                                   type="number"
                                   min="1"
-                                  value={editingStage.numberOfLaps || 5}
-                                  onChange={(e) => setEditingStage({ ...editingStage, numberOfLaps: parseInt(e.target.value) || 1 })}
+                                  value={editingStage.numberOfLaps ?? ''}
+                                  onChange={(e) => setEditingStage({ ...editingStage, numberOfLaps: e.target.value })}
                                   className="bg-[#09090B] border-zinc-700 text-white"
+                                  inputMode="numeric"
                                 />
+                                <label className="flex items-center gap-3 h-10 px-3 rounded-md border border-zinc-700 bg-[#09090B] text-white">
+                                  <Checkbox
+                                    checked={!!editingStage.lapRaceVariableLaps}
+                                    onCheckedChange={(checked) => setEditingStage({ ...editingStage, lapRaceVariableLaps: !!checked })}
+                                  />
+                                  <span className="text-sm">{t('theRace.variableNumberOfLaps')}</span>
+                                </label>
+                                <div>
+                                  <Label className="text-white">{t('theRace.lapRaceTotalTimeMode')}</Label>
+                                  <Select
+                                    value={editingStage.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE}
+                                    onValueChange={(value) => setEditingStage({ ...editingStage, lapRaceTotalTimeMode: value })}
+                                  >
+                                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="cumulative">{t('theRace.lapRaceTotalTimeModes.cumulative')}</SelectItem>
+                                      <SelectItem value="bestLap">{t('theRace.lapRaceTotalTimeModes.bestLap')}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('theRace.lapRaceMaxTimeMinutes')}</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={editingStage.lapRaceMaxTimeMinutes || ''}
+                                    onChange={(e) => setEditingStage({ ...editingStage, lapRaceMaxTimeMinutes: e.target.value })}
+                                    placeholder={t('theRace.placeholder.minutes')}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                    inputMode="numeric"
+                                  />
+                                </div>
                               </div>
                             )}
                             <div>

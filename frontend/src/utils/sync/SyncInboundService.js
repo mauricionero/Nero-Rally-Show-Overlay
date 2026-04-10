@@ -65,7 +65,7 @@ export class SyncInboundService {
       }
 
       if (isConnectionDebugEnabled()) {
-        console.debug('[SyncInbound][snapshot][provider]', {
+        console.log('[SyncInbound][snapshot][provider]', {
           role,
           partIndex,
           totalParts,
@@ -96,7 +96,7 @@ export class SyncInboundService {
     if (data?.messageType === this.syncMessageTypes.DELTA_BATCH && this.isPlainObject(deltaBatchPayload)) {
       if (data?.packageType === 'control' && applyDeltaBatchControl?.(data)) {
         if (isSyncDebugEnabled()) {
-          console.debug('[SyncInbound][control][handled]', {
+          console.log('[SyncInbound][control][handled]', {
             controlType: String(data?.controlType || '').trim() || null
           });
         }
@@ -104,7 +104,7 @@ export class SyncInboundService {
       }
 
       if (isSyncDebugEnabled()) {
-        console.debug('[SyncInbound][delta][apply]', {
+        console.log('[SyncInbound][delta][apply]', {
           packageType: String(data?.packageType || 'delta').trim(),
           domains: Object.keys(deltaBatchPayload)
         });
@@ -114,7 +114,7 @@ export class SyncInboundService {
     }
 
     if (isSyncDebugEnabled()) {
-      console.debug('[SyncInbound][legacy][apply]', {
+      console.log('[SyncInbound][legacy][apply]', {
         messageType: String(data?.messageType || '').trim() || null,
         section: String(data?.section || '').trim() || null
       });
@@ -140,7 +140,7 @@ export class SyncInboundService {
       && data?.section !== 'stageSos'
     ) {
       if (isTelemetryDebugEnabled()) {
-        console.debug('[SyncInbound][telemetry][ignore-android-non-telemetry]', {
+        console.log('[SyncInbound][telemetry][ignore-android-non-telemetry]', {
           messageType: payload?.messageType || null,
           section: data?.section || null
         });
@@ -161,7 +161,7 @@ export class SyncInboundService {
 
     if (telemetrySource && !this.trustedPilotTelemetrySources.has(telemetrySource)) {
       if (isTelemetryDebugEnabled()) {
-        console.debug('[SyncInbound][telemetry][ignore-untrusted-source]', {
+        console.log('[SyncInbound][telemetry][ignore-untrusted-source]', {
           pilotId,
           source: telemetrySource
         });

@@ -60,7 +60,7 @@ export class SyncConnectionService {
     if (historyBootstrap.mode === 'snapshot' && historyBootstrap.snapshotMessages.length > 0) {
       this.provider.historyBootstrapLoadedSnapshot = true;
       if (isTransportDebugEnabled()) {
-        console.debug('[WebSocket][RX][history] Loaded snapshot bootstrap from history', {
+        console.log('[WebSocket][RX][history] Loaded snapshot bootstrap from history', {
           count: historyBootstrap.snapshotMessages.length,
           snapshotTimestamp: historyBootstrap.snapshotTimestamp,
           snapshotVersion: historyBootstrap.snapshotVersion || null
@@ -84,7 +84,7 @@ export class SyncConnectionService {
 
       if (replayMessages.length > 0) {
         if (isTransportDebugEnabled()) {
-          console.debug('[WebSocket][RX][history] Replayed incremental updates after snapshot', {
+          console.log('[WebSocket][RX][history] Replayed incremental updates after snapshot', {
             count: replayMessages.length,
             snapshotTimestamp: historyBootstrap.snapshotTimestamp
           });
@@ -102,7 +102,7 @@ export class SyncConnectionService {
 
       if (historyBootstrap.priorityMessages.length > 0) {
         if (isTransportDebugEnabled()) {
-          console.debug('[WebSocket][RX][history] Replayed high-priority updates after snapshot', {
+          console.log('[WebSocket][RX][history] Replayed high-priority updates after snapshot', {
             count: historyBootstrap.priorityMessages.length,
             snapshotTimestamp: historyBootstrap.snapshotTimestamp
           });
@@ -119,7 +119,7 @@ export class SyncConnectionService {
       }
 
       if (isTransportDebugEnabled()) {
-        console.debug('[WebSocket][RX][bootstrap] Applied history summary', {
+        console.log('[WebSocket][RX][bootstrap] Applied history summary', {
           channelId: this.channelId,
           mode: historyBootstrap.mode,
           snapshotMessagesUsed: historyBootstrap.snapshotMessages.length,
@@ -134,7 +134,7 @@ export class SyncConnectionService {
     if (historyBootstrap.messages.length > 0 || historyBootstrap.priorityMessages.length > 0) {
       this.provider.historyBootstrapLoadedSnapshot = false;
       if (isTransportDebugEnabled()) {
-        console.debug('[WebSocket][RX][history] Replaying history without snapshot bootstrap', {
+        console.log('[WebSocket][RX][history] Replaying history without snapshot bootstrap', {
           count: historyBootstrap.messages.length,
           mode: historyBootstrap.mode,
           historyComplete: !!historyBootstrap.historyComplete
@@ -153,7 +153,7 @@ export class SyncConnectionService {
 
       if (historyBootstrap.priorityMessages.length > 0) {
         if (isTransportDebugEnabled()) {
-          console.debug('[WebSocket][RX][history] Replaying high-priority history', {
+          console.log('[WebSocket][RX][history] Replaying high-priority history', {
             count: historyBootstrap.priorityMessages.length,
             mode: historyBootstrap.mode,
             historyComplete: !!historyBootstrap.historyComplete
@@ -171,7 +171,7 @@ export class SyncConnectionService {
       }
 
       if (isTransportDebugEnabled()) {
-        console.debug('[WebSocket][RX][bootstrap] Applied history summary', {
+        console.log('[WebSocket][RX][bootstrap] Applied history summary', {
           channelId: this.channelId,
           mode: historyBootstrap.mode,
           snapshotMessagesUsed: historyBootstrap.snapshotMessages.length,
@@ -189,7 +189,7 @@ export class SyncConnectionService {
     }
 
     if (isConnectionDebugEnabled()) {
-      console.debug('[SyncConnection][history][recover][start]', {
+      console.log('[SyncConnection][history][recover][start]', {
         channelId: this.channelId,
         overrides: recoveryOverrides
       });
@@ -199,7 +199,7 @@ export class SyncConnectionService {
     await this.applyHistoryBootstrap(historyBootstrap);
 
     if (isConnectionDebugEnabled()) {
-      console.debug('[SyncConnection][history][recover][done]', {
+      console.log('[SyncConnection][history][recover][done]', {
         channelId: this.channelId,
         mode: historyBootstrap?.mode || 'none',
         snapshotTimestamp: Number(historyBootstrap?.snapshotTimestamp || 0),
@@ -217,7 +217,7 @@ export class SyncConnectionService {
     }
 
     if (isConnectionDebugEnabled()) {
-      console.debug('[SyncConnection][live][subscribe]', {
+      console.log('[SyncConnection][live][subscribe]', {
         channelType,
         channelName: channel.name
       });
@@ -241,7 +241,7 @@ export class SyncConnectionService {
 
       if (this.isOwnMessage(message)) {
         if (isTransportDebugEnabled()) {
-          console.debug(this.buildWebSocketLogPrefix('echo', 'update', channelType, routedData), {
+          console.log(this.buildWebSocketLogPrefix('echo', 'update', channelType, routedData), {
             channelType,
             data: routedData
           });
@@ -265,7 +265,7 @@ export class SyncConnectionService {
       }
 
       if (isTransportDebugEnabled()) {
-        console.debug(this.buildWebSocketLogPrefix('receive', 'update', channelType, routedData), {
+        console.log(this.buildWebSocketLogPrefix('receive', 'update', channelType, routedData), {
           channelType,
           data: routedData
         });
@@ -309,7 +309,7 @@ export class SyncConnectionService {
     }
 
     if (isConnectionDebugEnabled()) {
-      console.debug('[SyncConnection][reconnect][recover][start]', {
+      console.log('[SyncConnection][reconnect][recover][start]', {
         channelId: this.channelId
       });
     }
@@ -327,7 +327,7 @@ export class SyncConnectionService {
       await this.ensureLiveSubscriptions();
       this.provider.needsRecoveryAfterReconnect = false;
       if (isConnectionDebugEnabled()) {
-        console.debug('[SyncConnection][reconnect][recover][done]', {
+        console.log('[SyncConnection][reconnect][recover][done]', {
           channelId: this.channelId
         });
       }
@@ -401,7 +401,7 @@ export class SyncConnectionService {
 
   async start() {
     if (isConnectionDebugEnabled()) {
-      console.debug('[SyncConnection][start][bootstrap]', {
+      console.log('[SyncConnection][start][bootstrap]', {
         channelId: this.channelId,
         readHistory: this.options.readHistory !== false,
         requireSnapshotBootstrap: this.options.requireSnapshotBootstrap === true
@@ -431,7 +431,7 @@ export class SyncConnectionService {
     this.hasCompletedInitialConnect = true;
 
     if (isConnectionDebugEnabled()) {
-      console.debug('[SyncConnection][start][ready]', {
+      console.log('[SyncConnection][start][ready]', {
         channelId: this.channelId,
         waitingForSnapshotBootstrap: waitingForLiveSnapshotBootstrap,
         historyBootstrapMode: initialHistoryBootstrap?.mode || 'none'
@@ -439,7 +439,7 @@ export class SyncConnectionService {
     }
 
     if (isTransportDebugEnabled()) {
-      console.debug('[WebSocket] Connected to channels', this.channelNames);
+      console.log('[WebSocket] Connected to channels', this.channelNames);
     }
   }
 }

@@ -12,6 +12,7 @@ import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { LiveOverallTimeValue } from '../LiveOverallTimeValue.jsx';
 import {
   buildLapRaceLeaderboard,
+  getLapRaceStageMetaParts,
   getReferenceNow,
   getStageDateTime,
   isJumpStartForStage,
@@ -185,6 +186,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           totalLaps: entry.totalLaps,
           totalTimeMs: entry.totalTimeMs,
           totalTimeText: entry.totalTimeText,
+          totalTimeMode: entry.totalTimeMode,
           position: entry.position,
           hasTime: entry.hasTime,
           isFinished: entry.isFinished,
@@ -298,6 +300,23 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, referenceSpecialStage, ssStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t]);
 
   const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
+  const selectedStageLapMeta = useMemo(() => (
+    getLapRaceStageMetaParts({
+      stage: selectedStage,
+      lapsLabel: t('scene3.laps').toLowerCase(),
+      maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
+    }).join(' • ')
+  ), [selectedStage, t]);
+  const getLapRaceStageMetaText = (stage) => (
+    getLapRaceStageMetaParts({
+      stage,
+      lapsLabel: t('scene3.laps').toLowerCase(),
+      maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
+    }).join(' • ')
+  );
+  const lapRaceTimeColumnLabel = isLapRaceSelected && selectedStage?.lapRaceTotalTimeMode === 'bestLap'
+    ? t('times.bestLapTime')
+    : t('times.cumulativeTime');
   const leaderboardStatusItems = useMemo(() => (
     leaderboard.map((pilot) => ({
       ...pilot,
@@ -397,7 +416,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                       <SelectItem key={stage.id} value={stage.id}>
                         <div className="flex items-center gap-2">
                           <RotateCcw className="w-4 h-4 text-[#FACC15]" />
-                          {stage.name} ({stage.numberOfLaps} {t('scene3.laps').toLowerCase()})
+                          {stage.name}{getLapRaceStageMetaText(stage) ? ` (${getLapRaceStageMetaText(stage)})` : ''}
                         </div>
                       </SelectItem>
                     ))}
@@ -430,7 +449,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             }
           </h1>
           {isLapRaceSelected && selectedStage && (
-            <p className="text-zinc-400 text-xl">{selectedStage.numberOfLaps} {t('scene3.laps')}</p>
+            selectedStageLapMeta ? <p className="text-zinc-400 text-xl">{selectedStageLapMeta}</p> : null
           )}
         </div>
 
@@ -446,7 +465,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 {isLapRaceSelected ? (
                   <>
                     <th className="p-4 text-center uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.laps')}</th>
-                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.totalTime')}</th>
+                    <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{lapRaceTimeColumnLabel}</th>
                   </>
                 ) : selectedStageId ? (
                   <>
@@ -578,7 +597,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                             pilot.isRacing ? 'text-[#FACC15]' : 
                             'text-zinc-500'
                           }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {pilot.completedLaps || 0}/{selectedStage?.numberOfLaps || 0}
+                            {pilot.totalLaps > 0 ? `${pilot.completedLaps || 0}/${pilot.totalLaps}` : (pilot.completedLaps || 0)}
                           </span>
                         </td>
                         <td className="p-4 text-right">
@@ -588,7 +607,9 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                             pilot.isRacing ? 'text-[#FACC15]' : 
                             'text-zinc-500'
                           }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {pilot.hasTime ? formatDurationMs(pilot.totalTimeMs, timeDecimals) : '-'}
+                            {pilot.hasTime
+                              ? `${pilot.isFinished && pilot.totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${pilot.totalTimeText || formatDurationMs(pilot.totalTimeMs, timeDecimals)}`
+                              : '-'}
                           </span>
                         </td>
                       </>

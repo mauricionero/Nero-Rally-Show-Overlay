@@ -7,15 +7,19 @@ A broadcast-ready rally overlay system inspired by WRC TV graphics. This is a 10
 - **Setup page** to configure pilots, stages, timing, streams, branding, and sync.
 - **Overlay page** with 4 broadcast scenes (Live Stage, Timing Tower, Leaderboard, Pilot Focus).
 - **Times page** for fast, mobile-friendly time entry that syncs with Setup.
+- **Lap Race support** with variable laps, real start time, cumulative/best-lap totals, and live leaderboard sorting.
+- **Telemetry tooling** with GPS precision, heading, speed, and map coverage visualization.
+- **SOS / alert workflow** with priority delivery and acknowledgement handling.
+- **KML map import** with support for collapsing point-only exports into a single line map.
 - **No backend required**. State persists locally and can sync via Ably WebSocket.
 - **Multi-language** with YAML translations.
 - **VDO.Ninja** support for live camera feeds and external sources.
 
 ## Pages
 
-- `/` **Setup**: Configure everything (pilots, categories, stages, times, streams, config).
-- `/overlay` **Overlay**: Live broadcast graphics with 4 switchable scenes.
-- `/times` **Times**: Mobile-first timing entry; read-only by default until a stage is selected.
+- `/` **Setup**: Configure everything (pilots, categories, stages, times, streams, config, telemetry debug, KML import).
+- `/overlay` **Overlay**: Live broadcast graphics with 4 switchable scenes and optional debug LEDs.
+- `/times` **Times**: Mobile-first timing entry with lap-race support, SOS handling, and live sync.
 
 ## Key Features
 
@@ -23,8 +27,11 @@ A broadcast-ready rally overlay system inspired by WRC TV graphics. This is a 10
 - Live timing and positions with stage status (racing, finished, not started).
 - Category color coding across all views.
 - Per-stage alerts and jump start indicators.
+- Lap-race timing with planned vs real start time, variable lap counts, cumulative/best-lap totals, and auto-expanded lap columns.
+- SOS / alert badges and acknowledgement flow across Times, Setup, and Overlay.
 - AVG and deviation calculations per category.
 - Local or WebSocket sync between pages.
+- Optional debug logging toggles for sync, transport, telemetry, connection, and outbound traffic.
 
 ## Tech Stack
 
@@ -67,19 +74,19 @@ Each session key (for example `1-ABC12345`) maps to 4 Ably channels:
 - `rally-data:{channelId}`
   - Normal synchronized state changes.
   - This is where the centralized `delta-batch` messages go for regular Setup and Times edits.
-  - 1 day persistence
+  - Not persisted in Ably; normal state stays separate from telemetry and snapshots.
 - `rally-snapshots:{channelId}`
   - Full state snapshots used for bootstrap and recovery.
   - Fresh clients load snapshots from here and then replay newer `data` / `priority` messages.
-  - 1 day persistence
+  - Persisted in Ably.
 - `rally-telemetry:{channelId}`
   - Live pilot telemetry only.
   - Kept separate because telemetry can be frequent and should not pollute normal state history.
-  - no persistence
+  - Ephemeral messages, short-lived history only.
 - `rally-priority:{channelId}`
   - Urgent, low-volume messages.
   - Used for high-priority/control-style traffic such as ownership coordination and SOS-related acknowledgements.
-  - 1 day persistence
+  - Persisted in Ably.
 
 The separation is intentional:
 
@@ -113,16 +120,21 @@ The separation is intentional:
 - Normal synchronized state is sent as centralized `delta-batch` packages.
 - Snapshots are published separately and used only for bootstrap/recovery.
 - Telemetry is kept in its own channel and is treated differently from normal state sync.
+- Setup owns snapshot generation for the current session and uses a heartbeat lease for ownership failover.
+- Non-Setup pages wait for snapshot bootstrap instead of replaying plain history.
+- Lap-race `realStartTime` is persisted and used for scene timing; SS / Liaison / Service Park ideal starts are derived from stage start + pilot offset.
+- Pilot telemetry can include `gpsPrecision`, which is used by the map marker aura.
+- Manual disconnects are suppressed only for the current session so they do not immediately trigger reconnect loops.
 
 ### Sync Flow Summary
 
 - Setup owns snapshot generation for the session.
 - Normal edits are batched and published as deltas, typically at most once per second.
 - New or reconnecting clients:
-  1. Reuse recent history when possible.
-  2. Bootstrap from the latest snapshot when the local history marker is too old.
-  3. Replay newer `data` and `priority` messages after the snapshot timestamp.
-- Telemetry is live-only enough that it stays in its own lane and does not define the main snapshot/delta recovery path.
+  1. Bootstrap from the latest snapshot.
+  2. Replay newer `data` and `priority` messages after the snapshot timestamp.
+  3. Wait for snapshots if none are currently available.
+- Telemetry is isolated to its own channel and is not part of the snapshot recovery path.
 
 ## File Structure (frontend)
 

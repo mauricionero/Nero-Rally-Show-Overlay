@@ -447,7 +447,8 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       isFinished: data.isFinished || false,
       isRacing: data.isRacing || false,
       status: data.status || 'not_started',
-      totalLaps: currentStage?.numberOfLaps || 0,
+      totalLaps: rallyHelpers.getLapRaceConfiguredLapCount(currentStage),
+      totalTimeMode: data.totalTimeMode || 'cumulative',
       totalTimeText: data.totalTimeText || data.stageTotalText || '',
       lastLapText: lastLapDurationMs ? formatDurationMs(lastLapDurationMs, timeDecimals, { fallback: '' }) : '',
       displayText: data.displayText || data.stageTotalText || '',
@@ -484,24 +485,12 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   };
 
   const stageScheduleTime = useMemo(() => {
-    if (!currentStage?.startTime) {
+    if (!currentStage) {
       return '';
     }
 
-    if (!isLapRace) {
-      return currentStage.startTime;
-    }
-
-    if (!rallyHelpers.hasStageDateTimePassed(currentStage.startTime, currentStage.date, sceneNow)) {
-      return currentStage.startTime;
-    }
-
-    if (isLapRaceStageFinished) {
-      return '';
-    }
-
-    return rallyHelpers.getRunningTime(currentStage.startTime, currentStage.date, sceneNow, timeDecimals);
-  }, [currentStage, isLapRace, isLapRaceStageFinished, sceneNow, timeDecimals]);
+    return currentStage.startTime || '';
+  }, [currentStage]);
 
   return (
     <div className="relative w-full h-full" style={{ padding: sceneInset }} data-testid="scene-1-live-stage">
@@ -790,6 +779,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             let showLiveTime = false;
             
             if (isLapRace && lapInfo) {
+              const finishedLapDisplay = lapInfo.isFinished
+                ? `${lapInfo.totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${lapInfo.totalTimeText || lapInfo.displayText || ''}`
+                : '';
               // Lap Race display
               positionBadge = (
                 <div className="absolute top-2 left-2 bg-black/80 px-2 py-1 rounded flex items-center gap-1">
@@ -802,6 +794,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
               if (lapInfo.retired) {
                 displayTime = t('status.retired');
                 timeColor = 'text-red-400';
+              } else if (lapInfo.isFinished && finishedLapDisplay) {
+                displayTime = finishedLapDisplay;
+                timeColor = 'text-[#22C55E]';
               } else if (lapInfo.displayText) {
                 displayTime = lapInfo.displayText;
                 timeColor = lapInfo.isFinished
@@ -967,13 +962,13 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   let showLiveTime = false;
                   
                   if (isLapRace) {
-                    if (isFinished) {
+                  if (isFinished) {
                       borderColor = 'border-[#22C55E]';
-                      timeDisplay = 'FINISHED';
+                      timeDisplay = `${lapInfo?.totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${lapInfo?.totalTimeText || 'FINISHED'}`;
                       timeColor = 'text-[#22C55E]';
                     } else if (completedLaps > 0) {
                       borderColor = 'border-[#FACC15]';
-                      timeDisplay = `Lap ${completedLaps}/${currentStage?.numberOfLaps || 0}${lapInfo?.lastLapText ? ` • ${lapInfo.lastLapText}` : ''}`;
+                      timeDisplay = `Lap ${lapInfo?.totalLaps > 0 ? `${completedLaps}/${lapInfo.totalLaps}` : completedLaps}${lapInfo?.lastLapText ? ` • ${lapInfo.lastLapText}` : ''}`;
                       timeColor = 'text-[#FACC15]';
                     } else if (lapInfo?.displayText) {
                       timeDisplay = lapInfo.displayText;

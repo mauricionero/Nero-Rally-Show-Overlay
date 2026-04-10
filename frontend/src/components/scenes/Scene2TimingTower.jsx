@@ -7,7 +7,7 @@ import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import StatusPill from '../StatusPill.jsx';
-import { buildLapRaceLeaderboard, getReferenceNow, getRunningTime, hasStageDateTimePassed, parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
+import { buildLapRaceLeaderboard, getLapRaceStageMetaParts, getReferenceNow, parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { ChevronRight, Radio, RotateCcw, Flag, Video, Map as MapIcon } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -81,6 +81,13 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const currentStage = stages.find(s => s.id === currentStageId);
   const isLapRace = isLapRaceStageType(currentStage?.type);
   const isSSStage = isSpecialStageType(currentStage?.type);
+  const currentStageLapMeta = useMemo(() => (
+    getLapRaceStageMetaParts({
+      stage: currentStage,
+      lapsLabel: t('scene3.laps').toLowerCase(),
+      maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
+    }).join(' • ')
+  ), [currentStage, t]);
   const lapFastClockEnabled = Boolean(currentStageId && isLapRace && timeDecimals > 0);
   const currentFastTime = useFastClock(lapFastClockEnabled);
   const currentSecondAlignedTime = useSecondAlignedClock(Boolean(currentStageId && isLapRace && !lapFastClockEnabled));
@@ -160,24 +167,12 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       && sortedLapRacePilotsData.every((entry) => entry.retired || entry.isFinished)
   ), [isLapRace, sortedLapRacePilotsData]);
   const stageHeaderTime = useMemo(() => {
-    if (!currentStage?.startTime) {
+    if (!currentStage) {
       return '';
     }
 
-    if (!isLapRace) {
-      return currentStage.startTime;
-    }
-
-    if (!hasStageDateTimePassed(currentStage.startTime, currentStage.date, sceneNow)) {
-      return currentStage.startTime;
-    }
-
-    if (isLapRaceStageFinished) {
-      return '';
-    }
-
-    return getRunningTime(currentStage.startTime, currentStage.date, sceneNow, timeDecimals);
-  }, [currentStage, isLapRace, isLapRaceStageFinished, sceneNow, timeDecimals]);
+    return currentStage.startTime || '';
+  }, [currentStage]);
 
   const specialStageBaseItems = useMemo(() => {
     if (!currentStageId || !currentStage || isLapRace) {
@@ -413,7 +408,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   };
 
   const renderPilotRow = (data, index) => {
-    const { pilot, completedLaps, totalTimeMs, isFinished, isRacing, startTime, finishTime, retired } = data;
+    const { pilot, completedLaps, totalTimeMs, totalTimeText, totalTimeMode, isFinished, isRacing, startTime, finishTime, retired } = data;
     const pilotUiMeta = pilotUiMetaById.get(pilot.id) || {};
     const category = pilotUiMeta.category || null;
     const isExpanded = expandedPilotId === pilot.id;
@@ -546,8 +541,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               <span className={`font-mono text-sm ${displayValueClass}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                 {showGap
                   ? gap
-                  : (isFinished || isRacing)
-                    ? `${completedLaps > 0 || isFinished ? `${t('times.lap')} ${completedLaps}/${currentStage?.numberOfLaps || 0}` : ''}${totalTimeMs ? `${completedLaps > 0 || isFinished ? ' • ' : ''}${formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' })}` : ''}`
+                  : isFinished
+                    ? `${totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${totalTimeText || (totalTimeMs ? formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' }) : '')}`
+                    : isRacing
+                      ? `${completedLaps > 0 ? `${t('times.lap')} ${data.totalLaps > 0 ? `${completedLaps}/${data.totalLaps}` : completedLaps}` : ''}${totalTimeMs ? `${completedLaps > 0 ? ' • ' : ''}${formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' })}` : ''}`
                     : ''}
               </span>
             ) : showGap ? (
@@ -682,10 +679,10 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               <span className="text-zinc-400 text-xs font-bold uppercase">
                 {isSSStage && currentStage.ssNumber ? `${getStageNumberLabel(currentStage)} ` : ''}
                 {currentStage.name}
-                {isLapRace && ` (${currentStage.numberOfLaps} ${t('scene3.laps').toLowerCase()})`}
+                {isLapRace && currentStageLapMeta && ` (${currentStageLapMeta})`}
               </span>
               {stageHeaderTime && (
-                <span className={`text-xs font-bold font-mono ${isLapRace && hasStageDateTimePassed(currentStage.startTime, currentStage.date, sceneNow) ? 'text-[#FACC15]' : 'text-zinc-300'}`}>
+                <span className={`text-xs font-bold font-mono ${isLapRace ? 'text-[#FACC15]' : 'text-zinc-300'}`}>
                   {stageHeaderTime}
                 </span>
               )}
@@ -843,7 +840,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                   )}
                   {isLapRace && selectedPilotData && (
                     <p className="text-[#FACC15] text-lg font-mono">
-                      {t('times.lap')} {selectedPilotData.completedLaps || 0}/{currentStage?.numberOfLaps || 0}
+                      {t('times.lap')} {selectedPilotData.totalLaps > 0 ? `${selectedPilotData.completedLaps || 0}/${selectedPilotData.totalLaps}` : (selectedPilotData.completedLaps || 0)}
                     </p>
                   )}
                 </div>
