@@ -1,42 +1,63 @@
 import React, { useEffect, useState } from 'react';
 import { Input } from './ui/input';
+import { clampTimeDecimals } from '../utils/timeFormat.js';
 
-export const formatRollingClockValue = (value, { showSeconds = true } = {}) => {
+export const formatRollingClockValue = (value, { showSeconds = true, decimals = 0 } = {}) => {
   if (typeof value !== 'string') {
     return '';
   }
 
-  const maxDigits = showSeconds ? 6 : 4;
-  const digits = value.replace(/\D/g, '').slice(-maxDigits);
+  const safeDecimals = clampTimeDecimals(decimals);
+  const digits = value.replace(/\D/g, '');
   if (!digits) {
     return '';
   }
 
   if (!showSeconds) {
-    const padded = digits.padStart(4, '0');
+    const padded = digits.slice(-4).padStart(4, '0');
     return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
   }
 
-  const padded = digits.padStart(6, '0');
-  return `${padded.slice(0, 2)}:${padded.slice(2, 4)}:${padded.slice(4, 6)}`;
+  const fractionLength = safeDecimals > 0
+    ? Math.min(safeDecimals, Math.max(0, digits.length - 6))
+    : 0;
+  const window = digits.slice(-(6 + safeDecimals));
+  const wholeDigits = digits.length <= 6
+    ? digits.slice(-6)
+    : window.slice(0, window.length - fractionLength);
+  const fractionDigits = fractionLength > 0
+    ? window.slice(-fractionLength)
+    : '';
+  const padded = wholeDigits.padStart(6, '0');
+  const fractionText = fractionDigits ? `.${fractionDigits}` : '';
+  return `${padded.slice(0, 2)}:${padded.slice(2, 4)}:${padded.slice(4, 6)}${fractionText}`;
 };
 
-export const isRollingClockValueValid = (value, { showSeconds = true } = {}) => (
+export const isRollingClockValueValid = (value, { showSeconds = true, decimals = 0 } = {}) => (
   showSeconds
-    ? /^\d{2}:\d{2}:\d{2}$/.test(value)
+    ? (
+        clampTimeDecimals(decimals) > 0
+          ? new RegExp(`^\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,${clampTimeDecimals(decimals)}})?$`).test(value)
+          : /^\d{2}:\d{2}:\d{2}$/.test(value)
+      )
     : /^\d{2}:\d{2}$/.test(value)
 );
 
-export const stepRollingClockMinutes = (value, step = 1, { showSeconds = true } = {}) => {
-  const fallbackValue = showSeconds ? '00:00:00' : '00:00';
-  if (!isRollingClockValueValid(value, { showSeconds })) {
+export const stepRollingClockMinutes = (value, step = 1, { showSeconds = true, decimals = 0 } = {}) => {
+  const safeDecimals = clampTimeDecimals(decimals);
+  const fallbackValue = showSeconds
+    ? `00:00:00${safeDecimals > 0 ? `.${'0'.repeat(safeDecimals)}` : ''}`
+    : '00:00';
+  if (!isRollingClockValueValid(value, { showSeconds, decimals: safeDecimals })) {
     return fallbackValue;
   }
 
   const parts = value.split(':');
   const hours = Number(parts[0]);
   const minutes = Number(parts[1]);
-  const seconds = showSeconds ? Number(parts[2] || 0) : null;
+  const secondsPart = showSeconds ? (parts[2] || '0') : null;
+  const [secondsText, fractionText = ''] = showSeconds ? secondsPart.split('.') : [];
+  const seconds = showSeconds ? Number(secondsText || 0) : null;
 
   if (!Number.isFinite(hours) || !Number.isFinite(minutes) || (showSeconds && !Number.isFinite(seconds))) {
     return fallbackValue;
@@ -51,13 +72,18 @@ export const stepRollingClockMinutes = (value, step = 1, { showSeconds = true } 
     return baseValue;
   }
 
-  return `${baseValue}:${String(seconds).padStart(2, '0')}`;
+  const nextSeconds = String(seconds).padStart(2, '0');
+  const fraction = safeDecimals > 0
+    ? `.${String(fractionText || '').padEnd(safeDecimals, '0').slice(0, safeDecimals)}`
+    : '';
+  return `${baseValue}:${nextSeconds}${fraction}`;
 };
 
 export default function RollingClockInput({
   value,
   onCommit,
   showSeconds = true,
+  decimals = 0,
   readOnly = false,
   className,
   placeholder,
@@ -72,7 +98,7 @@ export default function RollingClockInput({
   }, [value]);
 
   const commitValue = (nextValue) => {
-    const formattedValue = formatRollingClockValue(nextValue || '', { showSeconds });
+    const formattedValue = formatRollingClockValue(nextValue || '', { showSeconds, decimals });
     setDraftValue(formattedValue);
     onCommit?.(formattedValue);
   };
@@ -81,7 +107,7 @@ export default function RollingClockInput({
     <Input
       value={draftValue}
       onChange={(event) => {
-        setDraftValue(formatRollingClockValue(event.target.value, { showSeconds }));
+        setDraftValue(formatRollingClockValue(event.target.value, { showSeconds, decimals }));
       }}
       onKeyDown={(event) => {
         onKeyDown?.(event);
@@ -98,18 +124,20 @@ export default function RollingClockInput({
 
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
           event.preventDefault();
-          const baseValue = isRollingClockValueValid(draftValue, { showSeconds })
+          const baseValue = isRollingClockValueValid(draftValue, { showSeconds, decimals })
             ? draftValue
-            : (showSeconds ? '00:00:00' : '00:00');
+            : (showSeconds
+              ? `00:00:00${clampTimeDecimals(decimals) > 0 ? `.${'0'.repeat(clampTimeDecimals(decimals))}` : ''}`
+              : '00:00');
           const step = event.shiftKey ? 5 : 1;
-          setDraftValue(stepRollingClockMinutes(baseValue, event.key === 'ArrowUp' ? step : -step, { showSeconds }));
+          setDraftValue(stepRollingClockMinutes(baseValue, event.key === 'ArrowUp' ? step : -step, { showSeconds, decimals }));
         }
       }}
       onBlur={(event) => {
         commitValue(draftValue);
         onBlur?.(event);
       }}
-      placeholder={placeholder || (showSeconds ? 'HH:MM:SS' : 'HH:MM')}
+      placeholder={placeholder || (showSeconds ? `HH:MM:SS${clampTimeDecimals(decimals) > 0 ? `.${'0'.repeat(clampTimeDecimals(decimals))}` : ''}` : 'HH:MM')}
       className={className}
       inputMode="numeric"
       readOnly={readOnly}
