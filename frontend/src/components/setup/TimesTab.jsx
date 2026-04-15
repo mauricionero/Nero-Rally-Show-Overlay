@@ -8,6 +8,7 @@ import { Checkbox } from '../ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog.jsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { TimeInput } from '../TimeInput.jsx';
+import TimingSourceIndicator from '../TimingSourceIndicator.jsx';
 import StatusPill from '../StatusPill.jsx';
 import CurrentStageCard from './CurrentStageCard.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
@@ -373,6 +374,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     arrivalTimes,
     startTimes,
     realStartTimes,
+    sourceFinishTime,
     retiredStages,
     stageAlerts,
     stageSos,
@@ -422,6 +424,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         && displayedIdealStartTimeValue === storedStartTimeValue;
         const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
         const displayedRealStartTimeValue = realStartTimeDrafts[pilot.id] ?? realStartTimeValue;
+      const finishTimeSource = sourceFinishTime[pilot.id]?.[stage.id] || '';
       const retired = !!retiredStages[pilot.id]?.[stage.id];
       const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
       const sosLevel = Number(stageSos?.[pilot.id]?.[stage.id] || 0);
@@ -444,6 +447,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
           displayedIdealStartTimeValue,
           realStartTimeValue,
           displayedRealStartTimeValue,
+          finishTimeSource,
           retired,
         alert,
         sos,
@@ -468,6 +472,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     arrivalTimes,
     startTimes,
     realStartTimes,
+    sourceFinishTime,
     retiredStages,
     stageAlerts,
     stageSos,
@@ -1000,6 +1005,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     </td>
                     <td className="p-1 sm:p-2">
                       <div className="flex items-center gap-1">
+                        <TimingSourceIndicator source={row.finishTimeSource} />
                         <TimeInput
                           value={arrivalTimeValue}
                           onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
@@ -1130,7 +1136,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
               deviationMs,
               isJumpStart,
               lineSync,
-              arrivalTimeValue
+              arrivalTimeValue,
+              finishTimeSource
             } = row;
             const lineSyncText = lineSync ? getLineSyncStatusText(t, lineSync.status) : '';
 
@@ -1281,6 +1288,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   <div className="mb-2">
                     <Label className="text-xs text-zinc-400">{t('times.arrivalTime')}</Label>
                     <div className="flex items-center gap-1">
+                  <TimingSourceIndicator source={finishTimeSource} />
                   <TimeInput
                     value={arrivalTimeValue}
                     onChange={(val) => handleArrivalTimeChange(pilot.id, val)}

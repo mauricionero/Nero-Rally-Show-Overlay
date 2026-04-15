@@ -7,6 +7,7 @@ import { Label } from '../ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog.jsx';
 import { TimeInput } from '../TimeInput.jsx';
 import RollingClockInput from '../RollingClockInput.jsx';
+import TimingSourceIndicator from '../TimingSourceIndicator.jsx';
 import { CheckSquare, Square, Clock, Plus, X, TriangleAlert } from 'lucide-react';
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceActualStartTime, getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
@@ -45,8 +46,11 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
   const { t } = useTranslation();
   const {
     setLapTime,
+    removeLapTimeColumn = null,
     getLapTime,
     getPilotLapTimes,
+    sourceFinishTime,
+    sourceLapTime,
     getStagePilots,
     togglePilotInStage,
     selectAllPilotsInStage,
@@ -112,8 +116,12 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     return Math.max(configuredLapCount, recordedLapCount, 1);
   }, [getPilotLapTimes, selectedPilots, stage]);
   const lapsArray = Array.from({ length: visibleLapCount }, (_, i) => i);
-  const lastLapIndex = Math.max(0, lapsArray.length - 1);
   const hasVariableLapCount = !!stage.lapRaceVariableLaps;
+  const lapColumnCanDelete = useMemo(() => (
+    lapsArray.map((lapIndex) => (
+      pilots.every((pilot) => !String(getLapTime(pilot.id, stage.id, lapIndex) || '').trim())
+    ))
+  ), [getLapTime, lapsArray, pilots, stage.id]);
   const totalColumnWidth = 140;
   const nowColumnWidth = 104;
   const addLapColumnWidth = 56;
@@ -155,6 +163,30 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     updateStage(stage.id, {
       numberOfLaps: nextLapCount
     });
+  };
+
+  const handleDeleteLap = (lapIndex) => {
+    if (isReadOnly || typeof removeLapTimeColumn !== 'function') {
+      return;
+    }
+
+    removeLapTimeColumn(stage.id, lapIndex);
+    const currentLapCount = Number(stage.numberOfLaps || visibleLapCount || 1);
+    updateStage(stage.id, {
+      numberOfLaps: Math.max(1, currentLapCount - 1)
+    });
+  };
+
+  const getNextUnfilledLapIndex = (pilotId) => {
+    const pilotLapEntries = getPilotLapTimes(pilotId, stage.id) || [];
+    const nextEmptyIndex = Array.from({ length: visibleLapCount }, (_, lapIndex) => lapIndex)
+      .find((lapIndex) => !String(pilotLapEntries[lapIndex] || '').trim());
+
+    if (typeof nextEmptyIndex === 'number') {
+      return nextEmptyIndex;
+    }
+
+    return Math.max(0, pilotLapEntries.length);
   };
 
   return (
@@ -280,7 +312,20 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                 </th>
                 {lapsArray.map((lapIndex) => (
                   <th key={lapIndex} className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    <div>{t('times.lap')} {lapIndex + 1}</div>
+                    <div className="flex items-center justify-center gap-1">
+                      <span>{t('times.lap')} {lapIndex + 1}</span>
+                      {lapColumnCanDelete[lapIndex] && !isReadOnly && (
+                        <button
+                          onClick={() => handleDeleteLap(lapIndex)}
+                          className="inline-flex items-center justify-center h-5 w-5 rounded text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title={t('common.delete')}
+                          type="button"
+                          disabled={typeof removeLapTimeColumn !== 'function'}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                     <div className="text-xs text-zinc-400 font-normal">{t('times.time')} / {t('times.duration')}</div>
                   </th>
                 ))}
@@ -353,6 +398,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                         </td>
                         {lapsArray.map((lapIndex) => {
                           const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
+                          const lapTimeSource = sourceLapTime?.[pilot.id]?.[stage.id]?.[lapIndex] || '';
                           const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, stage.id, lapIndex - 1) : null;
                           const actualStartTime = getLapRaceActualStartTime(stage);
                           const lapDuration = calculateLapDuration(lapTime, prevLapTime, actualStartTime, timeDecimals);
@@ -361,6 +407,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                             <td key={lapIndex} className="p-2">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1">
+                                  <TimingSourceIndicator source={lapTimeSource} />
                                   <TimeInput
                                     value={lapTime}
                                     onChange={(val) => setLapTime(pilot.id, stage.id, lapIndex, val)}
@@ -402,9 +449,14 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                         >
                           <div className="flex items-center justify-center gap-1 flex-nowrap">
                             <button
-                              onClick={() => setLapTime(pilot.id, stage.id, lastLapIndex, getCurrentTimeString(timeDecimals))}
+                              onClick={() => setLapTime(
+                                pilot.id,
+                                stage.id,
+                                getNextUnfilledLapIndex(pilot.id),
+                                getCurrentTimeString(timeDecimals)
+                              )}
                               className="inline-flex items-center justify-center h-8 w-8 rounded bg-zinc-800 text-zinc-400 hover:text-[#FF4500] hover:bg-zinc-700 transition-colors"
-                              title={`${t('times.now')} (${t('times.lap')} ${lastLapIndex + 1})`}
+                              title={t('times.now')}
                               disabled={isReadOnly}
                             >
                               <Clock className="w-4 h-4" />
@@ -433,7 +485,8 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                           className="p-2 bg-[#18181B] z-20"
                           style={{ width: `${totalColumnWidth}px`, minWidth: `${totalColumnWidth}px`, position: 'sticky', right: 0 }}
                         >
-                          <div className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <TimingSourceIndicator source={sourceFinishTime?.[pilot.id]?.[stage.id] || ''} />
                             <span className="text-white font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                               {times[pilot.id]?.[stage.id] || '-'}
                             </span>

@@ -212,7 +212,7 @@ export default function TheRaceTab() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-h-[calc(100vh-14rem)] overflow-y-auto overflow-x-hidden pr-2">
       {/* Event Name */}
       <Card className="bg-[#18181B] border-zinc-800 border-l-4 border-l-[#FF4500]">
         <CardHeader>
@@ -549,12 +549,12 @@ export default function TheRaceTab() {
                           <Edit className="w-4 h-4" />
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-[#18181B] border-zinc-800 text-white">
+                      <DialogContent className="bg-[#18181B] border-zinc-800 text-white max-h-[90vh] overflow-hidden">
                         <DialogHeader>
                           <DialogTitle className="text-white">{t('common.edit')} Stage</DialogTitle>
                         </DialogHeader>
                         {editingStage && (
-                          <div className="space-y-4">
+                          <div className="space-y-4 overflow-y-auto pr-1 max-h-[calc(90vh-8rem)]">
                             <div>
                               <Label className="text-white">{t('theRace.stageType')}</Label>
                               <Select value={editingStage.type} onValueChange={handleEditingStageTypeChange}>

@@ -12,6 +12,7 @@ import {
   getAllowedPublishSectionsForRole,
   normalizeSyncRole,
   roleRequiresSnapshotBootstrap,
+  SNAPSHOT_ONLY_TIMING_SECTION_KEYS,
   sanitizeSnapshotSections,
   SETUP_BASE_SECTION_KEYS,
   TIMES_ROLE_TIMING_SECTION_SET,
@@ -27,6 +28,12 @@ import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMar
 import { getPilotTelemetryForId, normalizePilotId } from '../utils/pilotIdentity.js';
 import { isSyncDebugEnabled, isTelemetryDebugEnabled } from '../utils/debugFlags.js';
 import { clearManualWsDisconnect, markManualWsDisconnect } from '../utils/wsAutoConnect.js';
+import {
+  canTimingSourceOverwrite,
+  getHighestTimingSource,
+  normalizeTimingSource,
+  TIMING_SOURCES
+} from '../utils/timingSource.js';
 
 const RallyContext = createContext();
 const RallyConfigContext = createContext();
@@ -249,6 +256,64 @@ const normalizeConnectionType = (value) => {
   return String(value).trim();
 };
 
+const getManualTimingSourceForRole = (role) => (
+  normalizeSyncRole(role) === SYNC_ROLES.TIMES
+    ? TIMING_SOURCES.TIMES
+    : TIMING_SOURCES.SETUP
+);
+
+const trimTrailingEmptyArrayValues = (values = []) => {
+  const nextValues = Array.isArray(values) ? [...values] : [];
+
+  while (nextValues.length > 0) {
+    const lastValue = nextValues[nextValues.length - 1];
+    if (lastValue === undefined || lastValue === null || lastValue === '') {
+      nextValues.pop();
+      continue;
+    }
+    break;
+  }
+
+  return nextValues;
+};
+
+const getNestedStageValue = (map = {}, pilotId, stageId, fallbackValue = '') => (
+  map?.[pilotId]?.[stageId] ?? fallbackValue
+);
+
+const setNestedStageValue = (map = {}, pilotId, stageId, value) => {
+  const normalizedPilotId = normalizePilotId(pilotId);
+  const normalizedStageId = String(stageId || '').trim();
+
+  if (!normalizedPilotId || !normalizedStageId) {
+    return isPlainObject(map) ? map : {};
+  }
+
+  const nextMap = isPlainObject(map) ? { ...map } : {};
+  const nextPilotStages = isPlainObject(nextMap[normalizedPilotId])
+    ? { ...nextMap[normalizedPilotId] }
+    : {};
+
+  if (value === undefined || value === null || value === '') {
+    delete nextPilotStages[normalizedStageId];
+  } else {
+    nextPilotStages[normalizedStageId] = value;
+  }
+
+  if (Object.keys(nextPilotStages).length > 0) {
+    nextMap[normalizedPilotId] = nextPilotStages;
+  } else {
+    delete nextMap[normalizedPilotId];
+  }
+
+  return nextMap;
+};
+
+const setNestedStageArrayValue = (map = {}, pilotId, stageId, values) => {
+  const trimmedValues = trimTrailingEmptyArrayValues(values);
+  return setNestedStageValue(map, pilotId, stageId, trimmedValues.length > 0 ? trimmedValues : '');
+};
+
 const writeCurrentSessionMetaToStorage = (nextMeta = null) => {
   if (typeof window === 'undefined' || !window.localStorage) {
     return;
@@ -275,6 +340,8 @@ const STORAGE_DOMAIN_VERSION_KEYS = {
   media: 'rally_media_version'
 };
 const CURRENT_SESSION_META_STORAGE_KEY = 'rally_meta_current_session';
+const SOURCE_FINISH_TIME_STORAGE_KEY = 'rally_source_finish_time';
+const SOURCE_LAP_TIME_STORAGE_KEY = 'rally_source_lap_time';
 const TIMING_PATCH_DEFAULT_VALUES = {
   times: '',
   arrivalTimes: '',
@@ -285,10 +352,15 @@ const TIMING_PATCH_DEFAULT_VALUES = {
   stagePilots: [],
   retiredStages: false,
   stageAlerts: false,
-  stageSos: 0
+  stageSos: 0,
+  sourceFinishTime: '',
+  sourceLapTime: []
 };
 const SETUP_TIMING_SECTION_SET = TIMING_SECTION_SET;
-const TIMING_BY_STAGE_FIELDS = new Set(TIMING_SECTION_KEYS);
+const TIMING_BY_STAGE_FIELDS = new Set([
+  ...TIMING_SECTION_KEYS,
+  ...SNAPSHOT_ONLY_TIMING_SECTION_KEYS
+]);
 
 const ALL_STORAGE_DOMAINS = Object.keys(STORAGE_DOMAIN_VERSION_KEYS);
 
@@ -764,6 +836,12 @@ const buildTimingByStageSnapshot = (snapshot = {}, selectedTimingSections = []) 
       if (sections.has('lapTimes') && snapshot.lapTimes?.[pilotId]?.[stageId] !== undefined) {
         pilotStageFields.lapTimes = snapshot.lapTimes[pilotId][stageId];
       }
+      if (sections.has('sourceFinishTime') && snapshot.sourceFinishTime?.[pilotId]?.[stageId] !== undefined) {
+        pilotStageFields.sourceFinishTime = snapshot.sourceFinishTime[pilotId][stageId];
+      }
+      if (sections.has('sourceLapTime') && snapshot.sourceLapTime?.[pilotId]?.[stageId] !== undefined) {
+        pilotStageFields.sourceLapTime = snapshot.sourceLapTime[pilotId][stageId];
+      }
       if (sections.has('positions') && snapshot.positions?.[pilotId]?.[stageId] !== undefined) {
         pilotStageFields.positions = snapshot.positions[pilotId][stageId];
       }
@@ -822,6 +900,8 @@ const expandTimingByStageSnapshot = (timingByStage = {}) => {
       assignPilotStageValue('startTimes', pilotFields.startTimes);
       assignPilotStageValue('realStartTimes', pilotFields.realStartTimes);
       assignPilotStageValue('lapTimes', pilotFields.lapTimes);
+      assignPilotStageValue('sourceFinishTime', pilotFields.sourceFinishTime);
+      assignPilotStageValue('sourceLapTime', pilotFields.sourceLapTime);
       assignPilotStageValue('positions', pilotFields.positions);
 
       if (pilotFields.retiredStages) {
@@ -996,6 +1076,8 @@ export const RallyProvider = ({ children }) => {
   const [arrivalTimes, setArrivalTimes] = useState(() => loadFromStorage('rally_arrival_times', {}));
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [realStartTimes, setRealStartTimes] = useState(() => loadFromStorage('rally_real_start_times', {}));
+  const [sourceFinishTime, setSourceFinishTime] = useState(() => loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}));
+  const [sourceLapTime, setSourceLapTime] = useState(() => loadFromStorage(SOURCE_LAP_TIME_STORAGE_KEY, {}));
   const [retiredStages, setRetiredStages] = useState(() => loadFromStorage('rally_retired_stages', {}));
   const [stageAlerts, setStageAlerts] = useState(() => loadFromStorage('rally_stage_alerts', {}));
   const [stageSos, setStageSosState] = useState(() => loadFromStorage('rally_stage_sos', {}));
@@ -1131,6 +1213,8 @@ export const RallyProvider = ({ children }) => {
   const arrivalTimesRef = useRef(arrivalTimes);
   const startTimesRef = useRef(startTimes);
   const realStartTimesRef = useRef(realStartTimes);
+  const sourceFinishTimeRef = useRef(sourceFinishTime);
+  const sourceLapTimeRef = useRef(sourceLapTime);
   const lapTimesRef = useRef(lapTimes);
   const positionsRef = useRef(positions);
   const stagePilotsRef = useRef(stagePilots);
@@ -1156,6 +1240,8 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    sourceFinishTime,
+    sourceLapTime,
     lapTimes,
     positions,
     stagePilots,
@@ -1179,6 +1265,14 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     pilotTelemetryByPilotIdRef.current = pilotTelemetryByPilotId;
   }, [pilotTelemetryByPilotId]);
+
+  useEffect(() => {
+    sourceFinishTimeRef.current = sourceFinishTime;
+  }, [sourceFinishTime]);
+
+  useEffect(() => {
+    sourceLapTimeRef.current = sourceLapTime;
+  }, [sourceLapTime]);
 
   useEffect(() => {
     metaCurrentSessionRef.current = metaCurrentSession;
@@ -1771,6 +1865,8 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
     setStartTimes(loadFromStorage('rally_start_times', {}));
     setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
+    setSourceFinishTime(loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}));
+    setSourceLapTime(loadFromStorage(SOURCE_LAP_TIME_STORAGE_KEY, {}));
     setRetiredStages(loadFromStorage('rally_retired_stages', {}));
     setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
     setStageSosState(loadFromStorage('rally_stage_sos', {}));
@@ -1865,6 +1961,7 @@ export const RallyProvider = ({ children }) => {
         if (shouldReloadArrivalTimes) setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
         if (shouldReloadStartTimes) setStartTimes(loadFromStorage('rally_start_times', {}));
         if (shouldReloadRealStartTimes) setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
+        setSourceFinishTime(loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}));
       }
     }
 
@@ -1872,6 +1969,7 @@ export const RallyProvider = ({ children }) => {
       hydratingDomainsRef.current.add('timingExtra');
       setPositions(loadFromStorage('rally_positions', {}));
       setLapTimes(loadFromStorage('rally_lap_times', {}));
+      setSourceLapTime(loadFromStorage(SOURCE_LAP_TIME_STORAGE_KEY, {}));
       setStagePilots(loadFromStorage('rally_stage_pilots', {}));
       setRetiredStages(loadFromStorage('rally_retired_stages', {}));
       setStageAlerts(loadFromStorage('rally_stage_alerts', {}));
@@ -2470,6 +2568,52 @@ export const RallyProvider = ({ children }) => {
     });
   }, [applyAcknowledgedSosEntries, clientRole, enqueueChangePackages, removePendingSosAlert]);
 
+  const computeLapRaceStoredTimeValue = useCallback((stage, lapEntries) => {
+    if (!stage || !isLapRaceStageType(stage.type)) {
+      return '';
+    }
+
+    const totalSeconds = getLapRaceStoredTotalTimeSeconds({
+      lapEntries,
+      startTime: getLapRaceActualStartTime(stage),
+      mode: stage.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE
+    });
+
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+      return '';
+    }
+
+    return formatDurationSeconds(totalSeconds, timeDecimals, {
+      fallback: '',
+      showHoursIfNeeded: true,
+      padMinutes: true
+    });
+  }, [timeDecimals]);
+
+  const setFinishTimeSourceValue = useCallback((pilotId, stageId, source) => {
+    setSourceFinishTime((prev) => setNestedStageValue(prev, pilotId, stageId, normalizeTimingSource(source)));
+  }, []);
+
+  const setLapTimeSourcesValue = useCallback((pilotId, stageId, sources) => {
+    const normalizedSources = trimTrailingEmptyArrayValues(
+      (Array.isArray(sources) ? sources : []).map((source) => normalizeTimingSource(source))
+    );
+    setSourceLapTime((prev) => setNestedStageArrayValue(prev, pilotId, stageId, normalizedSources));
+  }, []);
+
+  const setLapTimeSourceValue = useCallback((pilotId, stageId, lapIndex, source) => {
+    const normalizedSource = normalizeTimingSource(source);
+    if (!Number.isInteger(lapIndex) || lapIndex < 0) {
+      return;
+    }
+
+    setSourceLapTime((prev) => {
+      const currentValues = Array.isArray(prev?.[pilotId]?.[stageId]) ? [...prev[pilotId][stageId]] : [];
+      currentValues[lapIndex] = normalizedSource;
+      return setNestedStageArrayValue(prev, pilotId, stageId, currentValues);
+    });
+  }, []);
+
   const applyDeltaBatchChanges = useCallback((changes = {}, metadata = {}) => {
     if (!isPlainObject(changes)) {
       return;
@@ -2483,10 +2627,269 @@ export const RallyProvider = ({ children }) => {
       : changes;
     delete normalizedChanges.timingByStage;
 
+    const sourceRole = normalizeMessageSource(
+      metadata?.sourceRole
+      || metadata?.source
+      || metadata?.origin
+      || metadata?.clientSource
+    );
+    const incomingTimingSource = normalizeTimingSource(sourceRole);
+    const isSnapshotPackage = metadata?.packageType === 'snapshot';
+
+    if (!isSnapshotPackage && normalizedChanges.arrivalTimes !== undefined && (sourceRole === 'mobile' || sourceRole === 'android-app')) {
+      const nextArrivalTimes = {};
+      const nextLapTimes = isPlainObject(normalizedChanges.lapTimes) ? { ...normalizedChanges.lapTimes } : {};
+      const nextTimes = isPlainObject(normalizedChanges.times) ? { ...normalizedChanges.times } : {};
+      const lapRaceStagesById = new Map(
+        (Array.isArray(stagesRef.current) ? stagesRef.current : [])
+          .filter((stage) => stage?.id && isLapRaceStageType(stage.type))
+          .map((stage) => [stage.id, stage])
+      );
+
+      Object.entries(isPlainObject(normalizedChanges.arrivalTimes) ? normalizedChanges.arrivalTimes : {}).forEach(([pilotId, stageEntries]) => {
+        const normalizedPilotId = normalizePilotId(pilotId);
+        if (!normalizedPilotId || !isPlainObject(stageEntries)) {
+          return;
+        }
+
+        Object.entries(stageEntries).forEach(([stageId, arrivalValue]) => {
+          const normalizedStageId = String(stageId || '').trim();
+          const normalizedArrivalValue = typeof arrivalValue === 'string' ? arrivalValue.trim() : arrivalValue;
+          const lapRaceStage = lapRaceStagesById.get(normalizedStageId);
+
+          if (!lapRaceStage) {
+            nextArrivalTimes[normalizedPilotId] = {
+              ...(nextArrivalTimes[normalizedPilotId] || {}),
+              [normalizedStageId]: arrivalValue
+            };
+            return;
+          }
+
+          if (!normalizedArrivalValue) {
+            return;
+          }
+
+          const existingPilotLapPatch = isPlainObject(nextLapTimes[normalizedPilotId]) ? nextLapTimes[normalizedPilotId] : {};
+          const existingLapEntries = Array.isArray(existingPilotLapPatch[normalizedStageId])
+            ? [...existingPilotLapPatch[normalizedStageId]]
+            : [...(lapTimesRef.current?.[normalizedPilotId]?.[normalizedStageId] || [])];
+
+          if (existingLapEntries.some((entry) => String(entry || '').trim() === normalizedArrivalValue)) {
+            return;
+          }
+
+          const nextLapIndex = existingLapEntries.findIndex((entry) => !String(entry || '').trim());
+          if (nextLapIndex >= 0) {
+            existingLapEntries[nextLapIndex] = normalizedArrivalValue;
+          } else {
+            existingLapEntries.push(normalizedArrivalValue);
+          }
+
+          nextLapTimes[normalizedPilotId] = {
+            ...existingPilotLapPatch,
+            [normalizedStageId]: existingLapEntries
+          };
+
+          const nextStoredTotal = computeLapRaceStoredTimeValue(lapRaceStage, existingLapEntries);
+          nextTimes[normalizedPilotId] = {
+            ...(isPlainObject(nextTimes[normalizedPilotId]) ? nextTimes[normalizedPilotId] : {}),
+            [normalizedStageId]: nextStoredTotal
+          };
+        });
+      });
+
+      if (Object.keys(nextArrivalTimes).length > 0) {
+        normalizedChanges.arrivalTimes = nextArrivalTimes;
+      } else {
+        delete normalizedChanges.arrivalTimes;
+      }
+
+      if (Object.keys(nextLapTimes).length > 0) {
+        normalizedChanges.lapTimes = nextLapTimes;
+      }
+
+      if (Object.keys(nextTimes).length > 0) {
+        normalizedChanges.times = nextTimes;
+      }
+    }
+
+    if (!isSnapshotPackage && incomingTimingSource) {
+      const stagesById = new Map(
+        (Array.isArray(stagesRef.current) ? stagesRef.current : [])
+          .filter((stage) => stage?.id)
+          .map((stage) => [stage.id, stage])
+      );
+      const incomingArrivalTimes = isPlainObject(normalizedChanges.arrivalTimes) ? normalizedChanges.arrivalTimes : {};
+      const incomingTimes = isPlainObject(normalizedChanges.times) ? normalizedChanges.times : {};
+      const incomingLapTimes = isPlainObject(normalizedChanges.lapTimes) ? normalizedChanges.lapTimes : {};
+      const acceptedArrivalTimes = {};
+      const acceptedTimes = {};
+      const acceptedLapTimes = {};
+      const acceptedFinishSources = {};
+      const acceptedLapSources = {};
+      const handledLapTimeKeys = new Set();
+
+      const assignPilotStagePatchValue = (target, pilotId, stageId, value) => {
+        target[pilotId] = {
+          ...(target[pilotId] || {}),
+          [stageId]: value
+        };
+      };
+
+      Object.entries(incomingLapTimes).forEach(([pilotId, stageEntries]) => {
+        const normalizedPilotId = normalizePilotId(pilotId);
+        if (!normalizedPilotId || !isPlainObject(stageEntries)) {
+          return;
+        }
+
+        Object.entries(stageEntries).forEach(([stageId, incomingLapEntries]) => {
+          const normalizedStageId = String(stageId || '').trim();
+          const stage = stagesById.get(normalizedStageId);
+          if (!stage || !isLapRaceStageType(stage.type) || !Array.isArray(incomingLapEntries)) {
+            return;
+          }
+
+          handledLapTimeKeys.add(`${normalizedPilotId}:${normalizedStageId}`);
+
+          const currentLapEntries = Array.isArray(lapTimesRef.current?.[normalizedPilotId]?.[normalizedStageId])
+            ? lapTimesRef.current[normalizedPilotId][normalizedStageId]
+            : [];
+          const currentLapSources = Array.isArray(sourceLapTimeRef.current?.[normalizedPilotId]?.[normalizedStageId])
+            ? sourceLapTimeRef.current[normalizedPilotId][normalizedStageId]
+            : [];
+          const nextLapEntries = [...currentLapEntries];
+          const nextLapSources = [...currentLapSources];
+          const maxLength = Math.max(currentLapEntries.length, incomingLapEntries.length);
+          let acceptedAnyLapChange = false;
+
+          for (let lapIndex = 0; lapIndex < maxLength; lapIndex += 1) {
+            const incomingLapValue = lapIndex < incomingLapEntries.length
+              ? (incomingLapEntries[lapIndex] ?? '')
+              : '';
+            const currentLapSource = normalizeTimingSource(currentLapSources[lapIndex]);
+
+            if (!canTimingSourceOverwrite(currentLapSource, incomingTimingSource)) {
+              continue;
+            }
+
+            nextLapEntries[lapIndex] = incomingLapValue;
+            nextLapSources[lapIndex] = incomingLapValue ? incomingTimingSource : '';
+            acceptedAnyLapChange = true;
+          }
+
+          if (!acceptedAnyLapChange) {
+            return;
+          }
+
+          const trimmedLapEntries = trimTrailingEmptyArrayValues(nextLapEntries);
+          const trimmedLapSources = trimTrailingEmptyArrayValues(nextLapSources);
+          const nextStoredTotal = computeLapRaceStoredTimeValue(stage, trimmedLapEntries);
+          const nextFinishSource = nextStoredTotal ? getHighestTimingSource(trimmedLapSources) : '';
+
+          assignPilotStagePatchValue(acceptedLapTimes, normalizedPilotId, normalizedStageId, trimmedLapEntries);
+          assignPilotStagePatchValue(acceptedLapSources, normalizedPilotId, normalizedStageId, trimmedLapSources);
+          assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextStoredTotal);
+          assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
+        });
+      });
+
+      const finishPilotIds = new Set([
+        ...Object.keys(incomingArrivalTimes),
+        ...Object.keys(incomingTimes)
+      ]);
+
+      finishPilotIds.forEach((pilotId) => {
+        const normalizedPilotId = normalizePilotId(pilotId);
+        if (!normalizedPilotId) {
+          return;
+        }
+
+        const arrivalStageEntries = isPlainObject(incomingArrivalTimes[pilotId]) ? incomingArrivalTimes[pilotId] : {};
+        const timeStageEntries = isPlainObject(incomingTimes[pilotId]) ? incomingTimes[pilotId] : {};
+        const stageIds = new Set([
+          ...Object.keys(arrivalStageEntries),
+          ...Object.keys(timeStageEntries)
+        ]);
+
+        stageIds.forEach((stageId) => {
+          const normalizedStageId = String(stageId || '').trim();
+          if (!normalizedStageId) {
+            return;
+          }
+
+          const handledLapKey = `${normalizedPilotId}:${normalizedStageId}`;
+          if (handledLapTimeKeys.has(handledLapKey)) {
+            return;
+          }
+
+          const stage = stagesById.get(normalizedStageId);
+          const hasArrivalPatch = Object.prototype.hasOwnProperty.call(arrivalStageEntries, stageId);
+          const hasTimePatch = Object.prototype.hasOwnProperty.call(timeStageEntries, stageId);
+          if (!hasArrivalPatch && !hasTimePatch) {
+            return;
+          }
+
+          const currentFinishSource = normalizeTimingSource(sourceFinishTimeRef.current?.[normalizedPilotId]?.[normalizedStageId]);
+          if (!canTimingSourceOverwrite(currentFinishSource, incomingTimingSource)) {
+            return;
+          }
+
+          const nextArrivalValue = hasArrivalPatch ? (arrivalStageEntries[stageId] ?? '') : undefined;
+          const nextTimeValue = hasTimePatch ? (timeStageEntries[stageId] ?? '') : undefined;
+          const nextFinishSource = (nextArrivalValue || nextTimeValue) ? incomingTimingSource : '';
+
+          if (!stage || !isLapRaceStageType(stage.type)) {
+            if (hasArrivalPatch) {
+              assignPilotStagePatchValue(acceptedArrivalTimes, normalizedPilotId, normalizedStageId, nextArrivalValue);
+            }
+            if (hasTimePatch) {
+              assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextTimeValue);
+            }
+            assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
+            return;
+          }
+
+          if (hasTimePatch) {
+            assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextTimeValue);
+            assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
+          }
+        });
+      });
+
+      if (Object.keys(acceptedArrivalTimes).length > 0) {
+        normalizedChanges.arrivalTimes = acceptedArrivalTimes;
+      } else {
+        delete normalizedChanges.arrivalTimes;
+      }
+
+      if (Object.keys(acceptedTimes).length > 0) {
+        normalizedChanges.times = acceptedTimes;
+      } else {
+        delete normalizedChanges.times;
+      }
+
+      if (Object.keys(acceptedLapTimes).length > 0) {
+        normalizedChanges.lapTimes = acceptedLapTimes;
+      } else {
+        delete normalizedChanges.lapTimes;
+      }
+
+      if (Object.keys(acceptedFinishSources).length > 0) {
+        normalizedChanges.sourceFinishTime = acceptedFinishSources;
+      } else {
+        delete normalizedChanges.sourceFinishTime;
+      }
+
+      if (Object.keys(acceptedLapSources).length > 0) {
+        normalizedChanges.sourceLapTime = acceptedLapSources;
+      } else {
+        delete normalizedChanges.sourceLapTime;
+      }
+    }
+
     const messageTimestamp = Number(metadata?.timestamp || Date.now());
     const hasTimingChanges = Object.keys(normalizedChanges).some((key) => SETUP_TIMING_SECTION_SET.has(key));
     const hasSetupChanges = Object.keys(normalizedChanges).some((key) => SETUP_BASE_SECTION_KEYS.includes(key));
-    const isSnapshotPackage = metadata?.packageType === 'snapshot';
     isPublishing.current = true;
     setWsLastMessageAt(messageTimestamp);
 
@@ -2642,6 +3045,22 @@ export const RallyProvider = ({ children }) => {
       setLapTimes(() => (isSnapshotPackage ? (isPlainObject(normalizedChanges.lapTimes) ? normalizedChanges.lapTimes : {}) : mergeNestedPatch(lapTimesRef.current, normalizedChanges.lapTimes)));
     }
 
+    if (normalizedChanges.sourceFinishTime !== undefined) {
+      setSourceFinishTime(() => (
+        isSnapshotPackage
+          ? (isPlainObject(normalizedChanges.sourceFinishTime) ? normalizedChanges.sourceFinishTime : {})
+          : mergeNestedPatch(sourceFinishTimeRef.current, normalizedChanges.sourceFinishTime)
+      ));
+    }
+
+    if (normalizedChanges.sourceLapTime !== undefined) {
+      setSourceLapTime(() => (
+        isSnapshotPackage
+          ? (isPlainObject(normalizedChanges.sourceLapTime) ? normalizedChanges.sourceLapTime : {})
+          : mergeNestedPatch(sourceLapTimeRef.current, normalizedChanges.sourceLapTime)
+      ));
+    }
+
     if (normalizedChanges.positions !== undefined) {
       setPositions(() => (isSnapshotPackage ? (isPlainObject(normalizedChanges.positions) ? normalizedChanges.positions : {}) : mergeNestedPatch(positionsRef.current, normalizedChanges.positions)));
     }
@@ -2703,7 +3122,7 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 0);
-  }, [applyAcknowledgedSosEntries, clearResolvedSosAlerts, mergePilotTelemetryEntries, registerIncomingSosAlerts, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
+  }, [applyAcknowledgedSosEntries, clearResolvedSosAlerts, computeLapRaceStoredTimeValue, mergePilotTelemetryEntries, registerIncomingSosAlerts, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
 
   const applyDeltaBatchControl = useCallback((data = {}) => {
     const controlType = String(data?.controlType || '').trim();
@@ -3060,16 +3479,23 @@ export const RallyProvider = ({ children }) => {
 
     if (data?.section === 'times' && data?.stageId && normalizedData?.times && typeof normalizedData.times === 'object') {
       const stageId = data.stageId;
+      const timingChanges = {
+        times: Object.fromEntries(
+          Object.entries(normalizedData.times).map(([pilotId, value]) => ([
+            normalizePilotId(pilotId),
+            {
+              [stageId]: value
+            }
+          ]))
+        )
+      };
 
-      Object.entries(normalizedData.times).forEach(([pilotId, value]) => {
-        setTimingLineValue('times', pilotId, stageId, value);
+      applyDeltaBatchChanges(timingChanges, {
+        sourceRole: messageSource,
+        timestamp: Number(normalizedData?.timestamp || data?.timestamp || Date.now()),
+        packageType: 'delta',
+        channelType: data?.channelType || 'data'
       });
-
-      setWsLastMessageAt(Date.now());
-      isPublishing.current = true;
-      setTimeout(() => {
-        isPublishing.current = false;
-      }, 0);
       return;
     }
 
@@ -3202,7 +3628,7 @@ export const RallyProvider = ({ children }) => {
     setTimeout(() => {
       isPublishing.current = false;
     }, 0);
-  }, [mergePilotTelemetryEntries, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
+  }, [applyDeltaBatchChanges, mergePilotTelemetryEntries, shouldPreserveLocalTimingSection, suppressNextSetupTimingCapture]);
 
   const applyInboundSyncMessage = useCallback((data) => {
     if (!data) return;
@@ -3301,6 +3727,8 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    sourceFinishTime,
+    sourceLapTime,
     retiredStages,
     stageAlerts,
     stageSos,
@@ -3329,6 +3757,8 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    sourceFinishTime,
+    sourceLapTime,
     retiredStages,
     stageAlerts,
     stageSos,
@@ -4315,6 +4745,11 @@ export const RallyProvider = ({ children }) => {
   }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, lapTimes, updateDataVersion]);
 
   useEffect(() => {
+    previousSetupSyncStateRef.current.sourceLapTime = sourceLapTime;
+    localStorage.setItem(SOURCE_LAP_TIME_STORAGE_KEY, JSON.stringify(sourceLapTime));
+  }, [sourceLapTime]);
+
+  useEffect(() => {
     const previousStagePilots = previousSetupSyncStateRef.current.stagePilots;
     previousSetupSyncStateRef.current.stagePilots = stagePilots;
     if (hydratingDomainsRef.current.has('timingExtra')) return;
@@ -4389,6 +4824,11 @@ export const RallyProvider = ({ children }) => {
     captureSetupPatchEntries('realStartTimes', diffTimingLineEntries('realStartTimes', previousRealStartTimes, realStartTimes));
     }
   }, [arrivalTimes, captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, realStartTimes, startTimes, updateDataVersion]);
+
+  useEffect(() => {
+    previousSetupSyncStateRef.current.sourceFinishTime = sourceFinishTime;
+    localStorage.setItem(SOURCE_FINISH_TIME_STORAGE_KEY, JSON.stringify(sourceFinishTime));
+  }, [sourceFinishTime]);
 
   useEffect(() => {
     const previousRetiredStages = previousSetupSyncStateRef.current.retiredStages;
@@ -4795,6 +5235,16 @@ export const RallyProvider = ({ children }) => {
       delete newRealStartTimes[id];
       return newRealStartTimes;
     });
+    setSourceFinishTime(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setSourceLapTime(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     setArrivalTimes(prev => {
       const newArrivalTimes = { ...prev };
       delete newArrivalTimes[id];
@@ -4898,28 +5348,6 @@ export const RallyProvider = ({ children }) => {
     // Remove category from pilots
     setPilots(prev => prev.map(p => p.categoryId === id ? { ...p, categoryId: null } : p));
   };
-
-  const computeLapRaceStoredTimeValue = useCallback((stage, lapEntries) => {
-    if (!stage || !isLapRaceStageType(stage.type)) {
-      return '';
-    }
-
-    const totalSeconds = getLapRaceStoredTotalTimeSeconds({
-      lapEntries,
-      startTime: getLapRaceActualStartTime(stage),
-      mode: stage.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE
-    });
-
-    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
-      return '';
-    }
-
-    return formatDurationSeconds(totalSeconds, timeDecimals, {
-      fallback: '',
-      showHoursIfNeeded: true,
-      padMinutes: true
-    });
-  }, [timeDecimals]);
 
   const recalculateLapRaceStoredTimesForStage = useCallback((stageId, stageOverride = null) => {
     const resolvedStage = stageOverride || stages.find((stage) => stage.id === stageId);
@@ -5051,6 +5479,30 @@ export const RallyProvider = ({ children }) => {
       });
       return newRealStartTimes;
     });
+    setSourceFinishTime(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach((pilotId) => {
+        if (next[pilotId]) {
+          delete next[pilotId][id];
+          if (Object.keys(next[pilotId]).length === 0) {
+            delete next[pilotId];
+          }
+        }
+      });
+      return next;
+    });
+    setSourceLapTime(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach((pilotId) => {
+        if (next[pilotId]) {
+          delete next[pilotId][id];
+          if (Object.keys(next[pilotId]).length === 0) {
+            delete next[pilotId];
+          }
+        }
+      });
+      return next;
+    });
     setLapTimes(prev => {
       const newLapTimes = { ...prev };
       Object.keys(newLapTimes).forEach(pilotId => {
@@ -5166,6 +5618,7 @@ export const RallyProvider = ({ children }) => {
   // Lap times functions
   const setLapTime = useCallback((pilotId, stageId, lapIndex, time) => {
     const stage = stages.find((entry) => entry.id === stageId);
+    const manualTimingSource = getManualTimingSourceForRole(clientRole);
 
     setLapTimes(prev => {
       const pilotLaps = prev[pilotId] || {};
@@ -5193,9 +5646,130 @@ export const RallyProvider = ({ children }) => {
         }
       };
     });
+    setLapTimeSourceValue(pilotId, stageId, lapIndex, time ? manualTimingSource : '');
+    if (stage && isLapRaceStageType(stage.type)) {
+      const nextLapSources = Array.isArray(sourceLapTimeRef.current?.[pilotId]?.[stageId])
+        ? [...sourceLapTimeRef.current[pilotId][stageId]]
+        : [];
+      nextLapSources[lapIndex] = time ? manualTimingSource : '';
+      const nextStoredSource = getHighestTimingSource(nextLapSources);
+      setFinishTimeSourceValue(pilotId, stageId, nextStoredSource);
+    }
     markTimingSectionDirty('lapTimes');
     markTimingLineDirty('lapTimes', pilotId, stageId);
-  }, [computeLapRaceStoredTimeValue, markTimingLineDirty, markTimingSectionDirty, setLapTimes, setTimes, stages]);
+  }, [clientRole, computeLapRaceStoredTimeValue, markTimingLineDirty, markTimingSectionDirty, setFinishTimeSourceValue, setLapTimeSourceValue, setLapTimes, setTimes, stages]);
+
+  const removeLapTimeColumn = useCallback((stageId, lapIndex) => {
+    if (!Number.isInteger(lapIndex) || lapIndex < 0) {
+      return;
+    }
+
+    const stage = stages.find((entry) => entry.id === stageId);
+    if (!stage || !isLapRaceStageType(stage.type)) {
+      return;
+    }
+
+    const changedPilotIds = [];
+    setLapTimes((prev) => {
+      let didChange = false;
+      const next = { ...prev };
+
+      pilots.forEach((pilot) => {
+        const pilotId = pilot.id;
+        const currentPilotLaps = Array.isArray(next[pilotId]?.[stageId])
+          ? next[pilotId][stageId]
+          : null;
+
+        if (!currentPilotLaps || lapIndex >= currentPilotLaps.length) {
+          return;
+        }
+
+        const nextPilotLaps = [...currentPilotLaps];
+        nextPilotLaps.splice(lapIndex, 1);
+
+        const nextPilotLapEntries = {
+          ...(isPlainObject(next[pilotId]) ? next[pilotId] : {})
+        };
+
+        if (nextPilotLaps.length > 0) {
+          nextPilotLapEntries[stageId] = nextPilotLaps;
+        } else {
+          delete nextPilotLapEntries[stageId];
+        }
+
+        if (Object.keys(nextPilotLapEntries).length > 0) {
+          next[pilotId] = nextPilotLapEntries;
+        } else {
+          delete next[pilotId];
+        }
+
+        didChange = true;
+        changedPilotIds.push(pilotId);
+
+        const nextStoredTotal = computeLapRaceStoredTimeValue(stage, nextPilotLaps);
+        setTimes((timesPrev) => ({
+          ...timesPrev,
+          [pilotId]: {
+            ...(timesPrev[pilotId] || {}),
+            [stageId]: nextStoredTotal
+          }
+        }));
+        markTimingLineDirty('lapTimes', pilotId, stageId);
+        markTimingLineDirty('times', pilotId, stageId);
+      });
+
+      return didChange ? next : prev;
+    });
+
+    setSourceLapTime((prev) => {
+      let didChange = false;
+      const next = { ...(isPlainObject(prev) ? prev : {}) };
+
+      changedPilotIds.forEach((pilotId) => {
+        const currentPilotSources = Array.isArray(next[pilotId]?.[stageId])
+          ? [...next[pilotId][stageId]]
+          : [];
+
+        if (lapIndex >= currentPilotSources.length) {
+          return;
+        }
+
+        currentPilotSources.splice(lapIndex, 1);
+        const nextPilotSourceStages = isPlainObject(next[pilotId]) ? { ...next[pilotId] } : {};
+        if (currentPilotSources.length > 0) {
+          nextPilotSourceStages[stageId] = currentPilotSources;
+        } else {
+          delete nextPilotSourceStages[stageId];
+        }
+
+        if (Object.keys(nextPilotSourceStages).length > 0) {
+          next[pilotId] = nextPilotSourceStages;
+        } else {
+          delete next[pilotId];
+        }
+        didChange = true;
+      });
+
+      return didChange ? next : prev;
+    });
+
+    setSourceFinishTime((prev) => {
+      let next = prev;
+      changedPilotIds.forEach((pilotId) => {
+        const nextLapSources = Array.isArray(sourceLapTimeRef.current?.[pilotId]?.[stageId])
+          ? [...sourceLapTimeRef.current[pilotId][stageId]]
+          : [];
+        nextLapSources.splice(lapIndex, 1);
+        next = setNestedStageValue(next, pilotId, stageId, getHighestTimingSource(nextLapSources));
+      });
+      return next;
+    });
+
+    if (changedPilotIds.length > 0) {
+      markTimingSectionDirty('lapTimes');
+      markTimingSectionDirty('times');
+    }
+  }, [computeLapRaceStoredTimeValue, markTimingLineDirty, markTimingSectionDirty, pilots, setLapTimes, setSourceFinishTime, setSourceLapTime, setTimes, stages]);
 
   const getLapTime = useCallback((pilotId, stageId, lapIndex) => (
     lapTimes[pilotId]?.[stageId]?.[lapIndex] || ''
@@ -5250,6 +5824,8 @@ export const RallyProvider = ({ children }) => {
   }, [lapTimes, pilots, setPosition]);
 
   const setTime = useCallback((pilotId, stageId, time) => {
+    const stage = stages.find((entry) => entry.id === stageId);
+    const manualTimingSource = getManualTimingSourceForRole(clientRole);
     setTimes(prev => ({
       ...prev,
       [pilotId]: {
@@ -5257,15 +5833,21 @@ export const RallyProvider = ({ children }) => {
         [stageId]: time
       }
     }));
+    if (stage && isLapRaceStageType(stage.type)) {
+      setFinishTimeSourceValue(pilotId, stageId, time ? manualTimingSource : getHighestTimingSource(sourceLapTimeRef.current?.[pilotId]?.[stageId] || []));
+    } else {
+      setFinishTimeSourceValue(pilotId, stageId, time ? manualTimingSource : '');
+    }
     markTimingSectionDirty('times');
     markTimingLineDirty('times', pilotId, stageId);
-  }, [markTimingLineDirty, markTimingSectionDirty, setTimes]);
+  }, [clientRole, markTimingLineDirty, markTimingSectionDirty, setFinishTimeSourceValue, setTimes, stages]);
 
   const getTime = useCallback((pilotId, stageId) => (
     times[pilotId]?.[stageId] || ''
   ), [times]);
 
   const setArrivalTime = useCallback((pilotId, stageId, arrivalTime) => {
+    const manualTimingSource = getManualTimingSourceForRole(clientRole);
     setArrivalTimes(prev => ({
       ...prev,
       [pilotId]: {
@@ -5273,9 +5855,10 @@ export const RallyProvider = ({ children }) => {
         [stageId]: arrivalTime
       }
     }));
+    setFinishTimeSourceValue(pilotId, stageId, arrivalTime ? manualTimingSource : '');
     markTimingSectionDirty('arrivalTimes');
     markTimingLineDirty('arrivalTimes', pilotId, stageId);
-  }, [markTimingLineDirty, markTimingSectionDirty, setArrivalTimes]);
+  }, [clientRole, markTimingLineDirty, markTimingSectionDirty, setArrivalTimes, setFinishTimeSourceValue]);
 
   const getArrivalTime = useCallback((pilotId, stageId) => (
     arrivalTimes[pilotId]?.[stageId] || ''
@@ -5318,6 +5901,8 @@ export const RallyProvider = ({ children }) => {
       return;
     }
 
+    const manualTimingSource = getManualTimingSourceForRole(clientRole);
+
     const applyBulkUpdates = (previousState, valueKey) => {
       let changed = false;
       const nextState = { ...previousState };
@@ -5346,6 +5931,19 @@ export const RallyProvider = ({ children }) => {
     setTimes((prev) => applyBulkUpdates(prev, 'totalTime'));
     setArrivalTimes((prev) => applyBulkUpdates(prev, 'arrivalTime'));
     setStartTimes((prev) => applyBulkUpdates(prev, 'startTime'));
+    setSourceFinishTime((prev) => {
+      let next = prev;
+      entries.forEach((entry) => {
+        if (entry.totalTime !== undefined && entry.totalTime !== null && entry.totalTime !== '') {
+          next = setNestedStageValue(next, entry.pilotId, entry.stageId, manualTimingSource);
+          return;
+        }
+        if (entry.arrivalTime !== undefined && entry.arrivalTime !== null && entry.arrivalTime !== '') {
+          next = setNestedStageValue(next, entry.pilotId, entry.stageId, manualTimingSource);
+        }
+      });
+      return next;
+    });
     markTimingSectionDirty('times');
     markTimingSectionDirty('arrivalTimes');
     markTimingSectionDirty('startTimes');
@@ -5571,6 +6169,8 @@ export const RallyProvider = ({ children }) => {
       arrivalTimes: loadFromStorage('rally_arrival_times', {}),
       startTimes: loadFromStorage('rally_start_times', {}),
       realStartTimes: loadFromStorage('rally_real_start_times', {}),
+      sourceFinishTime: loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}),
+      sourceLapTime: loadFromStorage(SOURCE_LAP_TIME_STORAGE_KEY, {}),
       retiredStages: loadFromStorage('rally_retired_stages', {}),
       stageAlerts: loadFromStorage('rally_stage_alerts', {}),
       stageSos: loadFromStorage('rally_stage_sos', {}),
@@ -5606,6 +6206,8 @@ export const RallyProvider = ({ children }) => {
       if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
       if (data.startTimes) setStartTimes(data.startTimes);
       if (data.realStartTimes) setRealStartTimes(data.realStartTimes);
+      if (data.sourceFinishTime) setSourceFinishTime(data.sourceFinishTime);
+      if (data.sourceLapTime) setSourceLapTime(data.sourceLapTime);
       if (data.retiredStages) setRetiredStages(data.retiredStages);
       if (data.stageAlerts) setStageAlerts(data.stageAlerts);
       if (data.stageSos) setStageSosState(data.stageSos);
@@ -5631,7 +6233,7 @@ export const RallyProvider = ({ children }) => {
       console.error('Error importing data:', error);
       return false;
     }
-  }, [applyPilotTelemetryState, setCategories, setCameras, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [applyPilotTelemetryState, setArrivalTimes, setCategories, setCameras, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
 
   const clearAllData = useCallback(() => {
     setEventName('');
@@ -5645,6 +6247,8 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes({});
     setStartTimes({});
     setRealStartTimes({});
+    setSourceFinishTime({});
+    setSourceLapTime({});
     setRetiredStages({});
     setStageAlerts({});
     setStageSosState({});
@@ -5667,7 +6271,7 @@ export const RallyProvider = ({ children }) => {
     setMetaCurrentSession(null);
     updateDataVersion('pilotTelemetry');
     updateDataVersion(ALL_STORAGE_DOMAINS);
-  }, [applyPilotTelemetryState, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setArrivalTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [applyPilotTelemetryState, setArrivalTimes, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -5684,6 +6288,8 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    sourceFinishTime,
+    sourceLapTime,
     retiredStages,
     stageAlerts,
     mapPlacemarks,
@@ -5781,6 +6387,7 @@ export const RallyProvider = ({ children }) => {
     isStageAlert,
     // Lap time functions
     setLapTime,
+    removeLapTimeColumn,
     getLapTime,
     getPilotLapTimes,
     // Position functions
@@ -5884,6 +6491,8 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    sourceFinishTime,
+    sourceLapTime,
     lapTimes,
     positions,
     stagePilots,
@@ -5900,6 +6509,7 @@ export const RallyProvider = ({ children }) => {
     setRealStartTime,
     getRealStartTime,
     setLapTime,
+    removeLapTimeColumn,
     getLapTime,
     getPilotLapTimes,
     setPosition,
@@ -5933,10 +6543,13 @@ export const RallyProvider = ({ children }) => {
     lapTimes,
     positions,
     realStartTimes,
+    sourceFinishTime,
+    sourceLapTime,
     retiredStages,
     selectAllPilotsInStage,
     setArrivalTime,
     setLapTime,
+    removeLapTimeColumn,
     setPosition,
     setRealStartTime,
     setRetiredFromStage,

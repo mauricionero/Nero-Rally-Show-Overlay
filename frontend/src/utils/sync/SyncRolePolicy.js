@@ -44,6 +44,11 @@ export const TIMING_SECTION_KEYS = [
   'stageSos'
 ];
 
+export const SNAPSHOT_ONLY_TIMING_SECTION_KEYS = [
+  'sourceFinishTime',
+  'sourceLapTime'
+];
+
 export const SNAPSHOT_CORE_SECTION_KEYS = ['meta', 'pilots', 'categories', 'stages'];
 
 export const TIMES_ROLE_TIMING_SECTION_KEYS = [
@@ -63,6 +68,7 @@ export const MOBILE_TIMING_SNAPSHOT_SECTION_KEYS = [
   'startTimes',
   'realStartTimes',
   'lapTimes',
+  ...SNAPSHOT_ONLY_TIMING_SECTION_KEYS,
   'positions',
   'stagePilots',
   'retiredStages',
@@ -73,6 +79,7 @@ export const MOBILE_TIMING_SNAPSHOT_SECTION_KEYS = [
 export const ALL_SNAPSHOT_SECTION_KEYS = [
   ...SNAPSHOT_CORE_SECTION_KEYS,
   ...TIMING_SECTION_KEYS,
+  ...SNAPSHOT_ONLY_TIMING_SECTION_KEYS,
   'mapPlacemarks',
   'cameras',
   'externalMedia',
@@ -192,11 +199,14 @@ export const canReceiveDomainForRoles = (recipientRole, sourceRole, domain) => {
 
   if (source === SYNC_ROLES.MOBILE) {
     if (recipient === SYNC_ROLES.SETUP) {
-      return TELEMETRY_DOMAINS.has(normalizedDomain) || normalizedDomain === 'stageSos';
+      return TELEMETRY_DOMAINS.has(normalizedDomain)
+        || normalizedDomain === 'stageSos'
+        || normalizedDomain === 'arrivalTimes';
     }
 
     if (recipient === SYNC_ROLES.TIMES) {
-      return normalizedDomain === 'stageSos';
+      return normalizedDomain === 'stageSos'
+        || normalizedDomain === 'arrivalTimes';
     }
 
     if (recipient === SYNC_ROLES.OVERLAY) {
