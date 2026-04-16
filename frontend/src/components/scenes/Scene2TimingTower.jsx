@@ -5,6 +5,7 @@ import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
+import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import StatusPill from '../StatusPill.jsx';
 import { buildLapRaceLeaderboard, getLapRaceStageMetaParts, getReferenceNow, parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
@@ -23,6 +24,7 @@ import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { formatDurationMs, formatSecondsValue } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 
 const TIMING_TOWER_WIDTH_KEY = 'scene2TimingTowerWidth';
 const SCENE_2_CONFIG_KEY = 'scene2Config';
@@ -409,6 +411,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
 
   const renderPilotRow = (data, index) => {
     const { pilot, completedLaps, totalTimeMs, totalTimeText, totalTimeMode, isFinished, isRacing, startTime, finishTime, retired } = data;
+    const pilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id);
     const pilotUiMeta = pilotUiMetaById.get(pilot.id) || {};
     const category = pilotUiMeta.category || null;
     const isExpanded = expandedPilotId === pilot.id;
@@ -580,7 +583,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         
         {/* Expanded stream */}
         {isExpanded && hasStream && !hideStreams && (
-          <div className="h-32 bg-black m-2 rounded overflow-hidden">
+          <div className="relative h-32 bg-black m-2 rounded overflow-hidden">
             <StreamPlayer
               pilotId={pilot.id}
               streamUrl={pilot.streamUrl}
@@ -588,6 +591,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               className="w-full h-full"
               muted={true}
             />
+            <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} compact raised />
           </div>
         )}
       </div>
@@ -608,6 +612,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const selectedPilotSectionPosition = selectedPilot
     ? sectionPositionByPilotId.get(selectedPilot.id) || selectedPilotData?.position || null
     : null;
+  const selectedPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, selectedPilot?.id);
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-2-timing-tower">
@@ -815,6 +820,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               name={selectedPilot.name}
               className="w-full h-full"
             />
+            <PilotTelemetryHud pilot={selectedPilot} telemetry={selectedPilotTelemetry} raised />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
               <div className="flex items-center gap-4">
                 {selectedPilot?.carNumber && (

@@ -4,6 +4,7 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
+import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import StatusPill from '../StatusPill.jsx';
@@ -25,6 +26,7 @@ import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
+import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -763,6 +765,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
             // Pilot Stream Item
             const pilot = item;
+            const pilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id);
             const category = categoryById.get(pilot.categoryId);
             const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
             const alert = currentStageId ? alertByPilotId.has(pilot.id) : false;
@@ -835,6 +838,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     name={pilot.name}
                     className="w-full h-full"
                   />
+                )}
+                {!hideStreams && (
+                  <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} compact raised />
                 )}
                 <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">

@@ -26,6 +26,7 @@ import { formatDurationSeconds } from '../utils/timeFormat.js';
 import { getLapRaceActualStartTime, getLapRaceStoredTotalTimeSeconds } from '../utils/rallyHelpers.js';
 import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId, normalizePilotId } from '../utils/pilotIdentity.js';
+import { assignPilotTelemetryGForceFields, PILOT_G_FORCE_FIELD_KEYS } from '../utils/pilotTelemetry.js';
 import { isSyncDebugEnabled, isTelemetryDebugEnabled } from '../utils/debugFlags.js';
 import { clearManualWsDisconnect, markManualWsDisconnect } from '../utils/wsAutoConnect.js';
 import {
@@ -3469,6 +3470,8 @@ export const RallyProvider = ({ children }) => {
           immediateTelemetry.connectionType = normalizeConnectionType(normalizedData.connectionType);
         }
 
+        assignPilotTelemetryGForceFields(immediateTelemetry, normalizedData);
+
         mergePilotTelemetryEntries([[pilotId, immediateTelemetry]], {
           suppressSync: true,
           deferState: true
@@ -5178,6 +5181,9 @@ export const RallyProvider = ({ children }) => {
       delete nextUpdates.gpsPrecision;
       delete nextUpdates.connectionStrength;
       delete nextUpdates.connectionType;
+      PILOT_G_FORCE_FIELD_KEYS.forEach((fieldKey) => {
+        delete nextUpdates[fieldKey];
+      });
 
       return { ...pilot, ...nextUpdates };
     }));
@@ -5221,6 +5227,8 @@ export const RallyProvider = ({ children }) => {
     if (telemetry.connectionType !== undefined) {
       normalizedTelemetry.connectionType = normalizeConnectionType(telemetry.connectionType);
     }
+
+    assignPilotTelemetryGForceFields(normalizedTelemetry, telemetry);
 
     if (telemetry.lastTelemetryAt !== undefined) {
       normalizedTelemetry.lastTelemetryAt = telemetry.lastTelemetryAt;

@@ -6,6 +6,7 @@ import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
+import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import { StartInformationValue } from '../StartInformationValue.jsx';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -21,6 +22,7 @@ import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatClockFromDate, formatDurationMs } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import {
   getStageNumberLabel,
   getStageTitle,
@@ -188,6 +190,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
 
   const focusPilot = pilots.find(p => p.id === selectedPilotId);
   const selectedStage = stages.find(s => s.id === selectedStageId);
+  const focusPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, focusPilot?.id);
   const isLapRace = isLapRaceStageType(selectedStage?.type);
   const hasStageAlert = focusPilot && selectedStageId
     ? isStageAlert(focusPilot.id, selectedStageId)
@@ -302,6 +305,10 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
   const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia, stages, mapPlacemarks }), [pilots, cameras, externalMedia, stages, mapPlacemarks]);
   const selectedMainFeed = selectedMainFeedValue === 'none' ? null : findFeedByValue(availableFeeds, selectedMainFeedValue);
+  const selectedMainPilot = selectedMainFeed?.type === 'pilot'
+    ? pilots.find((pilot) => pilot.id === selectedMainFeed.id)
+    : null;
+  const selectedMainPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, selectedMainPilot?.id);
   const SelectedMediaIcon = selectedMainFeed?.type === 'media'
     ? getExternalMediaIconComponent(selectedMainFeed.icon)
     : null;
@@ -335,6 +342,23 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
       </div>
     );
   }
+
+  const focusPilotPip = showFocusPilotPip ? (
+    <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
+      <StreamPlayer
+        pilotId={focusPilot.id}
+        streamUrl={focusPilot.streamUrl}
+        name={focusPilot.name}
+        className="w-full h-full"
+      />
+      <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} compact raised />
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+        <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {focusPilot.name}
+        </p>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="relative w-full h-full flex" data-testid="scene-4-pilot-focus">
@@ -535,19 +559,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                 )}
 
                 {showFocusPilotPip && (
-                  <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
-                    <StreamPlayer
-                      pilotId={focusPilot.id}
-                      streamUrl={focusPilot.streamUrl}
-                      name={focusPilot.name}
-                      className="w-full h-full"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-                      <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {focusPilot.name}
-                      </p>
-                    </div>
-                  </div>
+                  focusPilotPip
                 )}
               </div>
             ) : selectedMainFeed?.type === 'stage-map' ? (
@@ -592,19 +604,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                 )}
 
                 {showFocusPilotPip && (
-                  <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
-                    <StreamPlayer
-                      pilotId={focusPilot.id}
-                      streamUrl={focusPilot.streamUrl}
-                      name={focusPilot.name}
-                      className="w-full h-full"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-                      <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {focusPilot.name}
-                      </p>
-                    </div>
-                  </div>
+                  focusPilotPip
                 )}
               </div>
             ) : selectedMainFeed ? (
@@ -617,6 +617,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     name={selectedMainFeed.name}
                     className="w-full h-full"
                   />
+                )}
+                {selectedMainPilot && !hideStreams && (
+                  <PilotTelemetryHud pilot={selectedMainPilot} telemetry={selectedMainPilotTelemetry} />
                 )}
                 
                 <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
@@ -649,19 +652,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                 )}
                 
                 {showFocusPilotPip && (
-                  <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
-                    <StreamPlayer
-                      pilotId={focusPilot.id}
-                      streamUrl={focusPilot.streamUrl}
-                      name={focusPilot.name}
-                      className="w-full h-full"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-                      <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {focusPilot.name}
-                      </p>
-                    </div>
-                  </div>
+                  focusPilotPip
                 )}
               </div>
             ) : focusPilot.streamUrl && !hideStreams ? (
@@ -673,6 +664,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   name={focusPilot.name}
                   className="w-full h-full"
                 />
+                <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} />
                 {selectedStageData && (
                   <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
                     <div className="flex items-center gap-2 mb-1">
