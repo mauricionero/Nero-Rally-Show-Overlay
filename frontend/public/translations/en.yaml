@@ -34,6 +34,7 @@ header:
   title: "NRS Control Zone"
   subtitle: "Setup & Configuration"
   goLive: "Go Live"
+  timesModule: "Times module"
   overlay: "Overlay"
   times: "Times"
   hide: "Hide"

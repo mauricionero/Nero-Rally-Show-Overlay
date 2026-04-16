@@ -368,9 +368,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         ? getEffectiveIdealStartTime(stage, pilot, storedStartTimeValue)
         : getPilotScheduledStartTime(stage, pilot);
       const isPersistedIdealStartTime = Boolean(storedStartTimeValue)
-        && displayedIdealStartTimeValue === storedStartTimeValue;
-        const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
-        const displayedRealStartTimeValue = realStartTimeDrafts[pilot.id] ?? realStartTimeValue;
+        && idealStartTimeValue === storedStartTimeValue;
+      const realStartTimeValue = realStartTimes[pilot.id]?.[stage.id] || '';
       const finishTimeSource = sourceFinishTime[pilot.id]?.[stage.id] || '';
       const retired = !!retiredStages[pilot.id]?.[stage.id];
       const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
@@ -387,15 +386,13 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         pilot,
         category,
         totalTime,
-          arrivalTimeValue,
-          storedStartTimeValue,
-          isPersistedIdealStartTime,
-          idealStartTimeValue,
-          displayedIdealStartTimeValue,
-          realStartTimeValue,
-          displayedRealStartTimeValue,
-          finishTimeSource,
-          retired,
+        arrivalTimeValue,
+        storedStartTimeValue,
+        isPersistedIdealStartTime,
+        idealStartTimeValue,
+        realStartTimeValue,
+        finishTimeSource,
+        retired,
         alert,
         sos,
         sosLevel,

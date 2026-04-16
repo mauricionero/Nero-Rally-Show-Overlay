@@ -40,6 +40,7 @@ header:
   title: "NRS Control Zone"
   subtitle: "Configuração"
   goLive: "Ao Vivo"
+  timesModule: "Módulo de Tempos"
   overlay: "Overlay"
   times: "Tempos"
   hide: "Ocultar"

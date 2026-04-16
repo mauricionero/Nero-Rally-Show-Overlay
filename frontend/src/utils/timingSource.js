@@ -77,15 +77,15 @@ export const getTimingSourceLabel = (source) => {
   const normalizedSource = normalizeTimingSource(source);
 
   if (normalizedSource === TIMING_SOURCES.MOBILE) {
-    return 'Mobile';
+    return 'Mobile app';
   }
 
   if (normalizedSource === TIMING_SOURCES.TIMES) {
-    return 'Times';
+    return 'Times module';
   }
 
   if (normalizedSource === TIMING_SOURCES.SETUP) {
-    return 'Setup';
+    return 'Setup & Configuration';
   }
 
   return '';

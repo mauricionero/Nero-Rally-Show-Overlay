@@ -86,7 +86,7 @@ export default function Times() {
   });
 
   useEffect(() => {
-    document.title = `${t('header.title')} - ${t('header.times')}`;
+    document.title = `${t('header.title')} - ${t('header.timesModule')}`;
   }, [t]);
 
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);

@@ -5,7 +5,8 @@ export const DEFAULT_DEBUG_FLAGS = {
   transport: false,
   telemetry: false,
   connection: false,
-  outbound: false
+  outbound: false,
+  heartbeat: false
 };
 
 const normalizeDebugFlags = (value = {}) => ({
@@ -13,7 +14,8 @@ const normalizeDebugFlags = (value = {}) => ({
   transport: value?.transport === true,
   telemetry: value?.telemetry === true,
   connection: value?.connection === true,
-  outbound: value?.outbound === true
+  outbound: value?.outbound === true,
+  heartbeat: value?.heartbeat === true
 });
 
 export const applyDebugFlagsToWindow = (value = {}) => {
@@ -26,6 +28,7 @@ export const applyDebugFlagsToWindow = (value = {}) => {
     window.__RALLY_TELEMETRY_DEBUG__ = nextFlags.telemetry;
     window.__RALLY_CONNECTION_DEBUG__ = nextFlags.connection;
     window.__RALLY_OUTBOUND_DEBUG__ = nextFlags.outbound;
+    window.__RALLY_HEARTBEAT_DEBUG__ = nextFlags.heartbeat;
   }
 
   return nextFlags;
@@ -74,3 +77,5 @@ export const isTelemetryDebugEnabled = () => getDebugFlags().telemetry === true;
 export const isConnectionDebugEnabled = () => getDebugFlags().connection === true;
 
 export const isOutboundDebugEnabled = () => getDebugFlags().outbound === true;
+
+export const isHeartbeatDebugEnabled = () => getDebugFlags().heartbeat === true;

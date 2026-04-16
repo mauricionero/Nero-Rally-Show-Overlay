@@ -34,7 +34,7 @@ export default function TimingSourceIndicator({ source, className = '' }) {
           </span>
         </TooltipTrigger>
         <TooltipContent side="top" className="bg-[#111827] text-white border border-[#374151]">
-          <div className="text-xs">{label}</div>
+          <div className="text-xs">source: {label}</div>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

@@ -46,6 +46,11 @@ export default function DebugTab() {
       key: 'outbound',
       title: 'Outbound queue',
       description: 'Show outbound package building, chunking, and queue publish logs.'
+    },
+    {
+      key: 'heartbeat',
+      title: 'Heartbeat logs',
+      description: 'Show ownership heartbeat, lease claim, release, and takeover logs.'
     }
   ]), []);
 

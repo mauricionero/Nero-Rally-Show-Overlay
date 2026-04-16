@@ -1,4 +1,4 @@
-import { isConnectionDebugEnabled, isTransportDebugEnabled } from '../debugFlags.js';
+import { isConnectionDebugEnabled, isHeartbeatDebugEnabled, isTransportDebugEnabled } from '../debugFlags.js';
 
 /**
  * SyncConnectionService owns the live connection lifecycle around the provider:
@@ -240,7 +240,14 @@ export class SyncConnectionService {
       }
 
       if (this.isOwnMessage(message)) {
-        if (isTransportDebugEnabled()) {
+        if (routedData?.messageType === 'ownership-heartbeat') {
+          if (isHeartbeatDebugEnabled()) {
+            console.log(this.buildWebSocketLogPrefix('echo', 'update', channelType, routedData, 'Heartbeat'), {
+              channelType,
+              data: routedData
+            });
+          }
+        } else if (isTransportDebugEnabled()) {
           console.log(this.buildWebSocketLogPrefix('echo', 'update', channelType, routedData), {
             channelType,
             data: routedData
@@ -264,7 +271,14 @@ export class SyncConnectionService {
         return;
       }
 
-      if (isTransportDebugEnabled()) {
+      if (routedData?.messageType === 'ownership-heartbeat') {
+        if (isHeartbeatDebugEnabled()) {
+          console.log(this.buildWebSocketLogPrefix('receive', 'update', channelType, routedData, 'Heartbeat'), {
+            channelType,
+            data: routedData
+          });
+        }
+      } else if (isTransportDebugEnabled()) {
         console.log(this.buildWebSocketLogPrefix('receive', 'update', channelType, routedData), {
           channelType,
           data: routedData

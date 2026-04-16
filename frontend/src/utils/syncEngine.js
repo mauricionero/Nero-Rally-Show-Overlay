@@ -1,4 +1,4 @@
-import { isSyncDebugEnabled } from './debugFlags.js';
+import { isHeartbeatDebugEnabled, isSyncDebugEnabled } from './debugFlags.js';
 import {
   SYNC_ROLES,
   filterChangesForRoleRecipient,
@@ -9,7 +9,7 @@ import {
 
 export { SYNC_ROLES } from './sync/SyncRolePolicy.js';
 
-const DEFAULT_FLUSH_INTERVAL_MS = 1000;
+const DEFAULT_FLUSH_INTERVAL_MS = 2000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 5000;
 const DEFAULT_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_OWNERSHIP_OBSERVATION_MS = 15000;
@@ -52,6 +52,12 @@ const deepMerge = (target = {}, source = {}) => {
   return next;
 };
 
+const logHeartbeatDebug = (message, details = {}) => {
+  if (isHeartbeatDebugEnabled()) {
+    console.log(message, details);
+  }
+};
+
 const normalizeMessageType = (value) => String(value || '').trim();
 
 const normalizeSourceRole = (data = {}) => normalizeSyncRole(
@@ -75,6 +81,8 @@ const isMergeableQueuedDelta = (message = {}) => (
   && message?.priority !== true
   && !String(message?.controlType || '').trim()
   && (!message?.channelType || String(message.channelType).trim() === 'data')
+  && Number(message?.totalParts || 1) === 1
+  && Number(message?.partIndex || 0) === 0
   && isPlainObject(message?.payload)
 );
 
@@ -475,6 +483,15 @@ export default class SyncEngine {
       return;
     }
 
+    logHeartbeatDebug('[SyncEngine][heartbeat][monitor][start]', {
+      instanceId: this.instanceId,
+      ownerId: this.ownerId || null,
+      ownerEpoch: this.ownerEpoch,
+      intervalMs: this.heartbeatIntervalMs,
+      observationMs: this.ownershipObservationMs,
+      takeoverThresholdMs: this.heartbeatIntervalMs * this.heartbeatMissesToTakeover
+    });
+
     if (!this.ownershipMonitorTimer) {
       this.ownershipMonitorTimer = window.setInterval(() => {
         if (!this.isConnected || this.role !== SYNC_ROLES.SETUP) {
@@ -486,6 +503,13 @@ export default class SyncEngine {
         const takeoverThreshold = this.heartbeatIntervalMs * this.heartbeatMissesToTakeover;
 
         if (!this.isOwner && this.lastOwnerHeartbeatAt > 0 && heartbeatAge >= takeoverThreshold) {
+          logHeartbeatDebug('[SyncEngine][heartbeat][monitor][takeover]', {
+            instanceId: this.instanceId,
+            ownerId: this.ownerId || null,
+            lastOwnerHeartbeatAt: this.lastOwnerHeartbeatAt,
+            heartbeatAge,
+            takeoverThreshold
+          });
           void this.claimOwnership('heartbeat-timeout');
         }
       }, Math.max(1000, this.heartbeatIntervalMs));
@@ -500,6 +524,12 @@ export default class SyncEngine {
 
         const now = Date.now();
         if (this.lastOwnerHeartbeatAt === 0 || (now - this.lastOwnerHeartbeatAt) >= this.ownershipObservationMs) {
+          logHeartbeatDebug('[SyncEngine][heartbeat][monitor][claim]', {
+            instanceId: this.instanceId,
+            ownerId: this.ownerId || null,
+            lastOwnerHeartbeatAt: this.lastOwnerHeartbeatAt,
+            observationMs: this.ownershipObservationMs
+          });
           void this.claimOwnership('observation-timeout');
         }
       }, this.ownershipObservationMs);
@@ -507,6 +537,12 @@ export default class SyncEngine {
   }
 
   stopOwnershipMonitoring() {
+    logHeartbeatDebug('[SyncEngine][heartbeat][monitor][stop]', {
+      instanceId: this.instanceId,
+      ownerId: this.ownerId || null,
+      ownerEpoch: this.ownerEpoch
+    });
+
     if (this.ownershipMonitorTimer) {
       window.clearInterval(this.ownershipMonitorTimer);
       this.ownershipMonitorTimer = null;
@@ -526,6 +562,13 @@ export default class SyncEngine {
       return;
     }
 
+    logHeartbeatDebug('[SyncEngine][heartbeat][timer][start]', {
+      instanceId: this.instanceId,
+      ownerId: this.ownerId || null,
+      ownerEpoch: this.ownerEpoch,
+      intervalMs: this.heartbeatIntervalMs
+    });
+
     this.heartbeatTimer = window.setInterval(() => {
       void this.publishOwnershipHeartbeat();
     }, this.heartbeatIntervalMs);
@@ -533,6 +576,11 @@ export default class SyncEngine {
 
   stopHeartbeat() {
     if (this.heartbeatTimer) {
+      logHeartbeatDebug('[SyncEngine][heartbeat][timer][stop]', {
+        instanceId: this.instanceId,
+        ownerId: this.ownerId || null,
+        ownerEpoch: this.ownerEpoch
+      });
       window.clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
@@ -606,6 +654,14 @@ export default class SyncEngine {
       timestamp: now
     });
 
+    logHeartbeatDebug('[SyncEngine][heartbeat][claim]', {
+      instanceId: this.instanceId,
+      ownerId: this.ownerId,
+      ownerEpoch: this.ownerEpoch,
+      reason,
+      timestamp: now
+    });
+
     this.stopHeartbeat();
     this.stopSnapshotTimer();
     this.startHeartbeat();
@@ -619,6 +675,12 @@ export default class SyncEngine {
     }
 
     const timestamp = Date.now();
+    logHeartbeatDebug('[SyncEngine][heartbeat][send]', {
+      instanceId: this.instanceId,
+      ownerId: this.ownerId || this.instanceId,
+      ownerEpoch: this.ownerEpoch,
+      timestamp
+    });
     const published = await this.publish({
       messageType: SYNC_MESSAGE_TYPES.OWNERSHIP_HEARTBEAT,
       ownerId: this.ownerId || this.instanceId,
@@ -629,9 +691,21 @@ export default class SyncEngine {
     if (published) {
       this.lastOwnerHeartbeatAt = timestamp;
       this.lastSeenOwnershipAt = timestamp;
+      logHeartbeatDebug('[SyncEngine][heartbeat][sent]', {
+        instanceId: this.instanceId,
+        ownerId: this.ownerId || this.instanceId,
+        ownerEpoch: this.ownerEpoch,
+        timestamp
+      });
       return published;
     }
 
+    logHeartbeatDebug('[SyncEngine][heartbeat][send-failed]', {
+      instanceId: this.instanceId,
+      ownerId: this.ownerId || this.instanceId,
+      ownerEpoch: this.ownerEpoch,
+      timestamp
+    });
     this.isOwner = false;
     this.stopHeartbeat();
     this.stopSnapshotTimer();
@@ -657,6 +731,14 @@ export default class SyncEngine {
       reason
     });
     this.onLeaseReleased?.({
+      ownerId: this.ownerId,
+      ownerEpoch: this.ownerEpoch,
+      reason,
+      timestamp
+    });
+
+    logHeartbeatDebug('[SyncEngine][heartbeat][release]', {
+      instanceId: this.instanceId,
       ownerId: this.ownerId,
       ownerEpoch: this.ownerEpoch,
       reason,
@@ -691,6 +773,19 @@ export default class SyncEngine {
       hasOwnership: this.isOwner,
       reason: message?.messageType || 'ownership-observed'
     });
+
+    if (
+      message?.messageType === SYNC_MESSAGE_TYPES.OWNERSHIP_HEARTBEAT
+      || message?.messageType === SYNC_MESSAGE_TYPES.OWNERSHIP_CLAIM
+    ) {
+      logHeartbeatDebug('[SyncEngine][heartbeat][observe]', {
+        instanceId: this.instanceId,
+        ownerId: this.ownerId,
+        ownerEpoch: this.ownerEpoch,
+        sourceInstanceId: String(message?.sourceInstanceId || message?.instanceId || null),
+        timestamp
+      });
+    }
 
     if (this.isOwner) {
       this.startHeartbeat();

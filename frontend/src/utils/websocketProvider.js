@@ -14,7 +14,7 @@
  */
 
 import Ably from 'ably';
-import { isTransportDebugEnabled } from './debugFlags.js';
+import { isHeartbeatDebugEnabled, isTransportDebugEnabled } from './debugFlags.js';
 import SyncConnectionService from './sync/SyncConnectionService.js';
 
 // Provider identifier (keeping for future extensibility)
@@ -154,13 +154,13 @@ const getLogMessageLabel = (data = {}) => {
   return messageType || 'data';
 };
 
-const buildWebSocketLogPrefix = (direction, eventName, channelType, data) => {
+const buildWebSocketLogPrefix = (direction, eventName, channelType, data, namespace = 'WebSocket') => {
   const emoji = direction === 'send'
     ? '⬆️'
     : direction === 'echo'
       ? '🪞'
       : '⬇️';
-  return `[WebSocket][${emoji}][${eventName}][${getLogChannelLabel(channelType)}][${getLogMessageLabel(data)}]`;
+  return `[${namespace}][${emoji}][${eventName}][${getLogChannelLabel(channelType)}][${getLogMessageLabel(data)}]`;
 };
 
 /**
@@ -898,7 +898,17 @@ class WebSocketProvider {
             name: 'update',
             data
           };
-      if (isTransportDebugEnabled()) {
+      const isHeartbeatMessage = data?.messageType === 'ownership-heartbeat';
+      if (isHeartbeatMessage) {
+        if (isHeartbeatDebugEnabled()) {
+          console.log(buildWebSocketLogPrefix('send', 'update', channelType, data, 'Heartbeat'), {
+            channelName: targetChannel?.name || null,
+            channelType,
+            ephemeral: isEphemeralMessage,
+            data
+          });
+        }
+      } else if (isTransportDebugEnabled()) {
         console.log(buildWebSocketLogPrefix('send', 'update', channelType, data), {
           channelName: targetChannel?.name || null,
           channelType,
@@ -946,7 +956,16 @@ class WebSocketProvider {
       };
 
       const channelType = targetChannel === this.priorityChannel ? 'priority' : 'data';
-      if (isTransportDebugEnabled()) {
+      const isHeartbeatControlMessage = payload?.messageType === 'ownership-heartbeat';
+      if (isHeartbeatControlMessage) {
+        if (isHeartbeatDebugEnabled()) {
+          console.log(buildWebSocketLogPrefix('send', 'update', channelType, payload, 'Heartbeat'), {
+            channelName: targetChannel?.name || null,
+            channelType,
+            data: payload
+          });
+        }
+      } else if (isTransportDebugEnabled()) {
         console.log(buildWebSocketLogPrefix('send', 'update', channelType, payload), {
           channelName: targetChannel?.name || null,
           channelType,
