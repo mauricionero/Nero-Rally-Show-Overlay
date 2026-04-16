@@ -1343,6 +1343,7 @@ export const RallyProvider = ({ children }) => {
     const packageType = String(details?.packageType || '').trim();
     const controlType = String(details?.controlType || '').trim();
     const section = String(details?.section || '').trim();
+    const payload = isPlainObject(details?.payload) ? details.payload : {};
     const source = String(
       details?.source
       || details?.origin
@@ -1350,6 +1351,7 @@ export const RallyProvider = ({ children }) => {
       || details?.sourceRole
       || ''
     ).trim().toLowerCase();
+    const hasArrivalTimes = section === 'arrivalTimes' || isPlainObject(payload.arrivalTimes);
 
     if (channelType === 'telemetry') {
       return false;
@@ -1365,7 +1367,7 @@ export const RallyProvider = ({ children }) => {
       return false;
     }
 
-    if (source === 'android-app' && section !== 'stageSos' && messageType !== 'pilot-telemetry') {
+    if (source === 'android-app' && section !== 'stageSos' && messageType !== 'pilot-telemetry' && !hasArrivalTimes) {
       return false;
     }
 
@@ -2830,7 +2832,11 @@ export const RallyProvider = ({ children }) => {
           }
 
           const currentFinishSource = normalizeTimingSource(sourceFinishTimeRef.current?.[normalizedPilotId]?.[normalizedStageId]);
-          if (!canTimingSourceOverwrite(currentFinishSource, incomingTimingSource)) {
+          const currentArrivalValue = arrivalTimesRef.current?.[normalizedPilotId]?.[normalizedStageId] || '';
+          const currentTimeValue = timesRef.current?.[normalizedPilotId]?.[normalizedStageId] || '';
+          const hasCurrentFinishValue = Boolean(currentArrivalValue || currentTimeValue);
+
+          if (hasCurrentFinishValue && !canTimingSourceOverwrite(currentFinishSource, incomingTimingSource)) {
             return;
           }
 
@@ -3537,6 +3543,27 @@ export const RallyProvider = ({ children }) => {
         }
       });
       normalizedData = flat;
+    }
+
+    if (isPlainObject(normalizedData) && (messageSource === 'mobile' || messageSource === 'android-app')) {
+      const legacyTimingEntries = Object.entries(normalizedData).filter(([key]) => TIMING_BY_STAGE_FIELDS.has(key));
+
+      if (legacyTimingEntries.length > 0) {
+        applyDeltaBatchChanges(Object.fromEntries(legacyTimingEntries), {
+          sourceRole: messageSource,
+          timestamp: Number(normalizedData?.timestamp || data?.timestamp || Date.now()),
+          packageType: 'delta',
+          channelType: data?.channelType || 'data'
+        });
+
+        normalizedData = Object.fromEntries(
+          Object.entries(normalizedData).filter(([key]) => !TIMING_BY_STAGE_FIELDS.has(key))
+        );
+
+        if (Object.keys(normalizedData).length === 0) {
+          return;
+        }
+      }
     }
     
     if (isSyncDebugEnabled()) {

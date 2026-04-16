@@ -132,12 +132,17 @@ export class SyncInboundService {
       || data?.origin
       || data?.clientSource
     );
+    const hasArrivalTimes = (
+      data?.section === 'arrivalTimes'
+      || (payload && typeof payload === 'object' && payload.arrivalTimes && typeof payload.arrivalTimes === 'object')
+    );
 
     if (
       messageSource === 'android-app'
       && payload?.messageType !== 'pilot-telemetry'
       && data?.section !== 'pilotTelemetry'
       && data?.section !== 'stageSos'
+      && !hasArrivalTimes
     ) {
       if (isTelemetryDebugEnabled()) {
         console.log('[SyncInbound][telemetry][ignore-android-non-telemetry]', {
