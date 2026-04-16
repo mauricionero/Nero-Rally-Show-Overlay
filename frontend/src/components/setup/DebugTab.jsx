@@ -12,7 +12,7 @@ import { DEFAULT_DEBUG_FLAGS, loadDebugFlags, saveDebugFlags } from '../../utils
 
 export default function DebugTab() {
   const { t } = useTranslation();
-  const { debugDate, setDebugDate } = useRally();
+  const { debugDate, setDebugDate, displayIdsInSetup, setDisplayIdsInSetup } = useRally();
   const {
     wsOwnership,
     wsLatestSnapshotAt,
@@ -122,6 +122,27 @@ export default function DebugTab() {
           </div>
 
           <p className="text-xs text-zinc-500">{t('debug.syncNote')}</p>
+
+          <div className="space-y-3 border-t border-zinc-800 pt-4">
+            <div>
+              <div className="text-sm font-semibold text-white">{t('debug.setupVisualsTitle')}</div>
+              <p className="text-xs text-zinc-500">
+                {t('debug.setupVisualsDescription')}
+              </p>
+            </div>
+
+            <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-[#09090B] px-3 py-3">
+              <Checkbox
+                checked={displayIdsInSetup === true}
+                onCheckedChange={(checked) => setDisplayIdsInSetup(checked === true)}
+                className="mt-0.5 border-zinc-600"
+              />
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-white">{t('debug.displayIds')}</div>
+                <div className="text-xs text-zinc-500">{t('debug.displayIdsDescription')}</div>
+              </div>
+            </label>
+          </div>
 
           <div className="space-y-2 border-t border-zinc-800 pt-4">
             <div className="flex items-center justify-between gap-4 text-sm">

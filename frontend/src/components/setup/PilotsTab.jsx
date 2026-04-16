@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRally } from '../../contexts/RallyContext.jsx';
 import { useRallyConfig } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -15,6 +16,7 @@ import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2 } from 'lucide-react';
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { normalizePilotId } from '../../utils/pilotIdentity.js';
+import DebugIdText from './DebugIdText.jsx';
 
 const escapeCsvValue = (value) => {
   const stringValue = String(value ?? '');
@@ -37,6 +39,7 @@ const normalizeOptionalNumberInput = (value) => {
 
 export default function PilotsTab({ hideStreams = false }) {
   const { t } = useTranslation();
+  const { displayIdsInSetup } = useRally();
   const {
     pilots,
     categories,
@@ -376,9 +379,12 @@ export default function PilotsTab({ hideStreams = false }) {
                         {pilot.carNumber}
                       </span>
                     )}
-                    <h3 className="font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      {pilot.name}
-                    </h3>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <h3 className="min-w-0 flex-1 font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {pilot.name}
+                      </h3>
+                      {displayIdsInSetup && <DebugIdText id={pilot.id} />}
+                    </div>
                   </div>
                   {pilot.streamUrl && (
                     <p className="text-xs text-zinc-500 truncate font-mono mt-1">{pilot.streamUrl}</p>

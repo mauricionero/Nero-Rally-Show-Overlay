@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import CurrentStageCard from './CurrentStageCard.jsx';
+import DebugIdText from './DebugIdText.jsx';
 import {
   getStageNumberLabel,
   isLapRaceStageType,
@@ -88,6 +89,7 @@ export default function TheRaceTab() {
     stages,
     mapPlacemarks,
     currentStageId,
+    displayIdsInSetup,
     addStage,
     updateStage,
     deleteStage
@@ -232,7 +234,7 @@ export default function TheRaceTab() {
         </CardContent>
       </Card>
 
-      <CurrentStageCard />
+      <CurrentStageCard showDebugIds={displayIdsInSetup} />
 
       {/* Add New Stage */}
       <Card className="bg-[#18181B] border-zinc-800">
@@ -519,6 +521,7 @@ export default function TheRaceTab() {
                         {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)} </span>}
                         {stage.name}
                       </h3>
+                      {displayIdsInSetup && <DebugIdText id={stage.id} />}
                       <span className={`text-xs px-2 py-0.5 rounded ${getStageTypeColor(stage.type)} bg-white/5`}>
                         {stage.type}
                       </span>

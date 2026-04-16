@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useRallyWs } from '../contexts/RallyContext.jsx';
+import { useRally, useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
@@ -32,6 +32,7 @@ import { shouldSuppressManualWsReconnect } from '../utils/wsAutoConnect.js';
 export default function Setup() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { displayIdsInSetup } = useRally();
   const {
     wsChannelKey,
     wsEnabled,
@@ -304,7 +305,7 @@ export default function Setup() {
 
           {activeTab === 'times' && (
             <TabsContent value="times">
-              <TimesTab tableFirstColumnWidth={90} />
+              <TimesTab tableFirstColumnWidth={90} showDebugIds={displayIdsInSetup} />
             </TabsContent>
           )}
 

@@ -11,6 +11,7 @@ import { TimeInput } from '../TimeInput.jsx';
 import TimingSourceIndicator from '../TimingSourceIndicator.jsx';
 import StatusPill from '../StatusPill.jsx';
 import CurrentStageCard from './CurrentStageCard.jsx';
+import DebugIdText from './DebugIdText.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
@@ -309,7 +310,7 @@ const getStageTypeColor = (type) => {
   }
 };
 
-function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false, layout = 'cards', isReadOnly = false, firstColumnWidth = 130 }) {
+function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false, layout = 'cards', isReadOnly = false, firstColumnWidth = 130, showDebugIds = false }) {
   const { t } = useTranslation();
   const showLineSyncRequest = typeof window !== 'undefined' && window.location?.pathname !== '/times';
   const {
@@ -761,6 +762,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         <span className="text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                           {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
                         </span>
+                        {showDebugIds && <DebugIdText id={pilot.id} />}
                         {showLineSyncRequest && (
                           <>
                             <button
@@ -1027,9 +1029,14 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         />
                       </div>
                     </div>
-                    <span className="flex-1 min-w-[140px] text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
-                    </span>
+                    <div className="flex-1 min-w-[140px]">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
+                        </span>
+                        {showDebugIds && <DebugIdText id={pilot.id} />}
+                      </div>
+                    </div>
                     {showLineSyncRequest && (
                       <>
                         <button
@@ -1258,7 +1265,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 }
 
 // Liaison/Service Park Stage Component - Simple start/end per pilot
-function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', isReadOnly = false, firstColumnWidth = 130 }) {
+function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', isReadOnly = false, firstColumnWidth = 130, showDebugIds = false }) {
   const { t } = useTranslation();
   const stageSortedPilots = sortedPilots;
 
@@ -1304,10 +1311,11 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
                     </div>
                   </td>
                   <td className="p-1 sm:p-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-white font-bold text-sm uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                         {pilot.name}
                       </span>
+                      {showDebugIds && <DebugIdText id={pilot.id} />}
                     </div>
                   </td>
                     <td className="p-1 sm:p-2">
@@ -1350,9 +1358,12 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
               {/* Pilot Header */}
               <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
                 <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
-                <span className="flex-1 min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {pilot.name}
-                </span>
+                <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2">
+                  <span className="min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {pilot.name}
+                  </span>
+                  {showDebugIds && <DebugIdText id={pilot.id} />}
+                </div>
               </div>
               
               {/* Start Time */}
@@ -1398,7 +1409,8 @@ export default function TimesTab({
   defaultOpenStageIds,
   showStageAccent = true,
   compactStagePadding = false,
-  tableFirstColumnWidth = 90
+  tableFirstColumnWidth = 90,
+  showDebugIds = false
 }) {
   const { t } = useTranslation();
   const { pilots, stages, categories, currentStageId } = useRallyMeta();
@@ -1459,7 +1471,7 @@ export default function TimesTab({
 
   return (
     <div className="space-y-6">
-      {showCurrentStageCard && <CurrentStageCard />}
+      {showCurrentStageCard && <CurrentStageCard showDebugIds={showDebugIds} />}
 
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-[#18181B] px-4 py-3">
         <div className="flex items-center gap-3">
@@ -1517,11 +1529,12 @@ export default function TimesTab({
                       ) : (
                         <Lock className="w-4 h-4 text-zinc-500" />
                       )}
-                      {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
-                      <span className="truncate">{stage.name}</span>
-                      {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && (
-                        <span className="text-sm text-zinc-400 font-normal">({getLapRaceMetaText(stage)})</span>
-                      )}
+                    {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
+                    <span className="truncate">{stage.name}</span>
+                    {showDebugIds && <DebugIdText id={stage.id} />}
+                    {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && (
+                      <span className="text-sm text-zinc-400 font-normal">({getLapRaceMetaText(stage)})</span>
+                    )}
                     </CardTitle>
                     {!isLapRaceStageType(stage.type) && getDisplayedStageSchedule(stage) && (
                       <CardDescription className="text-zinc-400 mt-1">
@@ -1546,6 +1559,7 @@ export default function TimesTab({
                     layout={showTimesAsCards ? 'cards' : 'table'}
                     isReadOnly={activeStageId !== undefined ? activeStageId !== stage.id : false}
                     firstColumnWidth={tableFirstColumnWidth}
+                    showDebugIds={showDebugIds}
                   />
                 )}
                 {isTransitStageType(stage.type) && (
@@ -1556,6 +1570,7 @@ export default function TimesTab({
                     layout={showTimesAsCards ? 'cards' : 'table'}
                     isReadOnly={activeStageId !== undefined ? activeStageId !== stage.id : false}
                     firstColumnWidth={tableFirstColumnWidth}
+                    showDebugIds={showDebugIds}
                   />
                 )}
                 {isLapRaceStageType(stage.type) && (
@@ -1567,6 +1582,7 @@ export default function TimesTab({
                     categoryOrderById={categoryOrderById}
                     comparePilotsForTimes={comparePilotsForTimes}
                     isReadOnly={activeStageId !== undefined ? activeStageId !== stage.id : false}
+                    showDebugIds={showDebugIds}
                   />
                 )}
               </CardContent>

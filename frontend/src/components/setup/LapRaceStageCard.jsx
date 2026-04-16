@@ -12,6 +12,7 @@ import { CheckSquare, Square, Clock, Plus, X, TriangleAlert } from 'lucide-react
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceActualStartTime, getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
 import PilotStatusBadges from '../PilotStatusBadges.jsx';
+import DebugIdText from './DebugIdText.jsx';
 
 // Helper to get current time in HH:MM:SS.mmm format
 const getCurrentTimeString = (timeDecimals) => formatClockFromDate(new Date(), timeDecimals);
@@ -42,7 +43,7 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime, timeDe
   return formatDurationMs(diffMs, timeDecimals, { fallback: '' });
 };
 
-export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, isReadOnly = false }) {
+export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, isReadOnly = false, showDebugIds = false }) {
   const { t } = useTranslation();
   const {
     setLapTime,
@@ -292,6 +293,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                   disabled={isReadOnly}
                 />
                 <span className="text-white text-xs">{pilot.name}</span>
+                {showDebugIds && <DebugIdText id={pilot.id} />}
               </label>
             );
           })}
@@ -393,6 +395,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                             <span className="text-white font-bold text-sm truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               {pilot.name}
                             </span>
+                            {showDebugIds && <DebugIdText id={pilot.id} />}
                             <PilotStatusBadges pilotId={pilot.id} stageId={stage.id} compact />
                           </div>
                         </div>

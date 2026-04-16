@@ -343,6 +343,7 @@ const STORAGE_DOMAIN_VERSION_KEYS = {
 const CURRENT_SESSION_META_STORAGE_KEY = 'rally_meta_current_session';
 const SOURCE_FINISH_TIME_STORAGE_KEY = 'rally_source_finish_time';
 const SOURCE_LAP_TIME_STORAGE_KEY = 'rally_source_lap_time';
+const SETUP_DISPLAY_IDS_STORAGE_KEY = 'rally_setup_display_ids';
 const TIMING_PATCH_DEFAULT_VALUES = {
   times: '',
   arrivalTimes: '',
@@ -1085,6 +1086,7 @@ export const RallyProvider = ({ children }) => {
   const [mapPlacemarks, setMapPlacemarks] = useState(() => loadFromStorage('rally_map_placemarks', []));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
+  const [displayIdsInSetup, setDisplayIdsInSetup] = useState(() => loadFromStorage(SETUP_DISPLAY_IDS_STORAGE_KEY, false) === true);
   const [timeDecimals, setTimeDecimals] = useState(() => {
     const storedValue = loadFromStorage('rally_time_decimals', 3);
     const numericValue = Number(storedValue);
@@ -1303,6 +1305,14 @@ export const RallyProvider = ({ children }) => {
 
     writeCurrentSessionMetaToStorage(metaCurrentSession);
   }, [metaCurrentSession, writeCurrentSessionMetaToStorage]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    window.localStorage.setItem(SETUP_DISPLAY_IDS_STORAGE_KEY, JSON.stringify(displayIdsInSetup === true));
+  }, [displayIdsInSetup]);
 
   const clearPilotTelemetryStateFlushTimer = useCallback(() => {
     if (pilotTelemetryStateFlushTimerRef.current) {
@@ -2731,6 +2741,17 @@ export const RallyProvider = ({ children }) => {
       const acceptedFinishSources = {};
       const acceptedLapSources = {};
       const handledLapTimeKeys = new Set();
+      const commitLapRacePatch = (normalizedPilotId, normalizedStageId, stage, nextLapEntries, nextLapSources) => {
+        const trimmedLapEntries = trimTrailingEmptyArrayValues(nextLapEntries);
+        const trimmedLapSources = trimTrailingEmptyArrayValues(nextLapSources);
+        const nextStoredTotal = computeLapRaceStoredTimeValue(stage, trimmedLapEntries);
+        const nextFinishSource = nextStoredTotal ? getHighestTimingSource(trimmedLapSources) : '';
+
+        assignPilotStagePatchValue(acceptedLapTimes, normalizedPilotId, normalizedStageId, trimmedLapEntries);
+        assignPilotStagePatchValue(acceptedLapSources, normalizedPilotId, normalizedStageId, trimmedLapSources);
+        assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextStoredTotal);
+        assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
+      };
 
       const assignPilotStagePatchValue = (target, pilotId, stageId, value) => {
         target[pilotId] = {
@@ -2748,7 +2769,7 @@ export const RallyProvider = ({ children }) => {
         Object.entries(stageEntries).forEach(([stageId, incomingLapEntries]) => {
           const normalizedStageId = String(stageId || '').trim();
           const stage = stagesById.get(normalizedStageId);
-          if (!stage || !isLapRaceStageType(stage.type) || !Array.isArray(incomingLapEntries)) {
+          if (!stage || !isLapRaceStageType(stage.type)) {
             return;
           }
 
@@ -2760,39 +2781,57 @@ export const RallyProvider = ({ children }) => {
           const currentLapSources = Array.isArray(sourceLapTimeRef.current?.[normalizedPilotId]?.[normalizedStageId])
             ? sourceLapTimeRef.current[normalizedPilotId][normalizedStageId]
             : [];
-          const nextLapEntries = [...currentLapEntries];
-          const nextLapSources = [...currentLapSources];
-          const maxLength = Math.max(currentLapEntries.length, incomingLapEntries.length);
-          let acceptedAnyLapChange = false;
+          if (Array.isArray(incomingLapEntries)) {
+            const nextLapEntries = [...currentLapEntries];
+            const nextLapSources = [...currentLapSources];
+            const maxLength = Math.max(currentLapEntries.length, incomingLapEntries.length);
+            let acceptedAnyLapChange = false;
 
-          for (let lapIndex = 0; lapIndex < maxLength; lapIndex += 1) {
-            const incomingLapValue = lapIndex < incomingLapEntries.length
-              ? (incomingLapEntries[lapIndex] ?? '')
-              : '';
-            const currentLapSource = normalizeTimingSource(currentLapSources[lapIndex]);
+            for (let lapIndex = 0; lapIndex < maxLength; lapIndex += 1) {
+              const incomingLapValue = lapIndex < incomingLapEntries.length
+                ? (incomingLapEntries[lapIndex] ?? '')
+                : '';
+              const currentLapSource = normalizeTimingSource(currentLapSources[lapIndex]);
 
-            if (!canTimingSourceOverwrite(currentLapSource, incomingTimingSource)) {
-              continue;
+              if (!canTimingSourceOverwrite(currentLapSource, incomingTimingSource)) {
+                continue;
+              }
+
+              nextLapEntries[lapIndex] = incomingLapValue;
+              nextLapSources[lapIndex] = incomingLapValue ? incomingTimingSource : '';
+              acceptedAnyLapChange = true;
             }
 
-            nextLapEntries[lapIndex] = incomingLapValue;
-            nextLapSources[lapIndex] = incomingLapValue ? incomingTimingSource : '';
-            acceptedAnyLapChange = true;
-          }
+            if (!acceptedAnyLapChange) {
+              return;
+            }
 
-          if (!acceptedAnyLapChange) {
+            commitLapRacePatch(normalizedPilotId, normalizedStageId, stage, nextLapEntries, nextLapSources);
             return;
           }
 
-          const trimmedLapEntries = trimTrailingEmptyArrayValues(nextLapEntries);
-          const trimmedLapSources = trimTrailingEmptyArrayValues(nextLapSources);
-          const nextStoredTotal = computeLapRaceStoredTimeValue(stage, trimmedLapEntries);
-          const nextFinishSource = nextStoredTotal ? getHighestTimingSource(trimmedLapSources) : '';
+          const incomingLapValue = String(incomingLapEntries || '').trim();
+          if (!incomingLapValue) {
+            return;
+          }
 
-          assignPilotStagePatchValue(acceptedLapTimes, normalizedPilotId, normalizedStageId, trimmedLapEntries);
-          assignPilotStagePatchValue(acceptedLapSources, normalizedPilotId, normalizedStageId, trimmedLapSources);
-          assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextStoredTotal);
-          assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
+          if (currentLapEntries.some((entry) => String(entry || '').trim() === incomingLapValue)) {
+            return;
+          }
+
+          const nextLapEntries = [...currentLapEntries];
+          const nextLapSources = [...currentLapSources];
+          const nextLapIndex = nextLapEntries.findIndex((entry) => !String(entry || '').trim());
+
+          if (nextLapIndex >= 0) {
+            nextLapEntries[nextLapIndex] = incomingLapValue;
+            nextLapSources[nextLapIndex] = incomingTimingSource;
+          } else {
+            nextLapEntries.push(incomingLapValue);
+            nextLapSources.push(incomingTimingSource);
+          }
+
+          commitLapRacePatch(normalizedPilotId, normalizedStageId, stage, nextLapEntries, nextLapSources);
         });
       });
 
@@ -6329,6 +6368,7 @@ export const RallyProvider = ({ children }) => {
     stageAlerts,
     mapPlacemarks,
     debugDate,
+    displayIdsInSetup,
     timeDecimals,
     streamConfigs,
     globalAudio,
@@ -6376,6 +6416,7 @@ export const RallyProvider = ({ children }) => {
     setEventName,
     setCurrentScene,
     setDebugDate,
+    setDisplayIdsInSetup,
     setTimeDecimals,
     setChromaKey,
     setMapUrl,

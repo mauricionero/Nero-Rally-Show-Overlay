@@ -3,6 +3,7 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import DebugIdText from './DebugIdText.jsx';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import {
   getStageTitle,
@@ -34,7 +35,7 @@ const getStageTypeColor = (type) => {
   }
 };
 
-export default function CurrentStageCard() {
+export default function CurrentStageCard({ showDebugIds = false }) {
   const { t } = useTranslation();
   const { stages, currentStageId, setCurrentStageId } = useRally();
 
@@ -71,6 +72,7 @@ export default function CurrentStageCard() {
                   <div className="flex items-center gap-2">
                     <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
                     {getStageTitle(stage)}
+                    {showDebugIds && <DebugIdText id={stage.id} />}
                     {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && ` (${getLapRaceMetaText(stage)})`}
                   </div>
                 </SelectItem>
@@ -82,6 +84,7 @@ export default function CurrentStageCard() {
           <p className="mt-2 text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
             <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
             LIVE: {getStageTitle(currentStage)}
+            {showDebugIds && <DebugIdText id={currentStage.id} className="text-zinc-400" />}
             {isLapRaceStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
           </p>
         )}
