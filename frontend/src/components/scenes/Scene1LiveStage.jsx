@@ -15,7 +15,7 @@ import * as rallyHelpers from '../../utils/rallyHelpers';
 import { ChevronLeft, ChevronRight, Flag, Maximize2, Minimize2, RotateCcw, Video, Map as MapIcon } from 'lucide-react';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
-import { getStageTitle, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
+import { getStageTitle, isLapTimingStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
@@ -90,8 +90,9 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const activeMedia = externalMedia.filter(m => m.url);
   const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [stages, mapPlacemarks]);
   const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
-  const isLapRace = isLapRaceStageType(currentStage?.type);
-  const isSSStage = isSpecialStageType(currentStage?.type);
+  const isLapRace = isLapTimingStageType(currentStage?.type);
+  const isSuperPrimeStage = currentStage?.type === SUPER_PRIME_STAGE_TYPE;
+  const isSSStage = isSpecialStageType(currentStage?.type) && !isLapRace;
   const lapFastClockEnabled = Boolean(currentStageId && isLapRace && timeDecimals > 0);
   const currentFastTime = useFastClock(lapFastClockEnabled);
   const currentSecondAlignedTime = useSecondAlignedClock(Boolean(currentStageId && isLapRace && !lapFastClockEnabled));
@@ -782,6 +783,8 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             let showLiveTime = false;
             
             if (isLapRace && lapInfo) {
+              const lapCountLabel = isSuperPrimeStage ? t('times.pass') : t('times.lap');
+              const activeLapColor = isSuperPrimeStage ? 'text-orange-400' : 'text-[#FACC15]';
               const finishedLapDisplay = lapInfo.isFinished
                 ? `${lapInfo.totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${lapInfo.totalTimeText || lapInfo.displayText || ''}`
                 : '';
@@ -790,7 +793,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 <div className="absolute top-2 left-2 bg-black/80 px-2 py-1 rounded flex items-center gap-1">
                   <span className="text-[#FF4500] font-bold text-lg">P{lapInfo.position}</span>
                   <span className="text-zinc-400 text-sm">
-                    Lap {lapInfo.completedLaps}/{lapInfo.totalLaps}
+                    {lapCountLabel} {lapInfo.completedLaps}/{lapInfo.totalLaps}
                   </span>
                 </div>
               );
@@ -805,7 +808,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 timeColor = lapInfo.isFinished
                   ? 'text-[#22C55E]'
                   : lapInfo.isRacing
-                    ? 'text-[#FACC15]'
+                    ? activeLapColor
                     : 'text-zinc-400';
               } else if (lapInfo.isFinished) {
                 displayTime = 'FINISHED';
@@ -904,13 +907,15 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             <div className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {isLapRace ? (
-                  <RotateCcw className="w-6 h-6 text-[#FACC15]" />
+                  isSuperPrimeStage
+                    ? <Flag className="w-6 h-6 text-orange-400" />
+                    : <RotateCcw className="w-6 h-6 text-[#FACC15]" />
                 ) : (
                   <Flag className="w-6 h-6 text-[#FF4500]" />
                 )}
                 <div>
                   <p className="text-zinc-400 text-sm uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    {isLapRace ? 'Race' : 'Current Stage'}
+                    {isLapRace && !isSuperPrimeStage ? 'Race' : 'Current Stage'}
                   </p>
                   <div className="mt-1 flex items-end gap-6">
                     <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -968,14 +973,17 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   let showLiveTime = false;
                   
                   if (isLapRace) {
-                  if (isFinished) {
+                    const lapCountLabel = isSuperPrimeStage ? t('times.pass') : t('times.lap');
+                    const activeLapBorderColor = isSuperPrimeStage ? 'border-orange-400' : 'border-[#FACC15]';
+                    const activeLapTextColor = isSuperPrimeStage ? 'text-orange-400' : 'text-[#FACC15]';
+                    if (isFinished) {
                       borderColor = 'border-[#22C55E]';
                       timeDisplay = `${lapInfo?.totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${lapInfo?.totalTimeText || 'FINISHED'}`;
                       timeColor = 'text-[#22C55E]';
                     } else if (completedLaps > 0) {
-                      borderColor = 'border-[#FACC15]';
-                      timeDisplay = `Lap ${lapInfo?.totalLaps > 0 ? `${completedLaps}/${lapInfo.totalLaps}` : completedLaps}${lapInfo?.lastLapText ? ` • ${lapInfo.lastLapText}` : ''}`;
-                      timeColor = 'text-[#FACC15]';
+                      borderColor = activeLapBorderColor;
+                      timeDisplay = `${lapCountLabel} ${lapInfo?.totalLaps > 0 ? `${completedLaps}/${lapInfo.totalLaps}` : completedLaps}${lapInfo?.lastLapText ? ` • ${lapInfo.lastLapText}` : ''}`;
+                      timeColor = activeLapTextColor;
                     } else if (lapInfo?.displayText) {
                       timeDisplay = lapInfo.displayText;
                       timeColor = 'text-zinc-400';

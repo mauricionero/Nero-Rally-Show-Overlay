@@ -32,7 +32,7 @@ const PILOT_EXAMPLE = `name,team,car,carNumber,category,startOrder,timeOffsetMin
 Ulysses Bertholdo / Mario Marini,Toyota Gazoo Racing,GR Yaris Rally1,42,WRC,1,0,"-23.550520, -46.633308",https://example.com/pilot.png,https://vdo.ninja/example`;
 
 const STAGE_EXAMPLE = `name,type,ssNumber,date,startTime,endTime,distance,numberOfLaps
-Super Prime,sss,7,2026-03-17,15:31,,3.2,
+Super Prime,sss,7,2026-03-17,15:31,,3.2,2
 Service A,service park,,2026-03-17,16:00,16:45,,
 Circuit Race,lap race,,2026-03-18,10:00,,5.1,8`;
 
@@ -415,7 +415,7 @@ export default function BulkLoadTab() {
         startTime: (values.startTime || '').trim(),
         endTime: (values.endTime || '').trim(),
         distance: (values.distance || '').trim(),
-        numberOfLaps: parseInt(values.numberOfLaps, 10) || 5
+        numberOfLaps: parseInt(values.numberOfLaps, 10) || (stageType === SUPER_PRIME_STAGE_TYPE ? 2 : 5)
       });
 
       importedNames.add(nameKey);

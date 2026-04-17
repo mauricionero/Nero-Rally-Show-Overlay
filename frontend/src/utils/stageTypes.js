@@ -5,6 +5,9 @@ export const LIAISON_STAGE_TYPE = 'Liaison';
 export const SERVICE_PARK_STAGE_TYPE = 'Service Park';
 
 export const isLapRaceStageType = (type) => type === LAP_RACE_STAGE_TYPE;
+export const isLapTimingStageType = (type) => (
+  type === LAP_RACE_STAGE_TYPE || type === SUPER_PRIME_STAGE_TYPE
+);
 
 export const isTransitStageType = (type) => (
   type === LIAISON_STAGE_TYPE || type === SERVICE_PARK_STAGE_TYPE

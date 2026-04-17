@@ -24,7 +24,7 @@ import {
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { Flag, RotateCcw, Car, Timer } from 'lucide-react';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
-import { getStageTitle, isLapRaceStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
+import { getStageTitle, isLapTimingStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useFastClock } from '../../hooks/useFastClock.js';
@@ -41,7 +41,12 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
   
   const selectedStage = stages.find(s => s.id === selectedStageId);
-  const selectedSpecialStageSelected = Boolean(selectedStageId && selectedStage && isSpecialStageType(selectedStage.type));
+  const selectedSpecialStageSelected = Boolean(
+    selectedStageId
+    && selectedStage
+    && isSpecialStageType(selectedStage.type)
+    && !isLapTimingStageType(selectedStage.type)
+  );
   const fastClockEnabled = selectedSpecialStageSelected && timeDecimals > 0;
   const currentFastTime = useFastClock(fastClockEnabled);
   const currentSecondAlignedTime = useSecondAlignedClock(selectedSpecialStageSelected && !fastClockEnabled);
@@ -54,57 +59,47 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   const alertStageId = selectedStageId || currentStageId || null;
   
   // Filter stages by type
-  const ssStages = stages.filter(s => isSpecialStageType(s.type));
-  const lapRaceStages = stages.filter(s => isLapRaceStageType(s.type));
+  const ssStages = stages.filter((stage) => isSpecialStageType(stage.type) && !isLapTimingStageType(stage.type));
+  const lapRaceStages = stages.filter((stage) => isLapTimingStageType(stage.type));
   const sortedAllStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   
   // Sort stages by start time
   const sortedSSStages = [...ssStages].sort(compareStagesBySchedule);
-
   const sortedLapRaceStages = [...lapRaceStages].sort(compareStagesBySchedule);
+  const sortedOverallStages = useMemo(() => (
+    [...stages.filter((stage) => isSpecialStageType(stage.type))].sort(compareStagesBySchedule)
+  ), [stages]);
 
-  const referenceSpecialStage = useMemo(() => {
+  const referenceOverallStage = useMemo(() => {
     if (selectedStage && isSpecialStageType(selectedStage.type)) {
       return selectedStage;
     }
 
     if (!currentStageId) {
-      return sortedSSStages[sortedSSStages.length - 1] || null;
+      return sortedOverallStages[sortedOverallStages.length - 1] || null;
     }
 
     const currentStageIndex = sortedAllStages.findIndex((stage) => stage.id === currentStageId);
     if (currentStageIndex === -1) {
-      return sortedSSStages[sortedSSStages.length - 1] || null;
+      return sortedOverallStages[sortedOverallStages.length - 1] || null;
     }
 
     return [...sortedAllStages.slice(0, currentStageIndex + 1)]
       .reverse()
       .find((stage) => isSpecialStageType(stage.type)) || null;
-  }, [selectedStage, currentStageId, sortedAllStages, sortedSSStages]);
+  }, [selectedStage, currentStageId, sortedAllStages, sortedOverallStages]);
 
-  const selectedSpecialStageIndex = useMemo(() => (
+  const selectedOverallStageIndex = useMemo(() => (
     selectedStage && isSpecialStageType(selectedStage.type)
-      ? sortedSSStages.findIndex((stage) => stage.id === selectedStage.id)
+      ? sortedOverallStages.findIndex((stage) => stage.id === selectedStage.id)
       : -1
-  ), [selectedStage, sortedSSStages]);
+  ), [selectedStage, sortedOverallStages]);
 
-  const ssStagesUpToSelected = useMemo(() => (
-    selectedSpecialStageIndex >= 0
-      ? sortedSSStages.slice(0, selectedSpecialStageIndex + 1)
-      : sortedSSStages
-  ), [selectedSpecialStageIndex, sortedSSStages]);
-
-  const referenceSpecialStageIndex = useMemo(() => (
-    referenceSpecialStage
-      ? sortedSSStages.findIndex((stage) => stage.id === referenceSpecialStage.id)
-      : -1
-  ), [referenceSpecialStage, sortedSSStages]);
-
-  const ssStagesUpToReference = useMemo(() => (
-    referenceSpecialStageIndex >= 0
-      ? sortedSSStages.slice(0, referenceSpecialStageIndex + 1)
-      : sortedSSStages
-  ), [referenceSpecialStageIndex, sortedSSStages]);
+  const overallStagesUpToSelected = useMemo(() => (
+    selectedOverallStageIndex >= 0
+      ? sortedOverallStages.slice(0, selectedOverallStageIndex + 1)
+      : sortedOverallStages
+  ), [selectedOverallStageIndex, sortedOverallStages]);
 
   const categoryById = useMemo(() => (
     new Map(categories.map((category) => [category.id, category]))
@@ -168,7 +163,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
 
     // If a specific stage is selected
     if (selectedStageId && selectedStage) {
-      if (isLapRaceStageType(selectedStage.type)) {
+      if (isLapTimingStageType(selectedStage.type)) {
         return buildLapRaceLeaderboard({
           pilots,
           stage: selectedStage,
@@ -236,10 +231,10 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             : (status === 'racing' && stageStartDateTime
               ? Math.max(0, sceneNow.getTime() - stageStartDateTime.getTime())
               : (displayOrderByPilotId.get(pilot.id) ?? Number.MAX_SAFE_INTEGER));
-          const completedStages = ssStagesUpToSelected.reduce((count, stage) => (
+          const completedStages = overallStagesUpToSelected.reduce((count, stage) => (
             times[pilot.id]?.[stage.id] ? count + 1 : count
           ), 0);
-          const overallTime = ssStagesUpToSelected.reduce((total, stage) => {
+          const overallTime = overallStagesUpToSelected.reduce((total, stage) => {
             const stageFinishTime = times[pilot.id]?.[stage.id];
             return stageFinishTime ? total + parseTime(stageFinishTime) : total;
           }, 0);
@@ -269,11 +264,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     return sortByRetirementAndTime(pilots.map(pilot => {
       let totalTime = 0;
       let completedStages = 0;
-      const isRetired = referenceSpecialStage
-        ? isPilotRetiredForStage(pilot.id, referenceSpecialStage.id, retiredStages)
+      const isRetired = referenceOverallStage
+        ? isPilotRetiredForStage(pilot.id, referenceOverallStage.id, retiredStages)
         : false;
       
-      sortedSSStages.forEach(stage => {
+      sortedOverallStages.forEach(stage => {
         const finishTime = times[pilot.id]?.[stage.id];
         if (finishTime) {
           totalTime += parseTime(finishTime);
@@ -297,13 +292,18 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         isRetired
       };
     }));
-  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedSSStages, referenceSpecialStage, ssStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t]);
+  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedOverallStages, referenceOverallStage, overallStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t]);
 
-  const isLapRaceSelected = isLapRaceStageType(selectedStage?.type);
+  const isLapRaceSelected = isLapTimingStageType(selectedStage?.type);
+  const isSuperPrimeSelected = selectedStage?.type === SUPER_PRIME_STAGE_TYPE;
+  const lapTimingAccentClass = isSuperPrimeSelected ? 'text-orange-400' : 'text-[#FACC15]';
+  const selectedTimingCountColumnLabel = isSuperPrimeSelected ? t('theRace.finishLinePassesShort') : t('scene3.laps');
+  const selectedTimingCountsShortLabel = isSuperPrimeSelected ? t('theRace.finishLinePassesShort') : t('scene3.laps').toLowerCase();
   const selectedStageLapMeta = useMemo(() => (
     getLapRaceStageMetaParts({
       stage: selectedStage,
       lapsLabel: t('scene3.laps').toLowerCase(),
+      passesLabel: t('theRace.finishLinePassesShort'),
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
     }).join(' • ')
   ), [selectedStage, t]);
@@ -311,6 +311,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     getLapRaceStageMetaParts({
       stage,
       lapsLabel: t('scene3.laps').toLowerCase(),
+      passesLabel: t('theRace.finishLinePassesShort'),
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
     }).join(' • ')
   );
@@ -415,7 +416,9 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                     {sortedLapRaceStages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
                         <div className="flex items-center gap-2">
-                          <RotateCcw className="w-4 h-4 text-[#FACC15]" />
+                          {React.createElement(getStageIcon(stage.type), {
+                            className: `w-4 h-4 ${stage.type === SUPER_PRIME_STAGE_TYPE ? 'text-orange-400' : 'text-[#FACC15]'}`
+                          })}
                           {stage.name}{getLapRaceStageMetaText(stage) ? ` (${getLapRaceStageMetaText(stage)})` : ''}
                         </div>
                       </SelectItem>
@@ -464,7 +467,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 <th className="p-4 text-left uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.pilot')}</th>
                 {isLapRaceSelected ? (
                   <>
-                    <th className="p-4 text-center uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('scene3.laps')}</th>
+                    <th className="p-4 text-center uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{selectedTimingCountColumnLabel}</th>
                     <th className="p-4 text-right uppercase font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{lapRaceTimeColumnLabel}</th>
                   </>
                 ) : selectedStageId ? (
@@ -487,7 +490,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                     if (pilot.isRacing || pilot.isFinished) {
                       const lapDiff = (displayLeader.completedLaps || 0) - (pilot.completedLaps || 0);
                       if (lapDiff > 0) {
-                        gap = `+${lapDiff} ${t('scene3.laps').toLowerCase()}`;
+                        gap = `+${lapDiff} ${selectedTimingCountsShortLabel}`;
                       } else if (displayLeader.totalTimeMs && pilot.totalTimeMs) {
                         const gapMs = pilot.totalTimeMs - displayLeader.totalTimeMs;
                         gap = '+' + formatDurationMs(gapMs, timeDecimals);
@@ -594,7 +597,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                           <span className={`text-xl font-mono ${
                             pilot.isRetired ? 'text-red-400' :
                             pilot.isFinished ? 'text-[#22C55E]' : 
-                            pilot.isRacing ? 'text-[#FACC15]' : 
+                            pilot.isRacing ? lapTimingAccentClass :
                             'text-zinc-500'
                           }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                             {pilot.totalLaps > 0 ? `${pilot.completedLaps || 0}/${pilot.totalLaps}` : (pilot.completedLaps || 0)}
@@ -604,7 +607,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                           <span className={`text-2xl font-mono ${
                             pilot.isRetired ? 'text-red-400' :
                             pilot.isFinished ? 'text-[#22C55E]' : 
-                            pilot.isRacing ? 'text-[#FACC15]' : 
+                            pilot.isRacing ? lapTimingAccentClass :
                             'text-zinc-500'
                           }`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                             {pilot.hasTime

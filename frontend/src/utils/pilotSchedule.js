@@ -1,8 +1,4 @@
-import {
-  isLapRaceStageType,
-  isManualStartStageType,
-  isTransitStageType
-} from './stageTypes.js';
+import { isTransitStageType } from './stageTypes.js';
 
 export const getPilotTimeOffsetMinutes = (pilot) => {
   const parsed = parseInt(pilot?.timeOffsetMinutes, 10);

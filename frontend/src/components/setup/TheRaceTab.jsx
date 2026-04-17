@@ -16,6 +16,7 @@ import DebugIdText from './DebugIdText.jsx';
 import {
   getStageNumberLabel,
   isLapRaceStageType,
+  isLapTimingStageType,
   isSpecialStageType,
   isTransitStageType,
   SUPER_PRIME_STAGE_TYPE
@@ -119,6 +120,10 @@ export default function TheRaceTab() {
       toast.error(t('theRace.stageName') + ' is required');
       return;
     }
+    if (newStage.type === SUPER_PRIME_STAGE_TYPE && Number(newStage.numberOfLaps || 0) < 1) {
+      toast.error(t('theRace.finishLinePasses') + ' is required');
+      return;
+    }
     addStage(newStage);
     setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
     toast.success('Stage added successfully');
@@ -135,6 +140,10 @@ export default function TheRaceTab() {
       toast.error('Date must be in DD/MM/YYYY format');
       return;
     }
+    if (editingStage.type === SUPER_PRIME_STAGE_TYPE && Number(editingStage.numberOfLaps || 0) < 1) {
+      toast.error(t('theRace.finishLinePasses') + ' is required');
+      return;
+    }
 
     updateStage(editingStage.id, {
       ...editingStage,
@@ -148,8 +157,12 @@ export default function TheRaceTab() {
   const sortedStages = [...stages].sort(compareStagesBySchedule);
 
   const isLapRaceType = isLapRaceStageType(newStage.type);
+  const isSuperPrimeType = newStage.type === SUPER_PRIME_STAGE_TYPE;
   const isSSType = isSpecialStageType(newStage.type);
   const supportsEndTime = isTransitStageType(newStage.type);
+  const getLapTimingCountShortLabel = (stageType) => (
+    stageType === SUPER_PRIME_STAGE_TYPE ? t('theRace.finishLinePassesShort') : t('scene3.laps').toLowerCase()
+  );
 
   const getDisplayedStageSchedule = (stage) => {
     if (!stage) return '';
@@ -164,7 +177,12 @@ export default function TheRaceTab() {
       ...prev,
       type,
       endTime: isTransitStageType(type) ? prev.endTime : '',
-      lapRaceTotalTimeMode: isLapRaceStageType(type)
+      numberOfLaps: type === SUPER_PRIME_STAGE_TYPE
+        ? (String(prev.numberOfLaps || '').trim() || '2')
+        : prev.numberOfLaps,
+      lapRaceTotalTimeMode: type === SUPER_PRIME_STAGE_TYPE
+        ? DEFAULT_LAP_RACE_TOTAL_TIME_MODE
+        : isLapRaceStageType(type)
         ? (prev.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE)
         : prev.lapRaceTotalTimeMode
     }));
@@ -175,7 +193,12 @@ export default function TheRaceTab() {
       ...prev,
       type,
       endTime: isTransitStageType(type) ? (prev.endTime || '') : '',
-      lapRaceTotalTimeMode: isLapRaceStageType(type)
+      numberOfLaps: type === SUPER_PRIME_STAGE_TYPE
+        ? (String(prev.numberOfLaps || '').trim() || '2')
+        : prev.numberOfLaps,
+      lapRaceTotalTimeMode: type === SUPER_PRIME_STAGE_TYPE
+        ? DEFAULT_LAP_RACE_TOTAL_TIME_MODE
+        : isLapRaceStageType(type)
         ? (prev.lapRaceTotalTimeMode || DEFAULT_LAP_RACE_TOTAL_TIME_MODE)
         : prev.lapRaceTotalTimeMode
     }) : prev);
@@ -203,7 +226,7 @@ export default function TheRaceTab() {
     const maxTime = Number(stage?.lapRaceMaxTimeMinutes || 0);
 
     if (Number.isFinite(lapCount) && lapCount > 0) {
-      parts.push(`${lapCount} ${t('scene3.laps').toLowerCase()}`);
+      parts.push(`${lapCount} ${getLapTimingCountShortLabel(stage?.type)}`);
     }
 
     if (Number.isFinite(maxTime) && maxTime > 0) {
@@ -421,6 +444,22 @@ export default function TheRaceTab() {
                 </div>
               )}
 
+              {isSuperPrimeType && (
+                <div>
+                  <Label className="text-white">{t('theRace.finishLinePasses')} *</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={newStage.numberOfLaps ?? ''}
+                    onChange={(e) => setNewStage({ ...newStage, numberOfLaps: e.target.value })}
+                    placeholder={t('theRace.placeholder.finishLinePasses')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    inputMode="numeric"
+                  />
+                  <p className="mt-1 text-xs text-zinc-500">{t('theRace.finishLinePassesHint')}</p>
+                </div>
+              )}
+
               <div>
                 <Label className="text-white">{t('theRace.date')}</Label>
                 <Input
@@ -531,7 +570,7 @@ export default function TheRaceTab() {
                       {stage.distance && <span>{stage.distance} km</span>}
                       {getDisplayedStageSchedule(stage) && <span>{getDisplayedStageSchedule(stage)}</span>}
                       {linkedPlacemark && <span>{t('theRace.mapPlacemark')}: {linkedPlacemark.name}</span>}
-                      {isLapRaceStageType(stage.type) && getLapRaceMetaParts(stage).map((part) => (
+                      {isLapTimingStageType(stage.type) && getLapRaceMetaParts(stage).map((part) => (
                         <span key={`${stage.id}-${part}`} className="text-[#FACC15]">{part}</span>
                       ))}
                     </div>
@@ -634,6 +673,21 @@ export default function TheRaceTab() {
                                     inputMode="numeric"
                                   />
                                 </div>
+                              </div>
+                            )}
+                            {editingStage.type === SUPER_PRIME_STAGE_TYPE && (
+                              <div className="space-y-2">
+                                <Label className="text-white">{t('theRace.finishLinePasses')} *</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={editingStage.numberOfLaps ?? ''}
+                                  onChange={(e) => setEditingStage({ ...editingStage, numberOfLaps: e.target.value })}
+                                  placeholder={t('theRace.placeholder.finishLinePasses')}
+                                  className="bg-[#09090B] border-zinc-700 text-white"
+                                  inputMode="numeric"
+                                />
+                                <p className="text-xs text-zinc-500">{t('theRace.finishLinePassesHint')}</p>
                               </div>
                             )}
                             <div>

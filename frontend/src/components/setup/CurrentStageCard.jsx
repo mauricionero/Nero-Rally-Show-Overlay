@@ -7,7 +7,7 @@ import DebugIdText from './DebugIdText.jsx';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import {
   getStageTitle,
-  isLapRaceStageType,
+  isLapTimingStageType,
   SUPER_PRIME_STAGE_TYPE
 } from '../../utils/stageTypes.js';
 import { getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
@@ -45,6 +45,7 @@ export default function CurrentStageCard({ showDebugIds = false }) {
     getLapRaceStageMetaParts({
       stage,
       lapsLabel: t('scene3.laps').toLowerCase(),
+      passesLabel: t('theRace.finishLinePassesShort'),
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
     }).join(' • ')
   );
@@ -73,7 +74,7 @@ export default function CurrentStageCard({ showDebugIds = false }) {
                     <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
                     {getStageTitle(stage)}
                     {showDebugIds && <DebugIdText id={stage.id} />}
-                    {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && ` (${getLapRaceMetaText(stage)})`}
+                    {isLapTimingStageType(stage.type) && getLapRaceMetaText(stage) && ` (${getLapRaceMetaText(stage)})`}
                   </div>
                 </SelectItem>
               );
@@ -85,7 +86,7 @@ export default function CurrentStageCard({ showDebugIds = false }) {
             <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
             LIVE: {getStageTitle(currentStage)}
             {showDebugIds && <DebugIdText id={currentStage.id} className="text-zinc-400" />}
-            {isLapRaceStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
+            {isLapTimingStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
           </p>
         )}
       </CardContent>

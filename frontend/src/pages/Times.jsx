@@ -12,7 +12,7 @@ import { compareStagesBySchedule, formatStageScheduleRange } from '../utils/stag
 import {
   getStageNumberLabel,
   getStageTitle,
-  isLapRaceStageType,
+  isLapTimingStageType,
   isSpecialStageType,
   isTransitStageType,
   SUPER_PRIME_STAGE_TYPE
@@ -141,7 +141,9 @@ export default function Times() {
     : t('times.selectStageToEdit');
   const stageSchedule = headerStage ? getDisplayedStageSchedule(headerStage) : '';
   const stageMeta = headerStage
-    ? (isLapRaceStageType(headerStage.type) ? `${headerStage.numberOfLaps || 0} ${t('scene3.laps').toLowerCase()}` : '')
+    ? (isLapTimingStageType(headerStage.type)
+      ? `${headerStage.numberOfLaps || 0} ${headerStage.type === SUPER_PRIME_STAGE_TYPE ? t('theRace.finishLinePassesShort') : t('scene3.laps').toLowerCase()}`
+      : '')
     : '';
 
   return (

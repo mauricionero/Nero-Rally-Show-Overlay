@@ -10,7 +10,8 @@ import RollingClockInput from '../RollingClockInput.jsx';
 import TimingSourceIndicator from '../TimingSourceIndicator.jsx';
 import { CheckSquare, Square, Clock, Plus, X, TriangleAlert } from 'lucide-react';
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
-import { getLapRaceActualStartTime, getLapRaceVisibleLapCount } from '../../utils/rallyHelpers.js';
+import { getLapRaceVisibleLapCount, getLapTimingStartTime, normalizeLapTimingBaselineClock } from '../../utils/rallyHelpers.js';
+import { SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import PilotStatusBadges from '../PilotStatusBadges.jsx';
 import DebugIdText from './DebugIdText.jsx';
 
@@ -23,7 +24,8 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime, timeDe
 
   const parseTime = (timeStr) => {
     if (!timeStr) return null;
-    const parts = timeStr.split(':');
+    const normalizedTimeStr = normalizeLapTimingBaselineClock(timeStr);
+    const parts = normalizedTimeStr.split(':');
     if (parts.length < 2) return null;
     const hours = parts.length === 3 ? parseInt(parts[0]) : 0;
     const mins = parts.length === 3 ? parseInt(parts[1]) : parseInt(parts[0]);
@@ -52,6 +54,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     getPilotLapTimes,
     sourceFinishTime,
     sourceLapTime,
+    startTimes,
     getStagePilots,
     togglePilotInStage,
     selectAllPilotsInStage,
@@ -65,6 +68,12 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
   } = useRallyTiming();
   const { updateStage } = useRallyMeta();
   const [pendingSosToggle, setPendingSosToggle] = useState(null);
+  const isSuperPrimeStage = stage?.type === SUPER_PRIME_STAGE_TYPE;
+  const timingCountLabel = isSuperPrimeStage ? t('times.pass') : t('times.lap');
+  const addTimingCountLabel = isSuperPrimeStage ? t('times.addPass') : t('times.addLap');
+  const stageStartLabel = isSuperPrimeStage ? t('times.stageStartTime') : t('times.raceStartTime');
+  const selectedPilotsLabel = isSuperPrimeStage ? t('times.pilotsInStage') : t('times.pilotsInRace');
+  const selectPilotsLabel = isSuperPrimeStage ? t('times.selectPilotsForStage') : t('times.selectPilots');
 
   const selectedPilotIds = getStagePilots(stage.id);
   const selectedPilotIdSet = useMemo(() => new Set(selectedPilotIds), [selectedPilotIds]);
@@ -187,6 +196,10 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
       return nextEmptyIndex;
     }
 
+    if (isSuperPrimeStage) {
+      return Math.max(0, visibleLapCount - 1);
+    }
+
     return Math.max(0, pilotLapEntries.length);
   };
 
@@ -194,7 +207,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     <div className="space-y-4">
       {/* Race Start Time */}
       <div className={`flex items-center gap-4 p-3 bg-[#09090B] rounded border border-zinc-700 ${isReadOnly ? 'opacity-80' : ''}`}>
-        <Label className="text-white whitespace-nowrap">{t('times.raceStartTime')}:</Label>
+        <Label className="text-white whitespace-nowrap">{stageStartLabel}:</Label>
         <RollingClockInput
           value={stage.startTime || ''}
           onCommit={(nextValue) => updateStage(stage.id, { startTime: nextValue })}
@@ -249,7 +262,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
       {/* Pilot Selection */}
       <div className={`p-3 bg-[#09090B] rounded border border-zinc-700 ${isReadOnly ? 'opacity-80' : ''}`}>
         <div className="flex items-center justify-between mb-2">
-          <Label className="text-white">{t('times.pilotsInRace')} ({selectedPilotIds.length}/{pilots.length})</Label>
+          <Label className="text-white">{selectedPilotsLabel} ({selectedPilotIds.length}/{pilots.length})</Label>
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -303,7 +316,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
       {/* Lap Times Matrix */}
       {selectedPilots.length === 0 ? (
         <div className="text-center py-8 text-zinc-500">
-          {t('times.selectPilots')}
+          {selectPilotsLabel}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -316,7 +329,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                 {lapsArray.map((lapIndex) => (
                   <th key={lapIndex} className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                     <div className="flex items-center justify-center gap-1">
-                      <span>{t('times.lap')} {lapIndex + 1}</span>
+                      <span>{timingCountLabel} {lapIndex + 1}</span>
                       {lapColumnCanDelete[lapIndex] && !isReadOnly && (
                         <button
                           onClick={() => handleDeleteLap(lapIndex)}
@@ -340,7 +353,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                     <button
                       onClick={handleAddLap}
                       className="inline-flex items-center justify-center h-8 w-8 rounded bg-zinc-800 text-zinc-400 hover:text-[#FF4500] hover:bg-zinc-700 transition-colors"
-                      title={t('times.addLap')}
+                      title={addTimingCountLabel}
                       disabled={isReadOnly}
                     >
                       <Plus className="w-4 h-4" />
@@ -404,8 +417,13 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                           const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
                           const lapTimeSource = sourceLapTime?.[pilot.id]?.[stage.id]?.[lapIndex] || '';
                           const prevLapTime = lapIndex > 0 ? getLapTime(pilot.id, stage.id, lapIndex - 1) : null;
-                          const actualStartTime = getLapRaceActualStartTime(stage);
-                          const lapDuration = calculateLapDuration(lapTime, prevLapTime, actualStartTime, timeDecimals);
+                          const timingStartTime = getLapTimingStartTime({
+                            stage,
+                            pilotId: pilot.id,
+                            pilot,
+                            startTimes
+                          });
+                          const lapDuration = calculateLapDuration(lapTime, prevLapTime, timingStartTime, timeDecimals);
 
                           return (
                             <td key={lapIndex} className="p-2">

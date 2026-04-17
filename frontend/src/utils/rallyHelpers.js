@@ -1,7 +1,7 @@
 import { sortPilotsByDisplayOrder } from './displayOrder.js';
 import { clampTimeDecimals, formatDurationMs, formatDurationSeconds } from './timeFormat.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from './pilotSchedule.js';
-import { isLapRaceStageType, isSpecialStageType, isTransitStageType } from './stageTypes.js';
+import { isLapTimingStageType, isSpecialStageType, isTransitStageType, SUPER_PRIME_STAGE_TYPE } from './stageTypes.js';
 
 // Helper functions for pilot status and timing
 
@@ -288,6 +288,27 @@ export const getLapRaceActualStartTime = (stage) => (
   stage?.realStartTime || ''
 );
 
+export const getLapTimingStartTime = ({
+  stage,
+  pilotId = '',
+  pilot = null,
+  startTimes = {}
+} = {}) => {
+  if (!stage) {
+    return '';
+  }
+
+  if (stage.type === SUPER_PRIME_STAGE_TYPE) {
+    return startTimes?.[pilotId]?.[stage.id]
+      || getPilotScheduledStartTime(stage, pilot)
+      || stage?.startTime
+      || getLapRaceActualStartTime(stage)
+      || '';
+  }
+
+  return getLapRaceActualStartTime(stage);
+};
+
 export const getLapRaceStageClockText = ({
   stage,
   now = new Date(),
@@ -319,18 +340,24 @@ export const getLapRaceVisibleLapCount = (stage) => {
 export const getLapRaceStageMetaParts = ({
   stage,
   lapsLabel = 'laps',
+  passesLabel = 'passes',
   maxTimeLabel = 'Max Time'
 } = {}) => {
-  if (!stage || !isLapRaceStageType(stage.type)) {
+  if (!stage || !isLapTimingStageType(stage.type)) {
     return [];
   }
 
   const parts = [];
   const configuredLapCount = getLapRaceConfiguredLapCount(stage);
   const maxTimeMinutes = Number(stage.lapRaceMaxTimeMinutes || 0);
+  const countLabel = stage.type === SUPER_PRIME_STAGE_TYPE ? passesLabel : lapsLabel;
 
   if (configuredLapCount > 0) {
-    parts.push(`${configuredLapCount} ${lapsLabel}`);
+    parts.push(`${configuredLapCount} ${countLabel}`);
+  }
+
+  if (stage.type === SUPER_PRIME_STAGE_TYPE) {
+    return parts;
   }
 
   if (Number.isFinite(maxTimeMinutes) && maxTimeMinutes > 0) {
@@ -340,9 +367,24 @@ export const getLapRaceStageMetaParts = ({
   return parts;
 };
 
+export const normalizeLapTimingBaselineClock = (value = '') => {
+  const normalizedValue = String(value || '').trim();
+  if (!normalizedValue) {
+    return '';
+  }
+
+  const parts = normalizedValue.split(':');
+  if (parts.length === 2) {
+    return `${normalizedValue}:00`;
+  }
+
+  return normalizedValue;
+};
+
 export const getLapRaceLapDurations = (lapEntries = [], startTime = '') => {
   const safeLapEntries = Array.isArray(lapEntries) ? lapEntries : [];
-  let previousSeconds = Number.isFinite(parseTime(startTime)) ? parseTime(startTime) : null;
+  const normalizedStartTime = normalizeLapTimingBaselineClock(startTime);
+  let previousSeconds = Number.isFinite(parseTime(normalizedStartTime)) ? parseTime(normalizedStartTime) : null;
 
   return safeLapEntries.map((lapTime) => {
     if (!lapTime || !String(lapTime).trim()) {
@@ -398,7 +440,8 @@ export const getLapRaceStoredTotalTimeSeconds = ({
     return null;
   }
 
-  const startSeconds = Number.isFinite(parseTime(startTime)) ? parseTime(startTime) : null;
+  const normalizedStartTime = normalizeLapTimingBaselineClock(startTime);
+  const startSeconds = Number.isFinite(parseTime(normalizedStartTime)) ? parseTime(normalizedStartTime) : null;
   const lastLapClock = safeLapEntries[lastFilledLapIndex] || '';
   const lastLapSeconds = Number.isFinite(parseTime(lastLapClock)) ? parseTime(lastLapClock) : null;
 
@@ -427,7 +470,12 @@ export const getLapRacePilotStageInfo = ({
     || getPilotScheduledStartTime(safeStage, pilot)
     || safeStage.startTime
     || '';
-  const startTime = getLapRaceActualStartTime(safeStage);
+  const startTime = getLapTimingStartTime({
+    stage: safeStage,
+    pilotId,
+    pilot,
+    startTimes
+  });
   const finishTime = times?.[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
   const pilotLaps = Array.isArray(lapTimes?.[pilotId]?.[stageId]) ? lapTimes[pilotId][stageId] : [];
@@ -525,7 +573,7 @@ export const getPilotStageTimingInfo = ({
     };
   }
 
-  if (isLapRaceStageType(stage.type)) {
+  if (isLapTimingStageType(stage.type)) {
     const lapInfo = getLapRacePilotStageInfo({
       pilotId,
       pilot,
@@ -644,7 +692,7 @@ export const buildLapRaceLeaderboard = ({
   timeDecimals = 3,
   fallbackOrderByPilotId = new Map()
 } = {}) => {
-  if (!stage?.id || !isLapRaceStageType(stage.type)) {
+  if (!stage?.id || !isLapTimingStageType(stage.type)) {
     return [];
   }
 

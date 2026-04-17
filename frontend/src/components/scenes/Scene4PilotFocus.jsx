@@ -26,7 +26,7 @@ import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import {
   getStageNumberLabel,
   getStageTitle,
-  isLapRaceStageType,
+  isLapTimingStageType,
   isSpecialStageType,
   SUPER_PRIME_STAGE_TYPE
 } from '../../utils/stageTypes.js';
@@ -191,7 +191,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const focusPilot = pilots.find(p => p.id === selectedPilotId);
   const selectedStage = stages.find(s => s.id === selectedStageId);
   const focusPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, focusPilot?.id);
-  const isLapRace = isLapRaceStageType(selectedStage?.type);
+  const isLapRace = isLapTimingStageType(selectedStage?.type);
+  const isSuperPrimeStage = selectedStage?.type === SUPER_PRIME_STAGE_TYPE;
+  const timingCountLabel = isSuperPrimeStage ? t('times.pass') : t('times.lap');
+  const timingCountsTitle = isSuperPrimeStage ? t('theRace.finishLinePasses') : t('scene4.lapTimes');
+  const timingAccentClass = isSuperPrimeStage ? 'text-orange-400' : 'text-[#FACC15]';
+  const timingAccentBorderClass = isSuperPrimeStage ? 'border-orange-400/30' : 'border-[#FACC15]/30';
   const hasStageAlert = focusPilot && selectedStageId
     ? isStageAlert(focusPilot.id, selectedStageId)
     : false;
@@ -209,7 +214,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     if (!focusPilot) return [];
     
     return sortedStages.map((stage) => {
-      const isLap = isLapRaceStageType(stage.type);
+      const isLap = isLapTimingStageType(stage.type);
       const isSS = isSpecialStageType(stage.type);
       
       if (isLap) {
@@ -226,10 +231,11 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           startLabel: t('status.start'),
           retiredLabel: t('status.retired')
         });
+        const stageTimingCountLabel = stage.type === SUPER_PRIME_STAGE_TYPE ? t('times.pass') : t('times.lap');
         const displayTime = lapStageInfo.isFinished
           ? `${lapStageInfo.totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${lapStageInfo.totalTimeText || ''}`
           : (lapStageInfo.completedLaps > 0
-            ? `${t('times.lap')} ${lapStageInfo.lapSummaryText}${lapStageInfo.totalTimeText ? ` • ${lapStageInfo.totalTimeText}` : ''}`
+            ? `${stageTimingCountLabel} ${lapStageInfo.lapSummaryText}${lapStageInfo.totalTimeText ? ` • ${lapStageInfo.totalTimeText}` : ''}`
             : (lapStageInfo.displayText || lapStageInfo.timeInfo?.text || '-'));
         
         return {
@@ -722,10 +728,10 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           <div className="w-1/3 bg-black/95 backdrop-blur-sm p-6 overflow-y-auto min-h-0">
             {/* Selected Stage Detail (for Lap Race, show lap breakdown) */}
             {selectedStageData && selectedStageData.isLapRace && (
-              <div className="mb-6 p-4 bg-white/5 rounded border border-[#FACC15]/30">
-                <h3 className="text-lg font-bold uppercase text-[#FACC15] mb-3 flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  <RotateCcw className="w-5 h-5" />
-                  {selectedStage?.name} - {t('scene4.lapTimes')}
+              <div className={`mb-6 p-4 bg-white/5 rounded border ${timingAccentBorderClass}`}>
+                <h3 className={`text-lg font-bold uppercase mb-3 flex items-center gap-2 ${timingAccentClass}`} style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {isSuperPrimeStage ? <Flag className="w-5 h-5" /> : <RotateCcw className="w-5 h-5" />}
+                  {selectedStage?.name} - {timingCountsTitle}
                 </h3>
                 <div className="space-y-2">
                   {Array.from({ length: selectedStageData.numberOfLaps }, (_, i) => {
@@ -737,7 +743,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                       <div key={i} className={`flex justify-between items-center p-2 rounded ${
                         isCompleted ? 'bg-[#22C55E]/10 border border-[#22C55E]/30' : 'bg-zinc-800/50'
                       }`}>
-                        <span className="text-zinc-400 text-sm">{t('times.lap')} {i + 1}</span>
+                        <span className="text-zinc-400 text-sm">{timingCountLabel} {i + 1}</span>
                         <div className="text-right">
                           {isCompleted ? (
                             <span className="text-[#22C55E] font-mono text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>

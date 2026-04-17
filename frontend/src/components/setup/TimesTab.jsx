@@ -23,7 +23,7 @@ import LapRaceStageCard from './LapRaceStageCard.jsx';
 import RollingClockInput from '../RollingClockInput.jsx';
 import {
   getStageNumberLabel,
-  isLapRaceStageType,
+  isLapTimingStageType,
   isSpecialStageType,
   isTransitStageType,
   SUPER_PRIME_STAGE_TYPE
@@ -1430,13 +1430,14 @@ export default function TimesTab({
     getLapRaceStageMetaParts({
       stage,
       lapsLabel: t('scene3.laps').toLowerCase(),
+      passesLabel: t('theRace.finishLinePassesShort'),
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
     }).join(' • ')
   ), [t]);
 
   const sortedStages = useMemo(() => {
     const visibleStages = showCompetitiveStagesOnly
-      ? stages.filter((stage) => isSpecialStageType(stage.type) || isLapRaceStageType(stage.type))
+      ? stages.filter((stage) => isSpecialStageType(stage.type) || isLapTimingStageType(stage.type))
       : stages;
 
     return [...visibleStages].sort(compareStagesBySchedule);
@@ -1532,11 +1533,11 @@ export default function TimesTab({
                     {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
                     <span className="truncate">{stage.name}</span>
                     {showDebugIds && <DebugIdText id={stage.id} />}
-                    {isLapRaceStageType(stage.type) && getLapRaceMetaText(stage) && (
+                    {isLapTimingStageType(stage.type) && getLapRaceMetaText(stage) && (
                       <span className="text-sm text-zinc-400 font-normal">({getLapRaceMetaText(stage)})</span>
                     )}
                     </CardTitle>
-                    {!isLapRaceStageType(stage.type) && getDisplayedStageSchedule(stage) && (
+                    {!isLapTimingStageType(stage.type) && getDisplayedStageSchedule(stage) && (
                       <CardDescription className="text-zinc-400 mt-1">
                         {t('times.scheduled')}: {getDisplayedStageSchedule(stage)}
                       </CardDescription>
@@ -1548,7 +1549,7 @@ export default function TimesTab({
             </button>
             {isOpen && (
               <CardContent className={compactStagePadding ? 'p-2' : undefined}>
-                {isSpecialStageType(stage.type) && (
+                {isSpecialStageType(stage.type) && !isLapTimingStageType(stage.type) && (
                   <TimedStageCard
                     stage={stage}
                     sortedPilots={sortedPilots}
@@ -1573,7 +1574,7 @@ export default function TimesTab({
                     showDebugIds={showDebugIds}
                   />
                 )}
-                {isLapRaceStageType(stage.type) && (
+                {isLapTimingStageType(stage.type) && (
                   <LapRaceStageCard
                     stage={stage}
                     pilots={pilots}

@@ -14,7 +14,7 @@ import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../uti
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
-import { getStageNumberLabel, isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
+import { getStageNumberLabel, isLapTimingStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
@@ -81,12 +81,17 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const resizeStateRef = useRef(null);
   
   const currentStage = stages.find(s => s.id === currentStageId);
-  const isLapRace = isLapRaceStageType(currentStage?.type);
-  const isSSStage = isSpecialStageType(currentStage?.type);
+  const isLapRace = isLapTimingStageType(currentStage?.type);
+  const isSuperPrimeStage = currentStage?.type === SUPER_PRIME_STAGE_TYPE;
+  const isSSStage = isSpecialStageType(currentStage?.type) && !isLapRace;
+  const lapTimingAccentClass = isSuperPrimeStage ? 'text-orange-400' : 'text-[#FACC15]';
+  const lapTimingCountLabel = isSuperPrimeStage ? t('times.pass') : t('times.lap');
+  const lapTimingCountsShortLabel = isSuperPrimeStage ? t('theRace.finishLinePassesShort') : t('scene3.laps').toLowerCase();
   const currentStageLapMeta = useMemo(() => (
     getLapRaceStageMetaParts({
       stage: currentStage,
       lapsLabel: t('scene3.laps').toLowerCase(),
+      passesLabel: t('theRace.finishLinePassesShort'),
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
     }).join(' • ')
   ), [currentStage, t]);
@@ -427,7 +432,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     const numberColorClass = (() => {
       if (numberStatusKey === 'retired') return 'text-red-400';
       if (numberStatusKey === 'finished') return 'text-[#22C55E]';
-      if (numberStatusKey === 'racing') return isLapRace ? 'text-[#FACC15]' : 'text-[#FF8C00]';
+      if (numberStatusKey === 'racing') return isLapRace ? lapTimingAccentClass : 'text-[#FF8C00]';
       if (numberStatusKey === 'pre_start') return 'text-[#FF8C00]';
       return 'text-zinc-500';
     })();
@@ -436,7 +441,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       if (isFinished) {
         timeColor = 'text-[#22C55E]';
       } else if (isRacing) {
-        timeColor = 'text-[#FACC15]';
+        timeColor = lapTimingAccentClass;
       }
     } else {
       if (rowStatusKey === 'retired') {
@@ -458,7 +463,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
       if (isLapRace) {
         const lapDiff = (leader.completedLaps || 0) - (completedLaps || 0);
         if (lapDiff > 0) {
-          gap = `+${lapDiff} ${t('scene3.laps').toLowerCase()}`;
+          gap = `+${lapDiff} ${lapTimingCountsShortLabel}`;
         } else {
           const leaderTime = leader.totalTimeMs;
           const pilotTime = totalTimeMs;
@@ -547,8 +552,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                   : isFinished
                     ? `${totalTimeMode === 'bestLap' ? `${t('times.bestLapShort')} • ` : ''}${totalTimeText || (totalTimeMs ? formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' }) : '')}`
                     : isRacing
-                      ? `${completedLaps > 0 ? `${t('times.lap')} ${data.totalLaps > 0 ? `${completedLaps}/${data.totalLaps}` : completedLaps}` : ''}${totalTimeMs ? `${completedLaps > 0 ? ' • ' : ''}${formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' })}` : ''}`
-                    : ''}
+                      ? `${completedLaps > 0 ? `${lapTimingCountLabel} ${data.totalLaps > 0 ? `${completedLaps}/${data.totalLaps}` : completedLaps}` : ''}${totalTimeMs ? `${completedLaps > 0 ? ' • ' : ''}${formatDurationMs(totalTimeMs, timeDecimals, { fallback: '' })}` : ''}`
+                      : ''}
               </span>
             ) : showGap ? (
               <span className={`font-mono text-sm ${displayValueClass}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
@@ -671,7 +676,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           )}
           <div className="flex items-center gap-2 relative z-10">
             {isLapRace ? (
-              <RotateCcw className="w-5 h-5 text-[#FACC15]" />
+              isSuperPrimeStage
+                ? <Flag className="w-5 h-5 text-orange-400" />
+                : <RotateCcw className="w-5 h-5 text-[#FACC15]" />
             ) : (
               <Flag className="w-5 h-5 text-[#FF4500]" />
             )}
@@ -687,7 +694,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                 {isLapRace && currentStageLapMeta && ` (${currentStageLapMeta})`}
               </span>
               {stageHeaderTime && (
-                <span className={`text-xs font-bold font-mono ${isLapRace ? 'text-[#FACC15]' : 'text-zinc-300'}`}>
+                <span className={`text-xs font-bold font-mono ${isLapRace ? lapTimingAccentClass : 'text-zinc-300'}`}>
                   {stageHeaderTime}
                 </span>
               )}
@@ -845,8 +852,8 @@ export default function Scene2TimingTower({ hideStreams = false }) {
                     </p>
                   )}
                   {isLapRace && selectedPilotData && (
-                    <p className="text-[#FACC15] text-lg font-mono">
-                      {t('times.lap')} {selectedPilotData.totalLaps > 0 ? `${selectedPilotData.completedLaps || 0}/${selectedPilotData.totalLaps}` : (selectedPilotData.completedLaps || 0)}
+                    <p className={`${lapTimingAccentClass} text-lg font-mono`}>
+                      {lapTimingCountLabel} {selectedPilotData.totalLaps > 0 ? `${selectedPilotData.completedLaps || 0}/${selectedPilotData.totalLaps}` : (selectedPilotData.completedLaps || 0)}
                     </p>
                   )}
                 </div>
