@@ -1,15 +1,58 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Cpu } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { getLedLoadColor } from '../utils/ledLoadColors.js';
 
-const getTargetFps = () => {
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const getInitialTargetFps = () => {
   const screenRate = Number(globalThis?.screen?.frameRate || 0);
   if (Number.isFinite(screenRate) && screenRate >= 30 && screenRate <= 240) {
     return Math.round(screenRate);
   }
   return 60;
 };
+
+const detectRefreshRate = async () => new Promise((resolve) => {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    resolve(60);
+    return;
+  }
+
+  const frameSamples = [];
+  let lastTime = null;
+  let sampleCount = 0;
+  const sampleLimit = 70;
+
+  const onFrame = (time) => {
+    if (lastTime !== null) {
+      const delta = time - lastTime;
+      if (delta > 0 && delta < 100) {
+        frameSamples.push(delta);
+      }
+    }
+    lastTime = time;
+    sampleCount += 1;
+
+    if (sampleCount >= sampleLimit) {
+      if (frameSamples.length < 10) {
+        resolve(60);
+        return;
+      }
+
+      const sorted = [...frameSamples].sort((left, right) => left - right);
+      const medianDelta = sorted[Math.floor(sorted.length / 2)];
+      const measuredFps = 1000 / medianDelta;
+      const normalizedFps = clamp(Math.round(measuredFps / 5) * 5, 50, 240);
+      resolve(normalizedFps);
+      return;
+    }
+
+    window.requestAnimationFrame(onFrame);
+  };
+
+  window.requestAnimationFrame(onFrame);
+});
 
 const getFpsLevel = (fps, targetFps) => {
   const safeTarget = Math.max(30, Number(targetFps) || 60);
@@ -88,7 +131,22 @@ const useFpsSample = () => {
 
 export default function PerformanceLed({ className, icon: Icon = Cpu, iconClassName = '' }) {
   const fps = useFpsSample();
-  const targetFps = useMemo(() => getTargetFps(), []);
+  const [targetFps, setTargetFps] = useState(() => getInitialTargetFps());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    detectRefreshRate().then((detected) => {
+      if (!cancelled && Number.isFinite(detected)) {
+        setTargetFps(detected);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const fpsLevel = getFpsLevel(fps, targetFps);
   const color = getLedLoadColor(fpsLevel);
   const containerClassName = className || 'relative w-3 h-3 rounded-full border border-zinc-700 flex items-center justify-center';

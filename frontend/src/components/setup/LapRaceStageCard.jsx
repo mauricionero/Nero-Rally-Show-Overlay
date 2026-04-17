@@ -8,9 +8,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TimeInput } from '../TimeInput.jsx';
 import RollingClockInput from '../RollingClockInput.jsx';
 import TimingSourceIndicator from '../TimingSourceIndicator.jsx';
+import StatusPill from '../StatusPill.jsx';
 import { CheckSquare, Square, Clock, Plus, X, TriangleAlert } from 'lucide-react';
 import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
-import { getLapRaceVisibleLapCount, getLapTimingStartTime, normalizeLapTimingBaselineClock } from '../../utils/rallyHelpers.js';
+import { getLapRaceVisibleLapCount, getLapTimingStartTime, normalizeLapTimingBaselineClock, parseClockTimeToSeconds } from '../../utils/rallyHelpers.js';
 import { SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import PilotStatusBadges from '../PilotStatusBadges.jsx';
 import DebugIdText from './DebugIdText.jsx';
@@ -45,16 +46,20 @@ const calculateLapDuration = (currentLapTime, previousLapTime, startTime, timeDe
   return formatDurationMs(diffMs, timeDecimals, { fallback: '' });
 };
 
+const isValidRealClockTime = (value) => /^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value);
+
 export default function LapRaceStageCard({ stage, pilots, sortedPilots, categoryMap, categoryOrderById, isReadOnly = false, showDebugIds = false }) {
   const { t } = useTranslation();
   const {
     setLapTime,
+    setRealStartTime,
     removeLapTimeColumn = null,
     getLapTime,
     getPilotLapTimes,
     sourceFinishTime,
     sourceLapTime,
     startTimes,
+    realStartTimes,
     getStagePilots,
     togglePilotInStage,
     selectAllPilotsInStage,
@@ -176,7 +181,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
   };
 
   const handleDeleteLap = (lapIndex) => {
-    if (isReadOnly || typeof removeLapTimeColumn !== 'function') {
+    if (isReadOnly || isSuperPrimeStage || typeof removeLapTimeColumn !== 'function') {
       return;
     }
 
@@ -185,6 +190,38 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
     updateStage(stage.id, {
       numberOfLaps: Math.max(1, currentLapCount - 1)
     });
+  };
+
+  const commitRealStartTimeChange = (pilotId, value) => {
+    if (isReadOnly) {
+      return;
+    }
+
+    const nextRealStartTime = value || '';
+    const previousStoredRealStartTime = realStartTimes?.[pilotId]?.[stage.id] || '';
+
+    if (nextRealStartTime === previousStoredRealStartTime) {
+      return;
+    }
+
+    setRealStartTime(
+      pilotId,
+      stage.id,
+      nextRealStartTime === '' || isValidRealClockTime(nextRealStartTime)
+        ? nextRealStartTime
+        : previousStoredRealStartTime
+    );
+  };
+
+  const getPilotIsJumpStart = (pilot) => {
+    const idealSeconds = parseClockTimeToSeconds(stage?.startTime || '');
+    const realSeconds = parseClockTimeToSeconds(realStartTimes?.[pilot.id]?.[stage.id] || '');
+
+    if (!Number.isFinite(idealSeconds) || !Number.isFinite(realSeconds)) {
+      return false;
+    }
+
+    return realSeconds < idealSeconds;
   };
 
   const getNextUnfilledLapIndex = (pilotId) => {
@@ -216,25 +253,29 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
           className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
           readOnly={isReadOnly}
         />
-        <Label className="text-white whitespace-nowrap">{t('times.realStartTime')}:</Label>
-        <RollingClockInput
-          value={stage.realStartTime || ''}
-          onCommit={(nextValue) => updateStage(stage.id, { realStartTime: nextValue })}
-          placeholder={getTimePlaceholder('clock', timeDecimals)}
-          decimals={timeDecimals}
-          className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
-          readOnly={isReadOnly}
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => updateStage(stage.id, { realStartTime: getCurrentTimeString(timeDecimals) })}
-          className="border-zinc-700 text-white"
-          disabled={isReadOnly}
-        >
-          <Clock className="w-3 h-3 mr-1" />
-          {t('times.now')}
-        </Button>
+        {!isSuperPrimeStage && (
+          <>
+            <Label className="text-white whitespace-nowrap">{t('times.realStartTime')}:</Label>
+            <RollingClockInput
+              value={stage.realStartTime || ''}
+              onCommit={(nextValue) => updateStage(stage.id, { realStartTime: nextValue })}
+              placeholder={getTimePlaceholder('clock', timeDecimals)}
+              decimals={timeDecimals}
+              className="bg-[#18181B] border-zinc-700 text-center font-mono text-white h-8 w-40"
+              readOnly={isReadOnly}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => updateStage(stage.id, { realStartTime: getCurrentTimeString(timeDecimals) })}
+              className="border-zinc-700 text-white"
+              disabled={isReadOnly}
+            >
+              <Clock className="w-3 h-3 mr-1" />
+              {t('times.now')}
+            </Button>
+          </>
+        )}
       </div>
 
       <AlertDialog open={Boolean(pendingSosToggle)} onOpenChange={(open) => { if (!open) setPendingSosToggle(null); }}>
@@ -326,11 +367,17 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                 <th className="text-left text-white uppercase font-bold p-2 sticky left-0 bg-[#18181B] z-10" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {t('scene3.pilot')}
                 </th>
+                {isSuperPrimeStage && (
+                  <th className="text-center text-white uppercase font-bold p-2 min-w-[180px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    <div>{t('times.realStartTime')}</div>
+                    <div className="text-xs text-zinc-400 font-normal">&nbsp;</div>
+                  </th>
+                )}
                 {lapsArray.map((lapIndex) => (
                   <th key={lapIndex} className="text-center text-white uppercase font-bold p-2 min-w-[140px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                     <div className="flex items-center justify-center gap-1">
                       <span>{timingCountLabel} {lapIndex + 1}</span>
-                      {lapColumnCanDelete[lapIndex] && !isReadOnly && (
+                      {lapColumnCanDelete[lapIndex] && !isReadOnly && !isSuperPrimeStage && (
                         <button
                           onClick={() => handleDeleteLap(lapIndex)}
                           className="inline-flex items-center justify-center h-5 w-5 rounded text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -380,7 +427,7 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
               {categoryBuckets.map((bucket) => (
                 <React.Fragment key={bucket.id}>
                   <tr className="bg-zinc-900/60">
-                    <td colSpan={lapsArray.length + 2 + (hasVariableLapCount ? 1 : 0)} className="p-2 border-b border-zinc-800">
+                    <td colSpan={lapsArray.length + 3 + (hasVariableLapCount ? 1 : 0) + (isSuperPrimeStage ? 1 : 0)} className="p-2 border-b border-zinc-800">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bucket.color }} />
                         <span className="text-zinc-300 text-xs uppercase font-semibold">
@@ -394,6 +441,8 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                   .map((pilot) => {
                     const alert = !!stageAlerts?.[pilot.id]?.[stage.id];
                     const sos = Number(stageSos?.[pilot.id]?.[stage.id] || 0) > 0;
+                    const realStartTime = realStartTimes?.[pilot.id]?.[stage.id] || '';
+                    const isJumpStart = getPilotIsJumpStart(pilot);
 
                     return (
                     <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
@@ -409,10 +458,52 @@ export default function LapRaceStageCard({ stage, pilots, sortedPilots, category
                               {pilot.name}
                             </span>
                             {showDebugIds && <DebugIdText id={pilot.id} />}
+                            {isJumpStart && (
+                              <StatusPill
+                                variant="jumpStart"
+                                text={t('status.jumpStart')}
+                                className="text-xs"
+                                tooltipTitle={t('times.jumpStart')}
+                                tooltipText={t('times.jumpStartTooltip')}
+                              />
+                            )}
                             <PilotStatusBadges pilotId={pilot.id} stageId={stage.id} compact />
                           </div>
                         </div>
+                      </td>
+                      {isSuperPrimeStage && (
+                        <td className="p-2">
+                          <div className="flex items-center gap-1">
+                            <RollingClockInput
+                              value={realStartTime}
+                              onCommit={(nextValue) => commitRealStartTimeChange(pilot.id, nextValue)}
+                              showSeconds
+                              decimals={timeDecimals}
+                              placeholder={getTimePlaceholder('clock', timeDecimals)}
+                              className={`bg-[#09090B] border-zinc-700 text-center font-mono text-xs h-7 flex-1 ${realStartTime ? 'text-white' : 'text-zinc-400'}`}
+                              readOnly={isReadOnly}
+                            />
+                            <button
+                              onClick={() => commitRealStartTimeChange(pilot.id, getCurrentTimeString(timeDecimals))}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded bg-zinc-800 text-zinc-400 hover:text-[#FF4500] hover:bg-zinc-700 transition-colors"
+                              title={t('times.now')}
+                              disabled={isReadOnly}
+                              type="button"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => commitRealStartTimeChange(pilot.id, '')}
+                              className="text-zinc-500 hover:text-red-500 transition-colors p-0.5"
+                              title={t('common.clear')}
+                              disabled={isReadOnly}
+                              type="button"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
                         </td>
+                      )}
                         {lapsArray.map((lapIndex) => {
                           const lapTime = getLapTime(pilot.id, stage.id, lapIndex);
                           const lapTimeSource = sourceLapTime?.[pilot.id]?.[stage.id]?.[lapIndex] || '';

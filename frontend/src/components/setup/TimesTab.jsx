@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
+import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Label } from '../ui/label';
@@ -17,8 +18,8 @@ import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/s
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
 import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
-import { getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
-import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw, Check, CheckCheck, CircleX } from 'lucide-react';
+import { getLapRaceVisibleLapCount, getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
+import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw, Check, CheckCheck, CircleX, Download } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
 import RollingClockInput from '../RollingClockInput.jsx';
 import {
@@ -46,6 +47,24 @@ const getDisplayedStageSchedule = (stage) => {
 
 const isValidClockTime = (value) => /^\d{2}:\d{2}(?::\d{2})?$/.test(value);
 const isValidRealClockTime = (value) => /^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value);
+
+const escapeCsvValue = (value) => {
+  const stringValue = String(value ?? '');
+  if (!/[",\n]/.test(stringValue)) {
+    return stringValue;
+  }
+
+  return `"${stringValue.replace(/"/g, '""')}"`;
+};
+
+const normalizeCsvFileNamePart = (value) => (
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'stage'
+);
 
 const SosDeliveryIndicator = ({ status, tooltipText }) => {
   if (!status) {
@@ -1414,7 +1433,15 @@ export default function TimesTab({
 }) {
   const { t } = useTranslation();
   const { pilots, stages, categories, currentStageId } = useRallyMeta();
-  const { stageSos } = useRallyTiming();
+  const {
+    stageSos,
+    times,
+    arrivalTimes,
+    startTimes,
+    realStartTimes,
+    lapTimes,
+    getStagePilots
+  } = useRallyTiming();
   const [showCompetitiveStagesOnly, setShowCompetitiveStagesOnly] = useState(true);
   const [showTimesAsCards, setShowTimesAsCards] = useState(false);
   const categoryOrderById = useMemo(() => (
@@ -1434,6 +1461,118 @@ export default function TimesTab({
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
     }).join(' • ')
   ), [t]);
+
+  const handleExportStageCsv = useCallback((stage) => {
+    if (!stage?.id) {
+      return;
+    }
+
+    const selectedPilotIds = new Set(getStagePilots(stage.id));
+    const stagePilots = sortedPilots.filter((pilot) => selectedPilotIds.has(pilot.id));
+    const stageStartTime = stage.startTime || '';
+    const isLapStage = isLapTimingStageType(stage.type);
+    const isTransitStage = isTransitStageType(stage.type);
+    const lapCount = isLapStage
+      ? Math.max(
+          getLapRaceVisibleLapCount(stage),
+          stagePilots.reduce((maxCount, pilot) => Math.max(
+            maxCount,
+            Array.isArray(lapTimes?.[pilot.id]?.[stage.id]) ? lapTimes[pilot.id][stage.id].length : 0
+          ), 0),
+          1
+        )
+      : 0;
+    const countLabel = stage.type === SUPER_PRIME_STAGE_TYPE ? t('times.pass') : t('times.lap');
+
+    const headers = [
+      'Pilot',
+      'Car Number',
+      'Start Order',
+      'Category',
+      'Stage Start Time',
+      'Pilot Start Time'
+    ];
+
+    if (isTransitStage) {
+      headers.push('End Time');
+    } else {
+      headers.push('Real Start Time', 'Jump Start');
+
+      if (isLapStage) {
+        for (let index = 0; index < lapCount; index += 1) {
+          headers.push(`${countLabel} ${index + 1}`);
+        }
+      } else {
+        headers.push('Arrival Time');
+      }
+
+      headers.push('Total Time');
+    }
+
+    const rows = stagePilots.map((pilot) => {
+      const category = categories.find((entry) => entry.id === pilot.categoryId);
+      const pilotStartTime = startTimes?.[pilot.id]?.[stage.id]
+        || getPilotScheduledStartTime(stage, pilot)
+        || stageStartTime
+        || '';
+      const realStartTime = realStartTimes?.[pilot.id]?.[stage.id] || '';
+      const pilotStartSeconds = parseClockTimeToSeconds(pilotStartTime);
+      const realStartSeconds = parseClockTimeToSeconds(realStartTime);
+      const jumpStart = Number.isFinite(pilotStartSeconds)
+        && Number.isFinite(realStartSeconds)
+        && realStartSeconds < pilotStartSeconds
+        ? 'YES'
+        : 'NO';
+      const row = [
+        pilot.name || '',
+        pilot.carNumber || '',
+        pilot.startOrder ?? '',
+        category?.name || '',
+        stageStartTime,
+        pilotStartTime
+      ];
+
+      if (isTransitStage) {
+        row.push(getPilotScheduledEndTime(stage, pilot) || '');
+        return row;
+      }
+
+      row.push(realStartTime, jumpStart);
+
+      if (isLapStage) {
+        const pilotLaps = Array.isArray(lapTimes?.[pilot.id]?.[stage.id]) ? lapTimes[pilot.id][stage.id] : [];
+        for (let index = 0; index < lapCount; index += 1) {
+          row.push(pilotLaps[index] || '');
+        }
+      } else {
+        row.push(arrivalTimes?.[pilot.id]?.[stage.id] || '');
+      }
+
+      row.push(times?.[pilot.id]?.[stage.id] || '');
+      return row;
+    });
+
+    const content = [
+      headers.map(escapeCsvValue).join(','),
+      ...rows.map((row) => row.map(escapeCsvValue).join(','))
+    ].join('\n');
+
+    const filenameParts = [
+      'rally-stage',
+      getStageNumberLabel(stage) || stage.id || 'stage',
+      stage.name || ''
+    ].filter(Boolean).map(normalizeCsvFileNamePart);
+    const filename = `${filenameParts.join('-')}.csv`;
+
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [arrivalTimes, categories, getStagePilots, lapTimes, realStartTimes, sortedPilots, stageSos, startTimes, t, times]);
 
   const sortedStages = useMemo(() => {
     const visibleStages = showCompetitiveStagesOnly
@@ -1515,38 +1654,56 @@ export default function TimesTab({
         
         return (
           <Card key={stage.id} className={stageCardClassName}>
-            <button
-              type="button"
-              onClick={() => handleStageHeaderSelect(stage.id)}
-              className="w-full text-left"
-            >
-              <CardHeader className={`cursor-pointer transition-colors ${stageHasSos ? 'bg-red-500/10 border-b border-red-500/30' : ''}`}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      <Icon className="w-5 h-5 flex-shrink-0" />
-                      {activeStageId === stage.id ? (
-                        <Unlock className="w-4 h-4 text-[#22C55E]" />
-                      ) : (
-                        <Lock className="w-4 h-4 text-zinc-500" />
-                      )}
+            <CardHeader className={`transition-colors ${stageHasSos ? 'bg-red-500/10 border-b border-red-500/30' : ''}`}>
+              <div className="flex items-start justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => handleStageHeaderSelect(stage.id)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    {activeStageId === stage.id ? (
+                      <Unlock className="w-4 h-4 text-[#22C55E]" />
+                    ) : (
+                      <Lock className="w-4 h-4 text-zinc-500" />
+                    )}
                     {isSpecialStageType(stage.type) && stage.ssNumber && <span className="text-[#FF4500]">{getStageNumberLabel(stage)}</span>}
                     <span className="truncate">{stage.name}</span>
                     {showDebugIds && <DebugIdText id={stage.id} />}
                     {isLapTimingStageType(stage.type) && getLapRaceMetaText(stage) && (
                       <span className="text-sm text-zinc-400 font-normal">({getLapRaceMetaText(stage)})</span>
                     )}
-                    </CardTitle>
-                    {!isLapTimingStageType(stage.type) && getDisplayedStageSchedule(stage) && (
-                      <CardDescription className="text-zinc-400 mt-1">
-                        {t('times.scheduled')}: {getDisplayedStageSchedule(stage)}
-                      </CardDescription>
-                    )}
-                  </div>
-                  <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </CardTitle>
+                  {!isLapTimingStageType(stage.type) && getDisplayedStageSchedule(stage) && (
+                    <CardDescription className="text-zinc-400 mt-1">
+                      {t('times.scheduled')}: {getDisplayedStageSchedule(stage)}
+                    </CardDescription>
+                  )}
+                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleExportStageCsv(stage)}
+                    className="h-8 border-zinc-700 bg-[#09090B] px-2 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                    title={`${stage.name} CSV`}
+                  >
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    CSV
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => handleStageHeaderSelect(stage.id)}
+                    className="inline-flex items-center justify-center"
+                    aria-label={isOpen ? 'Collapse stage' : 'Expand stage'}
+                  >
+                    <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
                 </div>
-              </CardHeader>
-            </button>
+              </div>
+            </CardHeader>
             {isOpen && (
               <CardContent className={compactStagePadding ? 'p-2' : undefined}>
                 {isSpecialStageType(stage.type) && !isLapTimingStageType(stage.type) && (
