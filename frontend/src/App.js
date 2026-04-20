@@ -5,6 +5,7 @@ import { TranslationProvider } from './contexts/TranslationContext.jsx';
 import Setup from './pages/Setup.jsx';
 import Overlay from './pages/Overlay.jsx';
 import Times from './pages/Times.jsx';
+import PilotTelemetry from './pages/PilotTelemetry.jsx';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
@@ -42,6 +43,7 @@ function App() {
             <Route path="/" element={<Setup />} />
             <Route path="/overlay" element={<Overlay />} />
             <Route path="/times" element={<Times />} />
+            <Route path="/pilot-telemetry" element={<PilotTelemetry />} />
           </Routes>
           <Toaster position="top-right" />
         </BrowserRouter>

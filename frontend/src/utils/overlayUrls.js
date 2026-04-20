@@ -15,3 +15,21 @@ export const getLocalTimesUrl = () => {
 export const getWebSocketTimesUrl = (channelKey) => {
   return `${getLocalTimesUrl()}?ws=${encodeURIComponent(channelKey)}`;
 };
+
+export const getLocalPilotTelemetryUrl = () => {
+  return `${window.location.origin}${getBasePath()}/pilot-telemetry`;
+};
+
+export const getWebSocketPilotTelemetryUrl = (channelKey, pilotId = '') => {
+  const url = new URL(getLocalPilotTelemetryUrl());
+
+  if (channelKey) {
+    url.searchParams.set('ws', channelKey);
+  }
+
+  if (pilotId) {
+    url.searchParams.set('pilotId', pilotId);
+  }
+
+  return url.toString();
+};

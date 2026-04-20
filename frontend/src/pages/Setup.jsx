@@ -287,7 +287,7 @@ export default function Setup() {
 
           {activeTab === 'pilots' && (
             <TabsContent value="pilots">
-              <PilotsTab hideStreams={hideStreams} />
+              <PilotsTab hideStreams={hideStreams} wsChannelKey={wsChannelKey} />
             </TabsContent>
           )}
 

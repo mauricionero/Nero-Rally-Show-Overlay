@@ -53,6 +53,7 @@ A broadcast-ready rally overlay system inspired by WRC TV graphics. This is a 10
    - Setup: `http://localhost:3003/`
    - Overlay: `http://localhost:3003/overlay`
    - Times: `http://localhost:3003/times`
+   - Pilot Telemetry: `http://localhost:3003/pilot-telemetry`
 
 ## Ably WebSocket Setup
 
@@ -66,6 +67,9 @@ The frontend uses Ably directly in the browser. You only need to provide an Ably
 Notes:
 - The key is read in `frontend/src/utils/websocketProvider.js`.
 - If the key is missing, WebSocket mode will fail to connect.
+- The pilot telemetry page is `/pilot-telemetry?ws=...&pilotId=...` and it can export a standalone BAT launcher with a bundled PowerShell reader plus a short-lived Ably token for that pilot.
+- The launcher token is generated in the browser from the existing Ably key the app already uses, and only the short-lived token is embedded in the exported BAT.
+- For the exact websocket package formats, see [WebSocket Package Reference](docs/websocket-packages.md).
 
 ### Channel Layout
 

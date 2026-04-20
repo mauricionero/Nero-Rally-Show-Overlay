@@ -23,6 +23,7 @@ common:
   all: "All"
   apply: "Apply"
   custom: "Custom"
+  copy: "Copy"
   send: "Send"
   yes: "Yes"
   no: "No"
@@ -224,6 +225,39 @@ times:
   syncLineNoChange: "Times replied. No changes needed."
   syncLineNoData: "Times has no data for this line."
   syncLineError: "Could not request Times data."
+
+# ===========================================
+# PILOT TELEMETRY PAGE
+# ===========================================
+pilotTelemetry:
+  title: "Pilot telemetry"
+  description: "This page only displays telemetry. The exported launcher reads Dirt Rally 2.0 UDP data and publishes it directly to Ably on the current rally channel."
+  hideStream: "Hide stream"
+  pilotNotSelected: "Pilot not selected"
+  pilotNotSelectedDescription: "Open this page with a `pilotId` in the URL to preview the telemetry overlay and export the standalone launcher."
+  liveStatus: "Live status"
+  liveStatusDescription: "Last update and connection info for the selected pilot."
+  channel: "Channel"
+  telemetryAge: "Telemetry age"
+  speed: "Speed"
+  gForce: "G force"
+  standaloneLauncher: "Standalone launcher"
+  standaloneLauncherDescription: "Download a single self-contained Windows BAT launcher for the current pilot and Ably channel."
+  pilotId: "Pilot ID:"
+  channelId: "Channel ID:"
+  file: "File:"
+  downloadLauncher: "Download launcher"
+  launcherDescription: "The BAT file contains a PowerShell reader inside it, reads Dirt Rally 2.0 UDP telemetry, and publishes pilot-telemetry messages with a short-lived Ably token generated for this launch."
+  cameraStreamActive: "Camera stream preview is active for this pilot."
+  noStreamConfigured: "This pilot does not have a stream configured."
+  notConnected: "Not connected"
+  waiting: "Waiting"
+  secondsAgo: "{value}s ago"
+  urlPilotMismatch: "The pilot ID in the URL does not match any loaded pilot."
+  pageUrlCopied: "Pilot telemetry page URL copied"
+  connectWebSocketFirst: "Connect to a WebSocket channel first"
+  launcherDownloaded: "{fileName} downloaded"
+  tokenRequestFailed: "Could not generate a launcher token."
 
 # ===========================================
 # STREAMS TAB

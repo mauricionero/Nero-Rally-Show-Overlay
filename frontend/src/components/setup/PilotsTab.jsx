@@ -13,9 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { StreamThumbnail } from '../StreamThumbnail.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { toast } from 'sonner';
-import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2 } from 'lucide-react';
+import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2, ExternalLink } from 'lucide-react';
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { normalizePilotId } from '../../utils/pilotIdentity.js';
+import { getWebSocketPilotTelemetryUrl } from '../../utils/overlayUrls.js';
 import DebugIdText from './DebugIdText.jsx';
 
 const escapeCsvValue = (value) => {
@@ -37,7 +38,7 @@ const normalizeOptionalNumberInput = (value) => {
   return Number.isFinite(numericValue) ? numericValue : '';
 };
 
-export default function PilotsTab({ hideStreams = false }) {
+export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
   const { t } = useTranslation();
   const { displayIdsInSetup } = useRally();
   const {
@@ -120,6 +121,11 @@ export default function PilotsTab({ hideStreams = false }) {
       timeOffsetMinutes: ''
     });
     toast.success('Pilot added successfully');
+  };
+
+  const handleOpenPilotTelemetryPage = (pilotId) => {
+    const url = getWebSocketPilotTelemetryUrl(wsChannelKey, pilotId);
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleUpdatePilot = () => {
@@ -436,6 +442,16 @@ export default function PilotsTab({ hideStreams = false }) {
                   </div>
                 </div>
                 <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleOpenPilotTelemetryPage(pilot.id)}
+                    disabled={!wsChannelKey}
+                    className="text-[#FACC15] hover:text-yellow-300 hover:bg-yellow-500/10 disabled:opacity-40"
+                    title="Open pilot telemetry page"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </Button>
                   <Dialog open={pilotDialogOpen && editingPilot?.id === pilot.id} onOpenChange={(open) => {
                     setPilotDialogOpen(open);
                     if (!open) setEditingPilot(null);

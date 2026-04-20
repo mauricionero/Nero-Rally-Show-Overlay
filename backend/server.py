@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,9 +8,11 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Any, Dict
 import uuid
+import json
 from datetime import datetime, timezone
 import ably
 import pusher
+import requests
 
 
 ROOT_DIR = Path(__file__).parent
@@ -68,6 +70,47 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
+class PilotTelemetryTokenRequest(BaseModel):
+    channel_id: str
+    pilot_id: str
+
+class PilotTelemetryTokenResponse(BaseModel):
+    token: str
+    issued: int
+    expires: int
+    capability: str
+    clientId: Optional[str] = None
+
+
+def create_pilot_telemetry_token(channel_id: str, pilot_id: str) -> Dict[str, Any]:
+    ably_key = os.environ.get('ABLY_KEY')
+    if not ably_key:
+        raise RuntimeError('ABLY_KEY is not configured')
+
+    key_name, key_secret = ably_key.split(':', 1)
+    capability = json.dumps(
+        {f"rally-telemetry:{channel_id}": ["publish"]},
+        separators=(',', ':'),
+        sort_keys=True
+    )
+    token_request = {
+        'keyName': key_name,
+        'ttl': 12 * 60 * 60 * 1000,
+        'capability': capability,
+        'clientId': pilot_id,
+        'timestamp': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'nonce': uuid.uuid4().hex
+    }
+
+    response = requests.post(
+        f'https://main.realtime.ably.net/keys/{key_name}/requestToken',
+        auth=(key_name, key_secret),
+        json=token_request,
+        timeout=15
+    )
+    response.raise_for_status()
+    return response.json()
+
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
 async def root():
@@ -96,6 +139,26 @@ async def get_status_checks():
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
     
     return status_checks
+
+
+@api_router.post("/ws/pilot-telemetry-token", response_model=PilotTelemetryTokenResponse)
+async def create_pilot_telemetry_launch_token(request: PilotTelemetryTokenRequest):
+    channel_id = str(request.channel_id or '').strip()
+    pilot_id = str(request.pilot_id or '').strip()
+
+    if not channel_id or not pilot_id:
+        raise HTTPException(status_code=400, detail="channel_id and pilot_id are required")
+
+    try:
+        token_details = create_pilot_telemetry_token(channel_id, pilot_id)
+        return PilotTelemetryTokenResponse(**token_details)
+    except requests.HTTPError as exc:
+        logger.error("Pilot telemetry token request failed: %s", str(exc))
+        detail = exc.response.text if getattr(exc, 'response', None) is not None else str(exc)
+        raise HTTPException(status_code=502, detail=detail)
+    except Exception as exc:
+        logger.error("Pilot telemetry token generation error: %s", str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # WebSocket Publishing Models

@@ -1061,7 +1061,7 @@ const buildDeltaBatchChangesFromEntries = (entries = []) => {
 };
 
 const normalizeMessageSource = (source) => String(source || '').trim().toLowerCase();
-const TRUSTED_PILOT_TELEMETRY_SOURCES = new Set(['android-app', 'setup-relay']);
+const TRUSTED_PILOT_TELEMETRY_SOURCES = new Set(['android-app', 'setup-relay', 'pilot-script', 'dirt-rally-2']);
 
 export const RallyProvider = ({ children }) => {
   // Event configuration

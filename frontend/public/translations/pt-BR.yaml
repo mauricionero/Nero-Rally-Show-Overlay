@@ -23,6 +23,7 @@ common:
   all: "Todos"
   apply: "Aplicar"
   custom: "Personalizado"
+  copy: "Copiar"
   send: "Enviar"
   yes: "Sim"
   no: "Não"
@@ -232,6 +233,39 @@ times:
   syncLineNoChange: "Times respondeu. Sem mudanças."
   syncLineNoData: "Times não tem dados para esta linha."
   syncLineError: "Não foi possível solicitar dados do Times."
+
+# ===========================================
+# PÁGINA DE TELEMETRIA DO PILOTO
+# ===========================================
+pilotTelemetry:
+  title: "Telemetria do piloto"
+  description: "Esta página mostra apenas a telemetria. O launcher exportado lê os dados UDP do Dirt Rally 2.0 e publica diretamente no Ably no canal atual do rally."
+  hideStream: "Ocultar stream"
+  pilotNotSelected: "Piloto não selecionado"
+  pilotNotSelectedDescription: "Abra esta página com um `pilotId` na URL para visualizar o overlay de telemetria e exportar o launcher independente."
+  liveStatus: "Status ao vivo"
+  liveStatusDescription: "Última atualização e informações de conexão do piloto selecionado."
+  channel: "Canal"
+  telemetryAge: "Idade da telemetria"
+  speed: "Velocidade"
+  gForce: "Força G"
+  standaloneLauncher: "Launcher independente"
+  standaloneLauncherDescription: "Baixe um único launcher BAT autocontido para o piloto e o canal Ably atuais."
+  pilotId: "ID do piloto:"
+  channelId: "ID do canal:"
+  file: "Arquivo:"
+  downloadLauncher: "Baixar launcher"
+  launcherDescription: "O arquivo BAT contém um leitor em PowerShell, lê a telemetria UDP do Dirt Rally 2.0 e publica mensagens pilot-telemetry com um token Ably de curta duração gerado para esta execução."
+  cameraStreamActive: "A prévia do stream da câmera está ativa para este piloto."
+  noStreamConfigured: "Este piloto não tem um stream configurado."
+  notConnected: "Sem conexão"
+  waiting: "Aguardando"
+  secondsAgo: "{value}s atrás"
+  urlPilotMismatch: "O ID do piloto na URL não corresponde a nenhum piloto carregado."
+  pageUrlCopied: "URL da página de telemetria do piloto copiada"
+  connectWebSocketFirst: "Conecte a um canal WebSocket primeiro"
+  launcherDownloaded: "{fileName} baixado"
+  tokenRequestFailed: "Não foi possível gerar um token do launcher."
 
 # ===========================================
 # ABA STREAMS
