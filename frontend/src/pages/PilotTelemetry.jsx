@@ -59,6 +59,18 @@ export default function PilotTelemetry() {
       ? getWebSocketPilotTelemetryUrl(resolvedChannelKey, queryPilotId)
       : getWebSocketPilotTelemetryUrl(resolvedChannelKey)
   ), [queryPilotId, resolvedChannelKey]);
+  const displayRpm = Number.isFinite(Number(selectedTelemetry?.rpmReal))
+    ? Number(selectedTelemetry.rpmReal).toFixed(1)
+    : (Number.isFinite(Number(selectedTelemetry?.rpmPercentage))
+      ? `${Number(selectedTelemetry.rpmPercentage).toFixed(1)}%`
+      : (Number.isFinite(Number(selectedTelemetry?.rpm)) ? Number(selectedTelemetry.rpm).toFixed(1) : '--'));
+  const displayGear = Number.isFinite(Number(selectedTelemetry?.gear))
+    ? (Number(selectedTelemetry.gear) === -1 ? 'R' : `${Math.trunc(Number(selectedTelemetry.gear))}`)
+    : '--';
+  const displayDistance = Number.isFinite(Number(selectedTelemetry?.distance))
+    ? `${Number(selectedTelemetry.distance).toFixed(3)}`
+    : '--';
+  const displayLatLong = selectedTelemetry?.latLong || '--';
 
   const launchArtifacts = useMemo(() => buildPilotTelemetryLaunchArtifacts({
     channelKey: resolvedChannelKey,
@@ -251,7 +263,7 @@ export default function PilotTelemetry() {
                   {t('pilotTelemetry.liveStatusDescription')}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
+              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
                   <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.channel')}</div>
                   <div className="font-mono text-[#FACC15] break-all">
@@ -279,6 +291,22 @@ export default function PilotTelemetry() {
                   <div className="font-mono text-white">
                     {Number.isFinite(Number(selectedTelemetry?.gForce)) ? `${Number(selectedTelemetry.gForce).toFixed(2)}G` : '--'}
                   </div>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
+                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.rpm')}</div>
+                  <div className="font-mono text-white">{displayRpm}</div>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
+                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.gear')}</div>
+                  <div className="font-mono text-white">{displayGear}</div>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
+                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.distance')}</div>
+                  <div className="font-mono text-white">{displayDistance}</div>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
+                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.latLong')}</div>
+                  <div className="font-mono text-white break-all">{displayLatLong}</div>
                 </div>
               </CardContent>
             </Card>

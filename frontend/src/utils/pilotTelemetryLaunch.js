@@ -42,9 +42,52 @@ ${renderedTokenDetails}
 
 $Script:AblyToken = $null
 $Script:AblyTokenExpiresAt = 0
+$Script:HttpClient = $null
 $Script:UdpPort = 20777
-$Script:PublishIntervalSeconds = 0.1
+$Script:PublishIntervalSeconds = 1.0
 $Script:ChannelName = "rally-telemetry:$($LaunchConfig.channelId)"
+
+function Get-FloatAtIndex {
+  param(
+    [byte[]]$Data,
+    [int]$Index
+  )
+
+  $offset = $Index * 4
+  if (-not $Data -or $offset -lt 0 -or ($offset + 4) -gt $Data.Length) {
+    throw "Telemetry packet is too short."
+  }
+
+  return [BitConverter]::ToSingle($Data, $offset)
+}
+
+function Format-RunTime {
+  param([double]$Seconds)
+
+  if ($Seconds -lt 0) {
+    $Seconds = 0
+  }
+
+  $totalMilliseconds = [math]::Round($Seconds * 1000)
+  $wholeSeconds = [int64]([math]::Floor($totalMilliseconds / 1000))
+  $milliseconds = [int64]($totalMilliseconds % 1000)
+  $hours = [int64]([math]::Floor($wholeSeconds / 3600))
+  $minutes = [int64]([math]::Floor(($wholeSeconds % 3600) / 60))
+  $seconds = [int64]($wholeSeconds % 60)
+
+  return ("{0:00}:{1:00}:{2:00}.{3:000}" -f $hours, $minutes, $seconds, $milliseconds)
+}
+
+function Format-NormalizedLatLong {
+  param(
+    [double]$PosX,
+    [double]$PosZ
+  )
+
+  $lat = [math]::Max(-89.9999999, [math]::Min(89.9999999, [math]::Round($PosZ / 100000.0, 7)))
+  $lng = [math]::Max(-179.9999999, [math]::Min(179.9999999, [math]::Round($PosX / 100000.0, 7)))
+  return ("{0:F7},{1:F7}" -f $lat, $lng)
+}
 
 function Write-Info {
   param([string]$Message)
@@ -70,6 +113,18 @@ function Initialize-AblyToken {
   }
 
   $Script:AblyToken = [string]$TokenDetails.token
+}
+
+function Initialize-HttpClient {
+  if ($Script:HttpClient) {
+    return
+  }
+
+  $client = New-Object System.Net.Http.HttpClient
+  $client.DefaultRequestHeaders.ConnectionClose = $false
+  $client.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new("Bearer", $Script:AblyToken)
+  $client.Timeout = [TimeSpan]::FromSeconds(15)
+  $Script:HttpClient = $client
 }
 
 function Ensure-GameTelemetryEnabled {
@@ -115,18 +170,24 @@ function Ensure-GameTelemetryEnabled {
 function Read-TelemetryPacket {
   param([byte[]]$Data)
 
-  if (-not $Data -or $Data.Length -lt 144) {
+  if (-not $Data -or $Data.Length -lt 260) {
     return $null
   }
 
   try {
-    $speedMs = [BitConverter]::ToSingle($Data, 28)
-    $yaw = [BitConverter]::ToSingle($Data, 16)
-    $posX = [BitConverter]::ToSingle($Data, 52)
-    $posY = [BitConverter]::ToSingle($Data, 56)
-    $posZ = [BitConverter]::ToSingle($Data, 60)
-    $gForceLat = [BitConverter]::ToSingle($Data, 136)
-    $gForceLon = [BitConverter]::ToSingle($Data, 140)
+    $runTime = [double](Get-FloatAtIndex -Data $Data -Index 0)
+    $lapTime = [double](Get-FloatAtIndex -Data $Data -Index 1)
+    $distanceDrivenLap = [double](Get-FloatAtIndex -Data $Data -Index 2)
+    $distanceDrivenOverall = [double](Get-FloatAtIndex -Data $Data -Index 3)
+    $posX = [double](Get-FloatAtIndex -Data $Data -Index 4)
+    $posY = [double](Get-FloatAtIndex -Data $Data -Index 5)
+    $posZ = [double](Get-FloatAtIndex -Data $Data -Index 6)
+    $speedMs = [double](Get-FloatAtIndex -Data $Data -Index 7)
+    $yaw = [double](Get-FloatAtIndex -Data $Data -Index 16)
+    $gear = [int]([math]::Round((Get-FloatAtIndex -Data $Data -Index 33)))
+    $gForceLat = [double](Get-FloatAtIndex -Data $Data -Index 34)
+    $gForceLon = [double](Get-FloatAtIndex -Data $Data -Index 35)
+    $rpmReal = [double](Get-FloatAtIndex -Data $Data -Index 37)
   } catch {
     return $null
   }
@@ -138,24 +199,38 @@ function Read-TelemetryPacket {
   }
 
   $gForce = [math]::Round([math]::Sqrt(($gForceLat * $gForceLat) + ($gForceLon * $gForceLon)), 2)
+  $rpmPercentage = $null
+  $maxRpm = 8000.0
+  if ($maxRpm -gt 0) {
+    $rpmPercentage = [math]::Round(($rpmReal / $maxRpm) * 100.0, 1)
+  }
+
   $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 
-  return [pscustomobject]@{
+  $packet = [pscustomobject]@{
     messageType = "pilot-telemetry"
     pilotId = $LaunchConfig.pilotId
     source = "dirt-rally-2"
-    latLong = ""
+    latLong = (Format-NormalizedLatLong -PosX $posX -PosZ $posZ)
+    distance = [math]::Round($distanceDrivenOverall, 3)
+    distanceDrivenLap = [math]::Round($distanceDrivenLap, 3)
+    distanceDrivenOverall = [math]::Round($distanceDrivenOverall, 3)
     speed = $speedKmh
     heading = $headingDeg
     gForce = $gForce
     longitudinalG = [math]::Round($gForceLon, 2)
     lateralG = [math]::Round($gForceLat, 2)
+    rpmReal = [math]::Round($rpmReal, 1)
+    rpmPercentage = $rpmPercentage
+    gear = $gear
     posX = [math]::Round($posX, 3)
     posY = [math]::Round($posY, 3)
     posZ = [math]::Round($posZ, 3)
     lastTelemetryAt = $nowMs
     latlongTimestamp = $nowMs
   }
+
+  return $packet
 }
 
 function Publish-TelemetryPacket {
@@ -165,12 +240,28 @@ function Publish-TelemetryPacket {
     Initialize-AblyToken
   }
 
+  if (-not $Script:HttpClient) {
+    Initialize-HttpClient
+  }
+
   $uri = "https://main.realtime.ably.net/channels/$($Script:ChannelName)/messages"
   $body = @{ name = "update"; data = $Packet } | ConvertTo-Json -Depth 20 -Compress
-  $headers = @{ Authorization = "Bearer $Script:AblyToken" }
+  $content = New-Object System.Net.Http.StringContent($body, [System.Text.Encoding]::UTF8, "application/json")
 
   try {
-    Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -ContentType "application/json" -Body $body | Out-Null
+    $response = $Script:HttpClient.PostAsync($uri, $content).GetAwaiter().GetResult()
+    if (-not $response.IsSuccessStatusCode) {
+      $statusCode = [int]$response.StatusCode
+      $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+
+      if ($statusCode -eq 401 -or $statusCode -eq 403) {
+        throw "Ably token rejected or expired. Generate a new launcher from the pilot telemetry page."
+      }
+
+      throw "Publish failed with status $statusCode: $responseBody"
+    }
+
+    $response.Dispose()
     return $true
   } catch {
     $statusCode = $null
@@ -196,6 +287,7 @@ function Main {
   [void](Ensure-GameTelemetryEnabled)
 
   $udpClient = New-Object System.Net.Sockets.UdpClient($Script:UdpPort)
+  $udpClient.Client.ReceiveTimeout = 1000
   $remoteEndpoint = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
 
   Write-Info ("Listening for Dirt Rally 2 telemetry on UDP {0}..." -f $Script:UdpPort)
@@ -203,7 +295,19 @@ function Main {
   $lastStatusLine = ""
 
   while ($true) {
-    $data = $udpClient.Receive([ref]$remoteEndpoint)
+    $data = $null
+    try {
+      $data = $udpClient.Receive([ref]$remoteEndpoint)
+    } catch [System.Net.Sockets.SocketException] {
+      if ($_.Exception.SocketErrorCode -ne [System.Net.Sockets.SocketError]::TimedOut) {
+        throw
+      }
+    }
+
+    if (-not $data) {
+      continue
+    }
+
     $packet = Read-TelemetryPacket -Data $data
     if (-not $packet) {
       continue

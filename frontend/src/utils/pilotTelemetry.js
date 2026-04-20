@@ -15,6 +15,30 @@ export const PILOT_G_FORCE_FIELD_KEYS = [
   'accelerationZ'
 ];
 
+export const PILOT_TELEMETRY_FIELD_KEYS = [
+  'latlongTimestamp',
+  'lastLatLongUpdatedAt',
+  'lastTelemetryAt',
+  'source',
+  'speed',
+  'heading',
+  'gpsPrecision',
+  'connectionStrength',
+  'connectionType',
+  'gForce',
+  'rpmPercentage',
+  'rpmReal',
+  'gear',
+  'distance',
+  'distanceDrivenLap',
+  'distanceDrivenOverall',
+  'longitudinalG',
+  'lateralG',
+  'posX',
+  'posY',
+  'posZ'
+];
+
 export const toFiniteTelemetryNumber = (value) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : null;
@@ -50,7 +74,7 @@ export const getPilotTelemetryLatestTimestamp = (telemetry = {}) => {
   return Math.max(...candidates);
 };
 
-export const isPilotTelemetryFresh = (telemetry = {}, now = Date.now(), maxAgeMs = 4000) => {
+export const isPilotTelemetryFresh = (telemetry = {}, now = Date.now(), maxAgeMs = 10000) => {
   const latestTimestamp = getPilotTelemetryLatestTimestamp(telemetry);
   if (latestTimestamp === null) {
     return false;
@@ -128,6 +152,16 @@ export const getPilotTelemetryGForceColor = (gForceValue, baseColor = '#FFFFFF')
 
 export const assignPilotTelemetryGForceFields = (target = {}, telemetry = {}) => {
   PILOT_G_FORCE_FIELD_KEYS.forEach((fieldKey) => {
+    if (telemetry[fieldKey] !== undefined) {
+      target[fieldKey] = telemetry[fieldKey];
+    }
+  });
+
+  return target;
+};
+
+export const assignPilotTelemetryFields = (target = {}, telemetry = {}) => {
+  PILOT_TELEMETRY_FIELD_KEYS.forEach((fieldKey) => {
     if (telemetry[fieldKey] !== undefined) {
       target[fieldKey] = telemetry[fieldKey];
     }

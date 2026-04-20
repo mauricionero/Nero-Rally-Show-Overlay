@@ -135,12 +135,17 @@ Pilot telemetry is its own message family and is routed to the telemetry channel
   "messageType": "pilot-telemetry",
   "pilotId": "pilot-id",
   "source": "android-app",
-  "latLong": "-23.5,-46.6",
+  "latLong": "-12.3456789,45.6789123",
   "latlongTimestamp": 1710000000000,
   "lastTelemetryAt": 1710000000100,
   "speed": 74.3,
   "heading": 182,
-  "gpsPrecision": 3.1
+  "gpsPrecision": 3.1,
+  "gForce": 2.4,
+  "rpmReal": 7421.5,
+  "rpmPercentage": 88.3,
+  "gear": 4,
+  "distance": 1823.412
 }
 ```
 
@@ -149,6 +154,14 @@ Notes:
 - `pilotId` is required.
 - The app accepts telemetry from trusted sources only, including `android-app`, `setup-relay`, `pilot-script`, and `dirt-rally-2`.
 - Telemetry can also be wrapped as `payload.pilotTelemetry` inside a `delta-batch` delta message when it comes through the setup sync path.
+- `latLong` is a normalized local-map coordinate string in the form `"<lat>,<lon>"`, not real GPS. The launcher currently emits 7 decimal places.
+- `rpmReal` takes priority over `rpmPercentage` when both are present.
+- `gear` is a signed integer, where `-1` means reverse.
+- `distance` is the distance driven in the current stage/lap context and is combined with the stage metadata distance to derive track progress.
+- `gForce` is the primary G-force value shown on the overlays.
+- `Max RPM` and `Idle RPM` are pilot configuration values, not live telemetry fields.
+- `maxGears` is not used.
+- Timing fields such as `arrivalTime`, `runTime`, and `lapTime` are not part of the live telemetry packet. They are handled by the timing side of the system.
 
 ### Direct pilot launcher
 
@@ -163,12 +176,18 @@ The launcher uses this shape:
   "messageType": "pilot-telemetry",
   "pilotId": "pilot-id",
   "source": "dirt-rally-2",
-  "latLong": "",
+  "latLong": "-12.3456789,45.6789123",
+  "distance": 1823.412,
+  "distanceDrivenLap": 1823.412,
+  "distanceDrivenOverall": 1823.412,
   "speed": 74.3,
   "heading": 182,
   "gForce": 2.4,
   "longitudinalG": 1.8,
   "lateralG": 1.6,
+  "rpmReal": 7421.5,
+  "rpmPercentage": 88.3,
+  "gear": 4,
   "lastTelemetryAt": 1710000000100,
   "latlongTimestamp": 1710000000100
 }
@@ -181,6 +200,7 @@ Notes:
 - The matching UI is `/pilot-telemetry?ws=...&pilotId=...`.
 - The page is display-only; the BAT launcher is the sender.
 - The launcher is Windows-only and depends on PowerShell, not Python.
+- The launcher keeps timing values separate from the live telemetry payload. `arrivalTime`, `runTime`, and `lapTime` belong to the timing package flow, not the live telemetry HUD.
 
 ## How To Use It
 

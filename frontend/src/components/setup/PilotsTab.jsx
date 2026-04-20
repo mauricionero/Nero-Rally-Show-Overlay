@@ -7,13 +7,14 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { StreamThumbnail } from '../StreamThumbnail.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { toast } from 'sonner';
-import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2, ExternalLink } from 'lucide-react';
+import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2, ExternalLink, ChevronDown, Sparkles } from 'lucide-react';
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { normalizePilotId } from '../../utils/pilotIdentity.js';
 import { getWebSocketPilotTelemetryUrl } from '../../utils/overlayUrls.js';
@@ -36,6 +37,71 @@ const normalizeOptionalNumberInput = (value) => {
 
   const numericValue = Number(trimmed);
   return Number.isFinite(numericValue) ? numericValue : '';
+};
+
+const normalizeOptionalTextInput = (value) => String(value ?? '').trim();
+
+const TELEMETRY_PLACEHOLDERS = {
+  latLong: '-23.550520, -46.633308',
+  speed: '85.5',
+  heading: '180',
+  gpsPrecision: '5.0',
+  gForce: '2.4',
+  rpmPercentage: '88.3',
+  rpmReal: '7421.5',
+  gear: '4',
+  distance: '1823.412'
+};
+
+const TELEMETRY_FORM_FIELD_KEYS = [
+  'latLong',
+  'latlongTimestamp',
+  'lastLatLongUpdatedAt',
+  'lastTelemetryAt',
+  'speed',
+  'heading',
+  'gpsPrecision',
+  'gForce',
+  'rpmPercentage',
+  'rpmReal',
+  'gear',
+  'distance',
+  'distanceDrivenLap',
+  'distanceDrivenOverall',
+  'trackLengthTotal',
+  'runTime',
+  'lapTime',
+  'arrivalTime',
+  'maxGears',
+  'maxRpm',
+  'idleRpm'
+];
+
+const buildTelemetryPayload = (editingPilot) => {
+  const payload = {
+    source: 'setup-relay',
+    lastTelemetryAt: Date.now()
+  };
+
+  const assignIfPresent = (key, value) => {
+    if (value !== '' && value !== null && value !== undefined) {
+      payload[key] = value;
+    }
+  };
+
+  assignIfPresent('latLong', normalizeOptionalTextInput(editingPilot.latLong));
+  assignIfPresent('latlongTimestamp', normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''));
+  assignIfPresent('lastLatLongUpdatedAt', normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''));
+  assignIfPresent('speed', normalizeOptionalNumberInput(editingPilot.speed));
+  assignIfPresent('heading', normalizeOptionalNumberInput(editingPilot.heading));
+  assignIfPresent('gpsPrecision', normalizeOptionalNumberInput(editingPilot.gpsPrecision));
+  assignIfPresent('gForce', normalizeOptionalNumberInput(editingPilot.gForce));
+  assignIfPresent('rpmPercentage', normalizeOptionalNumberInput(editingPilot.rpmPercentage));
+  assignIfPresent('rpmReal', normalizeOptionalNumberInput(editingPilot.rpmReal));
+  assignIfPresent('gear', normalizeOptionalNumberInput(editingPilot.gear));
+  assignIfPresent('distance', normalizeOptionalNumberInput(editingPilot.distance));
+
+  return payload;
 };
 
 export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
@@ -93,6 +159,11 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
         speed: liveTelemetry.speed ?? prev.speed ?? '',
         heading: liveTelemetry.heading ?? prev.heading ?? '',
         gpsPrecision: liveTelemetry.gpsPrecision ?? prev.gpsPrecision ?? '',
+        gForce: liveTelemetry.gForce ?? prev.gForce ?? '',
+        rpmPercentage: liveTelemetry.rpmPercentage ?? prev.rpmPercentage ?? '',
+        rpmReal: liveTelemetry.rpmReal ?? prev.rpmReal ?? '',
+        gear: liveTelemetry.gear ?? prev.gear ?? '',
+        distance: liveTelemetry.distance ?? prev.distance ?? '',
         lastTelemetryAt: liveTelemetry.lastTelemetryAt ?? prev.lastTelemetryAt ?? ''
       };
     });
@@ -128,6 +199,18 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const applyTelemetryPlaceholder = (fieldKey) => {
+    const placeholder = TELEMETRY_PLACEHOLDERS[fieldKey];
+
+    if (placeholder === undefined) {
+      return;
+    }
+
+    setEditingPilot((prev) => (
+      prev ? { ...prev, [fieldKey]: placeholder } : prev
+    ));
+  };
+
   const handleUpdatePilot = () => {
     if (!editingPilot.name.trim()) {
       toast.error(t('pilots.pilotName') + ' is required');
@@ -138,22 +221,11 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
       startOrder: parseInt(editingPilot.startOrder) || 999,
       timeOffsetMinutes: parseInt(editingPilot.timeOffsetMinutes) || 0
     };
-    delete pilotData.latLong;
-    delete pilotData.latlongTimestamp;
-    delete pilotData.lastLatLongUpdatedAt;
-    delete pilotData.lastTelemetryAt;
-    delete pilotData.speed;
-    delete pilotData.heading;
-    delete pilotData.gpsPrecision;
-    updatePilot(editingPilot.id, pilotData);
-    setPilotTelemetry(editingPilot.id, {
-      latLong: (editingPilot.latLong || '').trim(),
-      latlongTimestamp: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
-      lastLatLongUpdatedAt: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
-      speed: normalizeOptionalNumberInput(editingPilot.speed),
-      heading: normalizeOptionalNumberInput(editingPilot.heading),
-      gpsPrecision: normalizeOptionalNumberInput(editingPilot.gpsPrecision)
+    TELEMETRY_FORM_FIELD_KEYS.forEach((fieldKey) => {
+      delete pilotData[fieldKey];
     });
+    updatePilot(editingPilot.id, pilotData);
+    setPilotTelemetry(editingPilot.id, buildTelemetryPayload(editingPilot));
     setEditingPilot(null);
     setPilotDialogOpen(false);
     toast.success('Pilot updated successfully');
@@ -164,14 +236,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
       return;
     }
 
-    setPilotTelemetry(editingPilot.id, {
-      latLong: (editingPilot.latLong || '').trim(),
-      latlongTimestamp: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
-      lastLatLongUpdatedAt: normalizeOptionalNumberInput(editingPilot.latlongTimestamp ?? editingPilot.lastLatLongUpdatedAt ?? ''),
-      speed: normalizeOptionalNumberInput(editingPilot.speed),
-      heading: normalizeOptionalNumberInput(editingPilot.heading),
-      gpsPrecision: normalizeOptionalNumberInput(editingPilot.gpsPrecision)
-    });
+    setPilotTelemetry(editingPilot.id, buildTelemetryPayload(editingPilot));
     toast.success('Telemetry sent');
   };
 
@@ -577,7 +642,18 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                                 </div>
                               )}
                               <div>
-                                <Label className="text-white">{t('pilots.latLong')}</Label>
+                                <Label className="flex items-center justify-between gap-2 text-white">
+                                  <span>{t('pilots.latLong')}</span>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                    onClick={() => applyTelemetryPlaceholder('latLong')}
+                                    title={t('common.apply')}
+                                    aria-label={`${t('common.apply')} ${t('pilots.latLong')}`}
+                                  >
+                                    <Sparkles className="h-3 w-3" />
+                                  </button>
+                                </Label>
                                 <Input
                                   value={editingPilot.latLong || ''}
                                   onChange={(e) => setEditingPilot({ ...editingPilot, latLong: e.target.value })}
@@ -617,11 +693,22 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                  <Label className="flex items-center gap-1 text-white">
-                                    <Gauge className="w-3 h-3 text-[#FF4500]" />
-                                    {t('pilots.speed')}
+                                  <Label className="flex items-center justify-between gap-2 text-white">
+                                    <span className="flex items-center gap-1">
+                                      <Gauge className="w-3 h-3 text-[#FF4500]" />
+                                      {t('pilots.speed')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                      onClick={() => applyTelemetryPlaceholder('speed')}
+                                      title={t('common.apply')}
+                                      aria-label={`${t('common.apply')} ${t('pilots.speed')}`}
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                    </button>
                                   </Label>
                                   <Input
                                     type="number"
@@ -633,9 +720,20 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                                   />
                                 </div>
                                 <div>
-                                  <Label className="flex items-center gap-1 text-white">
-                                    <Navigation2 className="w-3 h-3 text-[#FF4500]" />
-                                    {t('pilots.heading')}
+                                  <Label className="flex items-center justify-between gap-2 text-white">
+                                    <span className="flex items-center gap-1">
+                                      <Navigation2 className="w-3 h-3 text-[#FF4500]" />
+                                      {t('pilots.heading')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                      onClick={() => applyTelemetryPlaceholder('heading')}
+                                      title={t('common.apply')}
+                                      aria-label={`${t('common.apply')} ${t('pilots.heading')}`}
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                    </button>
                                   </Label>
                                   <Input
                                     type="number"
@@ -647,9 +745,20 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                                   />
                                 </div>
                                 <div>
-                                  <Label className="flex items-center gap-1 text-white">
-                                    <MapPin className="w-3 h-3 text-[#FF4500]" />
-                                    {t('pilots.gpsPrecision')}
+                                  <Label className="flex items-center justify-between gap-2 text-white">
+                                    <span className="flex items-center gap-1">
+                                      <MapPin className="w-3 h-3 text-[#FF4500]" />
+                                      {t('pilots.gpsPrecision')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                      onClick={() => applyTelemetryPlaceholder('gpsPrecision')}
+                                      title={t('common.apply')}
+                                      aria-label={`${t('common.apply')} ${t('pilots.gpsPrecision')}`}
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                    </button>
                                   </Label>
                                   <Input
                                     type="number"
@@ -660,17 +769,155 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                                     className="bg-[#18181B] border-zinc-700 text-white"
                                   />
                                 </div>
-                                <div className="flex flex-col">
-                                  <Label className="text-transparent select-none">.</Label>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
-                                    onClick={handleSendTelemetryOnly}
-                                  >
-                                    {t('common.send')}
-                                  </Button>
+                                <div>
+                                  <Label className="flex items-center justify-between gap-2 text-white">
+                                    <span className="flex items-center gap-1">
+                                      <Gauge className="w-3 h-3 text-[#FF4500]" />
+                                      {t('pilots.gForce')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                      onClick={() => applyTelemetryPlaceholder('gForce')}
+                                      title={t('common.apply')}
+                                      aria-label={`${t('common.apply')} ${t('pilots.gForce')}`}
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                    </button>
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={editingPilot.gForce ?? ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, gForce: e.target.value })}
+                                    placeholder="2.4"
+                                    className="bg-[#18181B] border-zinc-700 text-white"
+                                  />
                                 </div>
+                              </div>
+
+                              <Collapsible>
+                                <div className="rounded-lg border border-zinc-800 bg-black/25">
+                                  <CollapsibleTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="group flex w-full items-center justify-between px-3 py-2 text-left"
+                                    >
+                                      <div>
+                                        <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">
+                                          {t('pilots.advancedTelemetry')}
+                                        </div>
+                                      <div className="text-xs text-zinc-500">
+                                        {t('pilots.advancedTelemetryDescription')}
+                                      </div>
+                                      </div>
+                                      <ChevronDown className="h-4 w-4 text-zinc-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                    </button>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent className="px-3 pb-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                                      <div>
+                                        <Label className="flex items-center justify-between gap-2 text-white">
+                                          <span>{t('pilots.rpmReal')}</span>
+                                          <button
+                                            type="button"
+                                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                            onClick={() => applyTelemetryPlaceholder('rpmReal')}
+                                            title={t('common.apply')}
+                                            aria-label={`${t('common.apply')} ${t('pilots.rpmReal')}`}
+                                          >
+                                            <Sparkles className="h-3 w-3" />
+                                          </button>
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={editingPilot.rpmReal ?? ''}
+                                          onChange={(e) => setEditingPilot({ ...editingPilot, rpmReal: e.target.value })}
+                                          placeholder="7421.5"
+                                          className="bg-[#18181B] border-zinc-700 text-white"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="flex items-center justify-between gap-2 text-white">
+                                          <span>{t('pilots.rpmPercentage')}</span>
+                                          <button
+                                            type="button"
+                                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                            onClick={() => applyTelemetryPlaceholder('rpmPercentage')}
+                                            title={t('common.apply')}
+                                            aria-label={`${t('common.apply')} ${t('pilots.rpmPercentage')}`}
+                                          >
+                                            <Sparkles className="h-3 w-3" />
+                                          </button>
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={editingPilot.rpmPercentage ?? ''}
+                                          onChange={(e) => setEditingPilot({ ...editingPilot, rpmPercentage: e.target.value })}
+                                          placeholder="88.3"
+                                          className="bg-[#18181B] border-zinc-700 text-white"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="flex items-center justify-between gap-2 text-white">
+                                          <span>{t('pilots.gear')}</span>
+                                          <button
+                                            type="button"
+                                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                            onClick={() => applyTelemetryPlaceholder('gear')}
+                                            title={t('common.apply')}
+                                            aria-label={`${t('common.apply')} ${t('pilots.gear')}`}
+                                          >
+                                            <Sparkles className="h-3 w-3" />
+                                          </button>
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          step="1"
+                                          value={editingPilot.gear ?? ''}
+                                          onChange={(e) => setEditingPilot({ ...editingPilot, gear: e.target.value })}
+                                          placeholder="4"
+                                          className="bg-[#18181B] border-zinc-700 text-white"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="flex items-center justify-between gap-2 text-white">
+                                          <span>{t('pilots.distance')}</span>
+                                          <button
+                                            type="button"
+                                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-700 bg-black/30 text-zinc-400 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+                                            onClick={() => applyTelemetryPlaceholder('distance')}
+                                            title={t('common.apply')}
+                                            aria-label={`${t('common.apply')} ${t('pilots.distance')}`}
+                                          >
+                                            <Sparkles className="h-3 w-3" />
+                                          </button>
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          step="0.001"
+                                          value={editingPilot.distance ?? ''}
+                                          onChange={(e) => setEditingPilot({ ...editingPilot, distance: e.target.value })}
+                                          placeholder="1823.412"
+                                          className="bg-[#18181B] border-zinc-700 text-white"
+                                        />
+                                      </div>
+                                    </div>
+                                  </CollapsibleContent>
+                                </div>
+                              </Collapsible>
+
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                                  onClick={handleSendTelemetryOnly}
+                                >
+                                  {t('common.send')}
+                                </Button>
                               </div>
 
                               <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">

@@ -26,7 +26,11 @@ import { formatDurationSeconds } from '../utils/timeFormat.js';
 import { getLapRaceStoredTotalTimeSeconds, getLapTimingStartTime } from '../utils/rallyHelpers.js';
 import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId, normalizePilotId } from '../utils/pilotIdentity.js';
-import { assignPilotTelemetryGForceFields, PILOT_G_FORCE_FIELD_KEYS } from '../utils/pilotTelemetry.js';
+import {
+  assignPilotTelemetryFields,
+  assignPilotTelemetryGForceFields,
+  PILOT_G_FORCE_FIELD_KEYS
+} from '../utils/pilotTelemetry.js';
 import { isSyncDebugEnabled, isTelemetryDebugEnabled } from '../utils/debugFlags.js';
 import { clearManualWsDisconnect, markManualWsDisconnect } from '../utils/wsAutoConnect.js';
 import {
@@ -3160,8 +3164,7 @@ export const RallyProvider = ({ children }) => {
         telemetry
       ]));
       mergePilotTelemetryEntries(telemetryEntries, {
-        suppressSync: true,
-        deferState: true
+        suppressSync: true
       });
     }
 
@@ -3467,7 +3470,7 @@ export const RallyProvider = ({ children }) => {
         });
       }
 
-      if (pilotId) {
+        if (pilotId) {
         const pilotExists = Array.isArray(pilotsRef.current)
           && pilotsRef.current.some((pilot) => normalizePilotId(pilot?.id) === pilotId);
 
@@ -3488,40 +3491,27 @@ export const RallyProvider = ({ children }) => {
           source: telemetrySource || (pilotTelemetryByPilotIdRef.current?.[pilotId]?.source || '')
         };
 
-        if (normalizedData.latLong !== undefined) {
-          immediateTelemetry.latLong = normalizeLatLongString(normalizedData.latLong || '');
-        }
-
         if (telemetryTimestamp !== undefined) {
           immediateTelemetry.latlongTimestamp = telemetryTimestamp;
           immediateTelemetry.lastLatLongUpdatedAt = telemetryTimestamp;
         }
-
-        if (normalizedData.speed !== undefined) {
-          immediateTelemetry.speed = normalizedData.speed;
+        if (normalizedData.latLong !== undefined) {
+          immediateTelemetry.latLong = normalizeLatLongString(normalizedData.latLong || '');
         }
 
-        if (normalizedData.heading !== undefined) {
-          immediateTelemetry.heading = normalizedData.heading;
-        }
-
-        if (normalizedData.gpsPrecision !== undefined) {
-          immediateTelemetry.gpsPrecision = normalizedData.gpsPrecision;
-        }
-
-        if (normalizedData.connectionStrength !== undefined) {
-          immediateTelemetry.connectionStrength = normalizeConnectionStrength(normalizedData.connectionStrength);
-        }
-
-        if (normalizedData.connectionType !== undefined) {
-          immediateTelemetry.connectionType = normalizeConnectionType(normalizedData.connectionType);
-        }
-
+        assignPilotTelemetryFields(immediateTelemetry, normalizedData);
         assignPilotTelemetryGForceFields(immediateTelemetry, normalizedData);
 
+        if (immediateTelemetry.connectionStrength !== undefined) {
+          immediateTelemetry.connectionStrength = normalizeConnectionStrength(immediateTelemetry.connectionStrength);
+        }
+
+        if (immediateTelemetry.connectionType !== undefined) {
+          immediateTelemetry.connectionType = normalizeConnectionType(immediateTelemetry.connectionType);
+        }
+
         mergePilotTelemetryEntries([[pilotId, immediateTelemetry]], {
-          suppressSync: true,
-          deferState: true
+          suppressSync: true
         });
       }
 
@@ -5246,36 +5236,16 @@ export const RallyProvider = ({ children }) => {
     if (telemetry.latLong !== undefined) {
       normalizedTelemetry.latLong = normalizeLatLongString(telemetry.latLong || '');
     }
-
-    if (telemetry.latlongTimestamp !== undefined) {
-      normalizedTelemetry.latlongTimestamp = telemetry.latlongTimestamp;
-    }
-
-    if (telemetry.lastLatLongUpdatedAt !== undefined) {
-      normalizedTelemetry.lastLatLongUpdatedAt = telemetry.lastLatLongUpdatedAt;
-    }
-
-    if (telemetry.speed !== undefined) {
-      normalizedTelemetry.speed = telemetry.speed;
-    }
-
-    if (telemetry.heading !== undefined) {
-      normalizedTelemetry.heading = telemetry.heading;
-    }
-
-    if (telemetry.gpsPrecision !== undefined) {
-      normalizedTelemetry.gpsPrecision = telemetry.gpsPrecision;
-    }
-
-    if (telemetry.connectionStrength !== undefined) {
-      normalizedTelemetry.connectionStrength = normalizeConnectionStrength(telemetry.connectionStrength);
-    }
-
-    if (telemetry.connectionType !== undefined) {
-      normalizedTelemetry.connectionType = normalizeConnectionType(telemetry.connectionType);
-    }
-
+    assignPilotTelemetryFields(normalizedTelemetry, telemetry);
     assignPilotTelemetryGForceFields(normalizedTelemetry, telemetry);
+
+    if (normalizedTelemetry.connectionStrength !== undefined) {
+      normalizedTelemetry.connectionStrength = normalizeConnectionStrength(normalizedTelemetry.connectionStrength);
+    }
+
+    if (normalizedTelemetry.connectionType !== undefined) {
+      normalizedTelemetry.connectionType = normalizeConnectionType(normalizedTelemetry.connectionType);
+    }
 
     if (telemetry.lastTelemetryAt !== undefined) {
       normalizedTelemetry.lastTelemetryAt = telemetry.lastTelemetryAt;

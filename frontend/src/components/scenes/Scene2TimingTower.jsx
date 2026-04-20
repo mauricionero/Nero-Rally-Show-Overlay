@@ -596,7 +596,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               className="w-full h-full"
               muted={true}
             />
-            <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} compact raised />
+            <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} trackLengthTotal={currentStage?.distance} compact raised />
           </div>
         )}
       </div>
@@ -827,7 +827,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               name={selectedPilot.name}
               className="w-full h-full"
             />
-            <PilotTelemetryHud pilot={selectedPilot} telemetry={selectedPilotTelemetry} raised />
+            <PilotTelemetryHud pilot={selectedPilot} telemetry={selectedPilotTelemetry} trackLengthTotal={currentStage?.distance} raised />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
               <div className="flex items-center gap-4">
                 {selectedPilot?.carNumber && (

@@ -843,7 +843,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                   />
                 )}
                 {!hideStreams && (
-                  <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} compact raised />
+                  <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} trackLengthTotal={currentStage?.distance} compact raised />
                 )}
                 <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                   <div className="flex items-center justify-between">
