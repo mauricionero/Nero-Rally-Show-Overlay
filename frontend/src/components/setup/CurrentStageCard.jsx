@@ -82,12 +82,21 @@ export default function CurrentStageCard({ showDebugIds = false }) {
           </SelectContent>
         </Select>
         {currentStage && (
-          <p className="mt-2 text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-            <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
-            LIVE: {getStageTitle(currentStage)}
-            {showDebugIds && <DebugIdText id={currentStage.id} className="text-zinc-400" />}
-            {isLapTimingStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
-          </p>
+          <div className="mt-2 space-y-1">
+            <p className="text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
+              LIVE: {getStageTitle(currentStage)}
+              {showDebugIds && <DebugIdText id={currentStage.id} className="text-zinc-400" />}
+              {isLapTimingStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
+            </p>
+            {(currentStage.game || currentStage.gameStageName) && (
+              <p className="text-xs text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {currentStage.game && <span>{t('theRace.game')}: {currentStage.game}</span>}
+                {currentStage.game && currentStage.gameStageName && <span> • </span>}
+                {currentStage.gameStageName && <span>{t('theRace.gameStageName')}: {currentStage.gameStageName}</span>}
+              </p>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

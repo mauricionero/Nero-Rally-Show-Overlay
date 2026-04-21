@@ -7,6 +7,7 @@ import { FeedSelect } from '../FeedSelect.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
+import CurrentStageBadge from '../CurrentStageBadge.jsx';
 import { StartInformationValue } from '../StartInformationValue.jsx';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -157,6 +158,10 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const currentTime = useSecondAlignedClock();
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
   const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
+  const selectedPilotCurrentStageId = useMemo(() => {
+    const selectedPilot = pilots.find((pilot) => pilot.id === selectedPilotId);
+    return String(selectedPilot?.currentStageId || '').trim();
+  }, [pilots, selectedPilotId]);
 
   useEffect(() => {
     if (!selectedPilotId && pilots.length > 0) {
@@ -171,10 +176,15 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   }, [stages, selectedStageId]);
 
   useEffect(() => {
-    if (followCurrentStage && currentStageId && stages.some((stage) => stage.id === currentStageId) && currentStageId !== selectedStageId) {
-      setSelectedStageId(currentStageId);
+    if (!followCurrentStage) {
+      return;
     }
-  }, [followCurrentStage, currentStageId, stages, selectedStageId]);
+
+    const nextStageId = selectedPilotCurrentStageId || currentStageId || stages[0]?.id || null;
+    if (nextStageId && nextStageId !== selectedStageId) {
+      setSelectedStageId(nextStageId);
+    }
+  }, [currentStageId, followCurrentStage, selectedPilotCurrentStageId, selectedStageId, stages]);
 
   useEffect(() => {
     if (selectedPilotId && !pilots.some((pilot) => pilot.id === selectedPilotId)) {
@@ -190,6 +200,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
 
   const focusPilot = pilots.find(p => p.id === selectedPilotId);
   const selectedStage = stages.find(s => s.id === selectedStageId);
+  const focusPilotCurrentStage = useMemo(() => (
+    stages.find((stage) => stage.id === selectedPilotCurrentStageId) || null
+  ), [selectedPilotCurrentStageId, stages]);
   const focusPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, focusPilot?.id);
   const isLapRace = isLapTimingStageType(selectedStage?.type);
   const isSuperPrimeStage = selectedStage?.type === SUPER_PRIME_STAGE_TYPE;
@@ -314,6 +327,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const selectedMainPilot = selectedMainFeed?.type === 'pilot'
     ? pilots.find((pilot) => pilot.id === selectedMainFeed.id)
     : null;
+  const selectedMainPilotCurrentStage = useMemo(() => (
+    stages.find((stage) => stage.id === String(selectedMainPilot?.currentStageId || '').trim()) || null
+  ), [selectedMainPilot?.currentStageId, stages]);
   const selectedMainPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, selectedMainPilot?.id);
   const SelectedMediaIcon = selectedMainFeed?.type === 'media'
     ? getExternalMediaIconComponent(selectedMainFeed.icon)
@@ -627,6 +643,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                 {selectedMainPilot && !hideStreams && (
                   <PilotTelemetryHud pilot={selectedMainPilot} telemetry={selectedMainPilotTelemetry} trackLengthTotal={selectedStage?.distance} />
                 )}
+                {selectedMainPilotCurrentStage && !hideStreams && (
+                  <CurrentStageBadge
+                    stage={selectedMainPilotCurrentStage}
+                    className="absolute top-4 left-1/2 -translate-x-1/2"
+                  />
+                )}
                 
                 <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
                   {selectedMainFeed.type === 'camera' && <Video className="w-4 h-4 text-[#FF4500]" />}
@@ -671,6 +693,10 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   className="w-full h-full"
                 />
                 <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} trackLengthTotal={selectedStage?.distance} />
+                <CurrentStageBadge
+                  stage={focusPilotCurrentStage}
+                  className="absolute top-4 left-1/2 -translate-x-1/2"
+                />
                 {selectedStageData && (
                   <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
                     <div className="flex items-center gap-2 mb-1">
@@ -695,6 +721,10 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               </div>
             ) : hideStreams && (focusPilot.streamUrl || selectedMainFeed) ? (
               <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
+                <CurrentStageBadge
+                  stage={focusPilotCurrentStage}
+                  className="absolute top-4 left-1/2 -translate-x-1/2"
+                />
                 {selectedStageData && (
                   <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm p-4 rounded border border-[#FF4500]">
                     <div className="flex items-center gap-2 mb-1">

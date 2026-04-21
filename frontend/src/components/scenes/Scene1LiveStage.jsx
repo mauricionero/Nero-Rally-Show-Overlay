@@ -5,6 +5,7 @@ import { LeftControls } from '../LeftControls.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
+import CurrentStageBadge from '../CurrentStageBadge.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import StatusPill from '../StatusPill.jsx';
@@ -128,7 +129,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       }
     ]))
   ), [categoryById, pilots]);
-  
+
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const draftLayout = LAYOUTS.find(l => l.id === draftSelectedLayout) || LAYOUTS[3];
   const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
@@ -767,6 +768,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
             // Pilot Stream Item
             const pilot = item;
             const pilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id);
+            const pilotCurrentStage = stages.find((stage) => stage.id === String(pilot.currentStageId || '').trim()) || null;
             const category = categoryById.get(pilot.categoryId);
             const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
             const alert = currentStageId ? alertByPilotId.has(pilot.id) : false;
@@ -833,7 +835,13 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 {category && (
                   <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ backgroundColor: category.color }} />
                 )}
-                {positionBadge}
+                {pilotCurrentStage && (
+                  <CurrentStageBadge
+                    stage={pilotCurrentStage}
+                    className="absolute top-3 left-1/2 -translate-x-1/2"
+                  />
+                )}
+                {!hideStreams && positionBadge}
                 {!hideStreams && (
                   <StreamPlayer
                     pilotId={pilot.id}

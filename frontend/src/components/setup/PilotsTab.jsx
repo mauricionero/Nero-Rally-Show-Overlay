@@ -18,6 +18,8 @@ import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2, Exter
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { normalizePilotId } from '../../utils/pilotIdentity.js';
 import { getWebSocketPilotTelemetryUrl } from '../../utils/overlayUrls.js';
+import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
+import { getStageTitle } from '../../utils/stageTypes.js';
 import DebugIdText from './DebugIdText.jsx';
 
 const escapeCsvValue = (value) => {
@@ -109,9 +111,11 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
   const { displayIdsInSetup } = useRally();
   const {
     pilots,
+    stages,
     categories,
     addPilot,
     updatePilot,
+    setPilotCurrentStage,
     setPilotTelemetry,
     getPilotTelemetry,
     getPersistedPilotTelemetry,
@@ -124,11 +128,13 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     team: '',
     car: '',
     carNumber: '',
+    currentStageId: '',
     picture: '',
     streamUrl: '',
     categoryId: null,
     startOrder: '',
-    timeOffsetMinutes: ''
+    timeOffsetMinutes: '',
+    isActive: true
   });
   const [editingPilot, setEditingPilot] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
@@ -185,11 +191,13 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
       team: '',
       car: '',
       carNumber: '',
+      currentStageId: '',
       picture: '',
       streamUrl: '',
       categoryId: null,
       startOrder: '',
-      timeOffsetMinutes: ''
+      timeOffsetMinutes: '',
+      isActive: true
     });
     toast.success('Pilot added successfully');
   };
@@ -242,6 +250,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
 
   const sortedCategories = sortCategoriesByDisplayOrder(categories);
   const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
+  const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
     [categories]
@@ -256,6 +265,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     { id: 'category', label: t('pilots.category'), getValue: (pilot) => categoryById.get(pilot.categoryId)?.name || '' },
     { id: 'startOrder', label: t('pilots.startOrder'), getValue: (pilot) => pilot.startOrder ?? '' },
     { id: 'timeOffsetMinutes', label: t('pilots.timeOffsetMinutes'), getValue: (pilot) => pilot.timeOffsetMinutes ?? '' },
+    { id: 'currentStageId', label: t('pilots.currentStage'), getValue: (pilot) => pilot.currentStageId || '' },
     { id: 'picture', label: t('pilots.pictureUrl'), getValue: (pilot) => pilot.picture || '' },
     { id: 'streamUrl', label: t('pilots.streamUrl'), getValue: (pilot) => pilot.streamUrl || '' },
     { id: 'isActive', label: t('pilots.activeStatus'), getValue: (pilot) => (pilot.isActive ? t('status.active') : t('status.inactive')) }
@@ -355,7 +365,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-4">
               <div>
                 <Label htmlFor="pilot-car-number" className="text-white">{t('pilots.carNumber')}</Label>
                 <Input
@@ -414,6 +424,17 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                 />
               </div>
               <div className="flex items-end">
+                <div className="flex items-center gap-2 rounded border border-zinc-700 bg-[#09090B] px-3 py-2 w-full h-[42px]">
+                  <Switch
+                    checked={newPilot.isActive}
+                    onCheckedChange={(checked) => setNewPilot({ ...newPilot, isActive: Boolean(checked) })}
+                    className="data-[state=checked]:bg-[#22C55E]"
+                    data-testid="switch-new-pilot-active"
+                  />
+                  <span className="text-sm text-white">{newPilot.isActive ? t('status.active') : t('status.inactive')}</span>
+                </div>
+              </div>
+              <div className="flex items-end">
                 <Button
                   onClick={handleAddPilot}
                   className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90"
@@ -433,7 +454,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
           <Card key={pilot.id} className="bg-[#18181B] border-zinc-800 relative" data-testid={`pilot-card-${pilot.id}`}>
             <CategoryBar categoryId={pilot.categoryId} />
             <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-4">
                 <StreamThumbnail
                   streamUrl={pilot.streamUrl}
                   name={pilot.name}
@@ -496,17 +517,40 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                       <span className="text-zinc-600">{t('pilots.telemetry')}:</span> {new Date(getPersistedPilotTelemetry(pilot.id).lastTelemetryAt).toLocaleTimeString()}
                     </p>
                   )}
-                  <div className="flex items-center gap-2 mt-2">
-                    <Switch
-                      checked={pilot.isActive}
-                      onCheckedChange={() => togglePilotActive(pilot.id)}
-                      className="data-[state=checked]:bg-[#22C55E]"
-                      data-testid={`switch-pilot-active-${pilot.id}`}
-                    />
-                    <span className="text-sm text-white">{pilot.isActive ? t('status.active') : t('status.inactive')}</span>
+                  <div className="mt-3 space-y-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+                        {t('pilots.currentStage')}
+                      </Label>
+                      <Select
+                        value={pilot.currentStageId || 'none'}
+                        onValueChange={(value) => setPilotCurrentStage(pilot.id, value === 'none' ? '' : value)}
+                      >
+                        <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white h-9 text-sm">
+                          <SelectValue placeholder={t('common.none')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{t('common.none')}</SelectItem>
+                          {sortedStages.map((stage) => (
+                            <SelectItem key={stage.id} value={stage.id}>
+                              {getStageTitle(stage)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={pilot.isActive}
+                        onCheckedChange={() => togglePilotActive(pilot.id)}
+                        className="data-[state=checked]:bg-[#22C55E]"
+                        data-testid={`switch-pilot-active-${pilot.id}`}
+                      />
+                      <span className="text-sm text-white">{pilot.isActive ? t('status.active') : t('status.inactive')}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-col items-end gap-1 shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"

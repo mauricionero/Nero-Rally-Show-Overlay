@@ -5201,6 +5201,7 @@ export const RallyProvider = ({ children }) => {
       categoryId: pilot.categoryId || null,
       startOrder: pilot.startOrder || 999,
       timeOffsetMinutes: pilot.timeOffsetMinutes || 0,
+      currentStageId: String(pilot.currentStageId || '').trim(),
       isActive: pilot.isActive ?? false
     };
     setPilots(prev => [...prev, newPilot]);
@@ -5213,6 +5214,9 @@ export const RallyProvider = ({ children }) => {
       }
 
       const nextUpdates = { ...updates };
+      if (nextUpdates.currentStageId !== undefined && nextUpdates.currentStageId !== null) {
+        nextUpdates.currentStageId = String(nextUpdates.currentStageId || '').trim();
+      }
       delete nextUpdates.latLong;
       delete nextUpdates.latlongTimestamp;
       delete nextUpdates.lastLatLongUpdatedAt;
@@ -5229,6 +5233,26 @@ export const RallyProvider = ({ children }) => {
       return { ...pilot, ...nextUpdates };
     }));
   }
+
+  const setPilotCurrentStage = useCallback((pilotId, stageId) => {
+    const normalizedPilotId = normalizePilotId(pilotId);
+    if (!normalizedPilotId) {
+      return;
+    }
+
+    updatePilot(normalizedPilotId, {
+      currentStageId: String(stageId || '').trim()
+    });
+  }, [updatePilot]);
+
+  const getPilotCurrentStage = useCallback((pilotId) => {
+    const normalizedPilotId = normalizePilotId(pilotId);
+    if (!normalizedPilotId) {
+      return '';
+    }
+
+    return String(pilotsRef.current?.find((pilot) => normalizePilotId(pilot?.id) === normalizedPilotId)?.currentStageId || '').trim();
+  }, []);
 
   const setPilotTelemetry = useCallback((pilotId, telemetry = {}) => {
     if (!pilotId) {
@@ -6434,6 +6458,8 @@ export const RallyProvider = ({ children }) => {
     // CRUD operations
     addPilot,
     updatePilot,
+    setPilotCurrentStage,
+    getPilotCurrentStage,
     setPilotTelemetry,
     getPilotTelemetry,
     getPersistedPilotTelemetry,
@@ -6520,6 +6546,8 @@ export const RallyProvider = ({ children }) => {
     setTransitionImageUrl,
     addPilot,
     updatePilot,
+    setPilotCurrentStage,
+    getPilotCurrentStage,
     setPilotTelemetry,
     getPilotTelemetry,
     getPersistedPilotTelemetry,
@@ -6548,6 +6576,8 @@ export const RallyProvider = ({ children }) => {
     setTransitionImageUrl,
     addPilot,
     updatePilot,
+    setPilotCurrentStage,
+    getPilotCurrentStage,
     setPilotTelemetry,
     getPilotTelemetry,
     getPersistedPilotTelemetry,

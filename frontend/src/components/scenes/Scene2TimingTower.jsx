@@ -6,6 +6,7 @@ import { FeedSelect } from '../FeedSelect.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
+import CurrentStageBadge from '../CurrentStageBadge.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import StatusPill from '../StatusPill.jsx';
 import { buildLapRaceLeaderboard, getLapRaceStageMetaParts, getReferenceNow, parseTime, getStageDateTime, isJumpStartForStage } from '../../utils/rallyHelpers';
@@ -14,7 +15,7 @@ import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../uti
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
-import { getStageNumberLabel, isLapTimingStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
+import { getStageNumberLabel, getStageTitle, isLapTimingStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
@@ -386,6 +387,24 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     return positionMap;
   }, [finished, isLapRace, notStarted, onStageOrdered, retired, sortedLapRacePilotsData]);
   const leader = isLapRace ? sortedLapRacePilotsData[0] : finished[0];
+  const selectedFeed = findFeedByValue(availableFeeds, selectedFeedValue);
+  const selectedPilot = selectedFeed?.type === 'pilot' ? pilots.find((pilot) => pilot.id === selectedFeed.id) : null;
+  const selectedPilotData = selectedFeed?.type === 'pilot'
+    ? sortedPilotsData.find((data) => data.pilot.id === selectedFeed.id)
+    : null;
+  const selectedPilotCurrentStage = useMemo(() => (
+    stages.find((stage) => stage.id === String(selectedPilot?.currentStageId || '').trim()) || null
+  ), [selectedPilot?.currentStageId, stages]);
+  const selectedPilotMeta = selectedPilot
+    ? [selectedPilot.car, selectedPilot.team].filter(Boolean).join(' • ')
+    : '';
+  const SelectedMediaIcon = selectedFeed?.type === 'media'
+    ? getExternalMediaIconComponent(selectedFeed.icon)
+    : null;
+  const selectedPilotSectionPosition = selectedPilot
+    ? sectionPositionByPilotId.get(selectedPilot.id) || selectedPilotData?.position || null
+    : null;
+  const selectedPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, selectedPilot?.id);
 
   if (!currentStageId) {
     return (
@@ -603,22 +622,6 @@ export default function Scene2TimingTower({ hideStreams = false }) {
     );
   };
 
-  const selectedFeed = findFeedByValue(availableFeeds, selectedFeedValue);
-  const selectedPilot = selectedFeed?.type === 'pilot' ? pilots.find((pilot) => pilot.id === selectedFeed.id) : null;
-  const selectedPilotData = selectedFeed?.type === 'pilot'
-    ? sortedPilotsData.find((data) => data.pilot.id === selectedFeed.id)
-    : null;
-  const selectedPilotMeta = selectedPilot
-    ? [selectedPilot.car, selectedPilot.team].filter(Boolean).join(' • ')
-    : '';
-  const SelectedMediaIcon = selectedFeed?.type === 'media'
-    ? getExternalMediaIconComponent(selectedFeed.icon)
-    : null;
-  const selectedPilotSectionPosition = selectedPilot
-    ? sectionPositionByPilotId.get(selectedPilot.id) || selectedPilotData?.position || null
-    : null;
-  const selectedPilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, selectedPilot?.id);
-
   return (
     <div className="relative w-full h-full flex" data-testid="scene-2-timing-tower">
       <LeftControls>
@@ -828,6 +831,12 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               className="w-full h-full"
             />
             <PilotTelemetryHud pilot={selectedPilot} telemetry={selectedPilotTelemetry} trackLengthTotal={currentStage?.distance} raised />
+            {selectedPilotCurrentStage && (
+              <CurrentStageBadge
+                stage={selectedPilotCurrentStage}
+                className="absolute top-4 left-4"
+              />
+            )}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
               <div className="flex items-center gap-4">
                 {selectedPilot?.carNumber && (
@@ -861,7 +870,51 @@ export default function Scene2TimingTower({ hideStreams = false }) {
             </div>
           </>
         ) : hideStreams && selectedFeed ? (
-          <div className="w-full h-full" />
+          <div className="w-full h-full relative" style={{ backgroundColor: chromaKey }}>
+            {selectedFeed.type === 'pilot' && selectedPilotCurrentStage && (
+              <CurrentStageBadge
+                stage={selectedPilotCurrentStage}
+                className="absolute top-4 left-4"
+              />
+            )}
+            {selectedFeed.type === 'pilot' && selectedPilot && (
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
+                <div className="flex items-center gap-4">
+                  {selectedPilot?.carNumber && (
+                    <div className="bg-[#FF4500] px-3 py-1 rounded">
+                      <span className="text-white font-bold text-2xl">{selectedPilot.carNumber}</span>
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {selectedPilot.name}
+                      </p>
+                      {selectedPilotSectionPosition && (
+                        <span className="text-[#22C55E] text-xl font-bold" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                          #{selectedPilotSectionPosition}
+                        </span>
+                      )}
+                    </div>
+                    {selectedPilotMeta && (
+                      <p className="text-zinc-300 text-sm uppercase tracking-wide mt-1">
+                        {selectedPilotMeta}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {selectedFeed.type !== 'pilot' && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-white text-2xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {selectedFeed.name}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <p className="text-white text-xl">{t('scene2.noPilotsOrCameras')}</p>

@@ -24,17 +24,17 @@ import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { arrivalTimeToTotal, normalizeTimingInput, totalTimeToArrival } from '../../utils/timeConversion.js';
 import { parseKmlPlacemarks } from '../../utils/kmlImport.js';
 
-const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'latLong', 'picture', 'streamUrl'];
-const STAGE_HEADERS = ['name', 'type', 'ssNumber', 'date', 'startTime', 'endTime', 'distance', 'numberOfLaps'];
+const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'currentStageId', 'latLong', 'picture', 'streamUrl'];
+const STAGE_HEADERS = ['name', 'type', 'game', 'gameStageName', 'ssNumber', 'date', 'startTime', 'endTime', 'distance', 'numberOfLaps'];
 const TIME_HEADERS = ['number', 'pilot', 'totalTime', 'arrivalTime', 'startTime'];
 
-const PILOT_EXAMPLE = `name,team,car,carNumber,category,startOrder,timeOffsetMinutes,latLong,picture,streamUrl
-Ulysses Bertholdo / Mario Marini,Toyota Gazoo Racing,GR Yaris Rally1,42,WRC,1,0,"-23.550520, -46.633308",https://example.com/pilot.png,https://vdo.ninja/example`;
+const PILOT_EXAMPLE = `name,team,car,carNumber,category,startOrder,timeOffsetMinutes,currentStageId,latLong,picture,streamUrl
+Ulysses Bertholdo / Mario Marini,Toyota Gazoo Racing,GR Yaris Rally1,42,WRC,1,0,,"-23.550520, -46.633308",https://example.com/pilot.png,https://vdo.ninja/example`;
 
-const STAGE_EXAMPLE = `name,type,ssNumber,date,startTime,endTime,distance,numberOfLaps
-Super Prime,sss,7,2026-03-17,15:31,,3.2,2
-Service A,service park,,2026-03-17,16:00,16:45,,
-Circuit Race,lap race,,2026-03-18,10:00,,5.1,8`;
+const STAGE_EXAMPLE = `name,type,game,gameStageName,ssNumber,date,startTime,endTime,distance,numberOfLaps
+Super Prime,sss,dirtRally2,SSS 7,7,2026-03-17,15:31,,3.2,2
+Service A,service park,,,,2026-03-17,16:00,16:45,,
+Circuit Race,lap race,dirtRally2,Challenge Loop,,2026-03-18,10:00,,5.1,8`;
 
 const TIME_EXAMPLE = `number,pilot,totalTime,arrivalTime,startTime
 42,Ulysses Bertholdo / Mario Marini,12:34.567,10:42:15.123,10:29
@@ -326,6 +326,7 @@ export default function BulkLoadTab() {
         categoryId: values.category ? categoryMap[normalizeLookupKey(values.category)] : null,
         startOrder: parseInt(values.startOrder, 10) || 999,
         timeOffsetMinutes: parseInt(values.timeOffsetMinutes, 10) || 0,
+        currentStageId: (values.currentStageId || '').trim(),
         latLong: (values.latLong || '').trim(),
         picture: (values.picture || '').trim(),
         streamUrl: (values.streamUrl || '').trim()
@@ -346,6 +347,7 @@ export default function BulkLoadTab() {
               categoryId: values.category ? nextPilotData.categoryId : (existingPilot.categoryId ?? null),
               startOrder: String(values.startOrder || '').trim() ? nextPilotData.startOrder : (existingPilot.startOrder ?? 999),
               timeOffsetMinutes: String(values.timeOffsetMinutes || '').trim() ? nextPilotData.timeOffsetMinutes : (existingPilot.timeOffsetMinutes ?? 0),
+              currentStageId: String(values.currentStageId || '').trim() ? nextPilotData.currentStageId : (existingPilot.currentStageId || ''),
               latLong: nextPilotData.latLong || existingPilot.latLong || '',
               picture: nextPilotData.picture || existingPilot.picture || '',
               streamUrl: nextPilotData.streamUrl || existingPilot.streamUrl || ''
@@ -410,6 +412,8 @@ export default function BulkLoadTab() {
       addStage({
         name,
         type: stageType,
+        game: (values.game || 'dirtRally2').trim(),
+        gameStageName: (values.gameStageName || '').trim(),
         ssNumber: (values.ssNumber || '').trim(),
         date: normalizeDate(values.date || ''),
         startTime: (values.startTime || '').trim(),

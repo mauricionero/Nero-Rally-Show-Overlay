@@ -14,12 +14,49 @@ const normalizeFilePart = (value, fallback = 'pilot') => {
 
 const renderJsonString = (value) => JSON.stringify(value ?? {});
 
+const normalizeGameId = (value) => String(value ?? '').trim();
+
+const buildPilotTelemetryStageCatalog = (stages = []) => (
+  (Array.isArray(stages) ? stages : [])
+    .map((stage) => ({
+      stageId: String(stage?.id || '').trim(),
+      stageName: String(stage?.name || '').trim(),
+      gameId: normalizeGameId(stage?.game),
+      gameStageName: String(stage?.gameStageName || '').trim()
+    }))
+    .filter((entry) => entry.stageId)
+);
+
+const buildPilotTelemetryGameStageRegistryTemplate = (stages = []) => {
+  const registry = {};
+
+  (Array.isArray(stages) ? stages : []).forEach((stage) => {
+    const stageId = String(stage?.id || '').trim();
+    const gameId = normalizeGameId(stage?.game);
+    if (!stageId || !gameId) {
+      return;
+    }
+
+    if (!registry[gameId]) {
+      registry[gameId] = {};
+    }
+
+    registry[gameId][stageId] = [
+      '',
+      String(stage?.gameStageName || '').trim()
+    ];
+  });
+
+  return registry;
+};
+
 const buildPilotTelemetryPowerShellScript = ({
   tokenDetails,
   channelId,
   pilotId,
   pilotName,
-  maxRpm,
+  stageCatalog,
+  gameStageRegistry,
   telemetryUrl
 }) => {
   const renderedTokenDetails = renderJsonString(tokenDetails);
@@ -27,9 +64,10 @@ const buildPilotTelemetryPowerShellScript = ({
     channelId,
     pilotId,
     pilotName: pilotName || pilotId || 'Pilot',
-    maxRpm: Number.isFinite(Number(maxRpm)) && Number(maxRpm) > 0 ? Number(maxRpm) : null,
     telemetryUrl: telemetryUrl || ''
   });
+  const renderedStageCatalog = renderJsonString(stageCatalog || []);
+  const renderedGameStageRegistry = renderJsonString(gameStageRegistry || {});
 
   return `$ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -42,13 +80,71 @@ $TokenDetails = @'
 ${renderedTokenDetails}
 '@ | ConvertFrom-Json
 
+$StageCatalog = @'
+${renderedStageCatalog}
+'@ | ConvertFrom-Json
+
+$GameStageRegistry = @'
+${renderedGameStageRegistry}
+'@ | ConvertFrom-Json
+
 $Script:AblyToken = $null
 $Script:AblyTokenExpiresAt = 0
 $Script:HttpClient = $null
 $Script:LastPublishedPacketSignature = $null
+$Script:LastResolvedStageSignature = $null
+$Script:StageIdentifier = $null
+$Script:ResolvedStageIdentity = $null
+$Script:LastRunTime = $null
+$Script:LastDistanceDrivenOverall = $null
 $Script:UdpPort = 20777
 $Script:PublishIntervalSeconds = 1.0
 $Script:ChannelName = "rally-telemetry:$($LaunchConfig.channelId)"
+
+class GameStageIdentifier {
+  [object]$Registry
+
+  GameStageIdentifier([object]$Registry) {
+    $this.Registry = $Registry
+  }
+
+  [string] GetFingerprint([double]$TrackLengthMeters, [double]$StartPoint) {
+    return ("{0:F2}, {1:F2}" -f $TrackLengthMeters, $StartPoint)
+  }
+
+  [object] Resolve([double]$TrackLengthMeters, [double]$StartPoint) {
+    $fingerprint = $this.GetFingerprint($TrackLengthMeters, $StartPoint)
+
+    foreach ($gameProp in $this.Registry.PSObject.Properties) {
+      $gameId = [string]$gameProp.Name
+      $stageMap = $gameProp.Value
+      if (-not $stageMap) {
+        continue
+      }
+
+      foreach ($stageProp in $stageMap.PSObject.Properties) {
+        $stageId = [string]$stageProp.Name
+        $entry = $stageProp.Value
+        if (-not $entry -or $entry.Count -lt 2) {
+          continue
+        }
+
+        $knownFingerprint = [string]$entry[0]
+        $gameStageName = [string]$entry[1]
+        if ($knownFingerprint -and $knownFingerprint -eq $fingerprint) {
+          return [pscustomobject]@{
+            gameId = $gameId
+            stageId = $stageId
+            gameStageName = $gameStageName
+            fingerprint = $fingerprint
+          }
+        }
+      }
+    }
+
+    return $null
+  }
+}
 
 function Get-FloatAtIndex {
   param(
@@ -131,15 +227,31 @@ function Initialize-HttpClient {
   $Script:HttpClient = $client
 }
 
-function Get-MaxRpm {
-  if ($LaunchConfig.PSObject.Properties.Name -contains "maxRpm") {
-    $maxRpm = [double]$LaunchConfig.maxRpm
-    if ($maxRpm -gt 0) {
-      return $maxRpm
-    }
+function Initialize-StageIdentifier {
+  if ($Script:StageIdentifier) {
+    return
   }
 
-  return 8000.0
+  $Script:StageIdentifier = [GameStageIdentifier]::new($GameStageRegistry)
+}
+
+function Resolve-CurrentStageIdentity {
+  param(
+    [double]$TrackLengthMeters,
+    [double]$StartPoint
+  )
+
+  Initialize-StageIdentifier
+  if (-not $Script:StageIdentifier) {
+    return $null
+  }
+
+  $resolved = $Script:StageIdentifier.Resolve($TrackLengthMeters, $StartPoint)
+  if ($resolved) {
+    $Script:ResolvedStageIdentity = $resolved
+  }
+
+  return $Script:ResolvedStageIdentity
 }
 
 function Get-DirtRallyRpm {
@@ -209,6 +321,7 @@ function Read-TelemetryPacket {
     $gForceLat = [double](Get-FloatAtIndex -Data $Data -Index 34)
     $gForceLon = [double](Get-FloatAtIndex -Data $Data -Index 35)
     $rawRpm = [double](Get-FloatAtIndex -Data $Data -Index 37)
+    $trackLengthTotal = [double](Get-FloatAtIndex -Data $Data -Index 61)
   } catch {
     return $null
   }
@@ -222,7 +335,7 @@ function Read-TelemetryPacket {
   $gForce = [math]::Round([math]::Sqrt(($gForceLat * $gForceLat) + ($gForceLon * $gForceLon)), 2)
   $rpmPercentage = $null
   $rpmDisplay = Get-DirtRallyRpm -RawRpm $rawRpm
-  $maxRpm = Get-MaxRpm
+  $maxRpm = 8000.0
   if ($maxRpm -gt 0) {
     $rpmPercentage = [math]::Round([math]::Max(0, [math]::Min(100, ($rpmDisplay / $maxRpm) * 100.0)), 1)
   }
@@ -233,6 +346,9 @@ function Read-TelemetryPacket {
     messageType = "pilot-telemetry"
     pilotId = $LaunchConfig.pilotId
     source = "win-telemetry"
+    runTime = [math]::Round($runTime, 3)
+    lapTime = [math]::Round($lapTime, 3)
+    trackLengthTotal = [math]::Round($trackLengthTotal, 3)
     latLong = (Format-NormalizedLatLong -PosX $posX -PosZ $posZ)
     distance = [math]::Round($distanceDrivenOverall, 3)
     distanceDrivenLap = [math]::Round($distanceDrivenLap, 3)
@@ -242,8 +358,8 @@ function Read-TelemetryPacket {
     gForce = $gForce
     rpmPercentage = $rpmPercentage
     rpmDisplay = $rpmDisplay
-    maxRpm = [math]::Round($maxRpm, 1)
     gear = $gear
+    posZ = [math]::Round($posZ, 3)
     lastTelemetryAt = $nowMs
     latlongTimestamp = $nowMs
   }
@@ -265,6 +381,8 @@ function Publish-TelemetryPacket {
   $packetSignature = [pscustomobject]@{
     pilotId = $Packet.pilotId
     source = $Packet.source
+    gameId = $Packet.gameId
+    stageId = $Packet.stageId
     latLong = $Packet.latLong
     distance = $Packet.distance
     distanceDrivenLap = $Packet.distanceDrivenLap
@@ -285,6 +403,9 @@ function Publish-TelemetryPacket {
     messageType = $Packet.messageType
     pilotId = $Packet.pilotId
     source = $Packet.source
+    gameId = $Packet.gameId
+    stageId = $Packet.stageId
+    gameStageName = $Packet.gameStageName
     latLong = $Packet.latLong
     distance = $Packet.distance
     distanceDrivenLap = $Packet.distanceDrivenLap
@@ -336,6 +457,12 @@ function Main {
   if ($LaunchConfig.telemetryUrl) {
     Write-Info ("Telemetry page: {0}" -f $LaunchConfig.telemetryUrl)
   }
+  if ($StageCatalog) {
+    Write-Info ("Stage catalog entries bundled: {0}" -f @($StageCatalog).Count)
+  }
+  if ($GameStageRegistry) {
+    Write-Info ("Game registry groups bundled: {0}" -f @($GameStageRegistry.PSObject.Properties).Count)
+  }
 
   [void](Ensure-GameTelemetryEnabled)
 
@@ -366,6 +493,36 @@ function Main {
       continue
     }
 
+    if ($Script:LastRunTime -ne $null -and $packet.runTime -lt $Script:LastRunTime -and $packet.runTime -lt 15) {
+      $Script:ResolvedStageIdentity = $null
+    } elseif ($Script:LastDistanceDrivenOverall -ne $null -and $packet.distanceDrivenOverall -lt $Script:LastDistanceDrivenOverall -and $packet.distanceDrivenOverall -lt 50) {
+      $Script:ResolvedStageIdentity = $null
+    }
+
+    $Script:LastRunTime = $packet.runTime
+    $Script:LastDistanceDrivenOverall = $packet.distanceDrivenOverall
+
+    if (-not $Script:ResolvedStageIdentity -and $packet.trackLengthTotal -gt 0) {
+      $resolvedStage = Resolve-CurrentStageIdentity -TrackLengthMeters $packet.trackLengthTotal -StartPoint $packet.posZ
+      if ($resolvedStage) {
+        $packet | Add-Member -NotePropertyName gameId -NotePropertyValue $resolvedStage.gameId -Force
+        $packet | Add-Member -NotePropertyName stageId -NotePropertyValue $resolvedStage.stageId -Force
+        $packet | Add-Member -NotePropertyName gameStageName -NotePropertyValue $resolvedStage.gameStageName -Force
+
+        $resolvedStageSignature = "{0}|{1}|{2}" -f $resolvedStage.gameId, $resolvedStage.stageId, $resolvedStage.fingerprint
+        if ($Script:LastResolvedStageSignature -ne $resolvedStageSignature) {
+          Write-Host ""
+          Write-Info ("Resolved stage: {0} ({1})" -f $resolvedStage.gameStageName, $resolvedStage.stageId)
+          Write-Info ("Fingerprint: {0}" -f $resolvedStage.fingerprint)
+          $Script:LastResolvedStageSignature = $resolvedStageSignature
+        }
+      }
+    } elseif ($Script:ResolvedStageIdentity) {
+      $packet | Add-Member -NotePropertyName gameId -NotePropertyValue $Script:ResolvedStageIdentity.gameId -Force
+      $packet | Add-Member -NotePropertyName stageId -NotePropertyValue $Script:ResolvedStageIdentity.stageId -Force
+      $packet | Add-Member -NotePropertyName gameStageName -NotePropertyValue $Script:ResolvedStageIdentity.gameStageName -Force
+    }
+
     $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     if (($nowMs - $lastPublishAt) -lt ($Script:PublishIntervalSeconds * 1000)) {
       continue
@@ -377,7 +534,7 @@ function Main {
     }
 
     $lastPublishAt = $nowMs
-    $statusLine = ([char]13) + ("Speed: {0,6:N1} km/h | G: {1,4:N2} | Heading: {2,6:N1} deg | RPM: {3,6:N1} / {4,6:N1}" -f [double]$packet.speed, [double]$packet.gForce, [double]$packet.heading, [double]$packet.rpmDisplay, [double]$packet.maxRpm)
+    $statusLine = ([char]13) + ("Speed: {0,6:N1} km/h | G: {1,4:N2} | Heading: {2,6:N1} deg | RPM: {3,6:N1}%" -f [double]$packet.speed, [double]$packet.gForce, [double]$packet.heading, [double]$packet.rpmPercentage)
     if ($statusLine -ne $lastStatusLine) {
       Write-Host -NoNewline $statusLine
       $lastStatusLine = $statusLine
@@ -400,6 +557,8 @@ const buildPilotTelemetryBatScript = ({
   channelId,
   pilotId,
   pilotName,
+  stageCatalog,
+  gameStageRegistry,
   telemetryUrl
 }) => {
   const renderedPowerShellContent = String(
@@ -408,6 +567,8 @@ const buildPilotTelemetryBatScript = ({
       channelId,
       pilotId,
       pilotName,
+      stageCatalog,
+      gameStageRegistry,
       telemetryUrl
     }) || ''
   )
@@ -477,6 +638,7 @@ export const requestPilotTelemetryLaunchToken = async ({ channelId, pilotId } = 
 export const buildPilotTelemetryLaunchArtifacts = ({
   channelKey,
   pilot,
+  stages,
   telemetryUrl
 } = {}) => {
   const { valid, channelId } = parseChannelKey(channelKey);
@@ -487,18 +649,20 @@ export const buildPilotTelemetryLaunchArtifacts = ({
   }
 
   const pilotName = String(pilot?.name || pilotId || 'Pilot').trim();
-  const pilotMaxRpm = Number(pilot?.maxRpm);
   const safePilotName = normalizeFilePart(pilotName, 'pilot');
   const safePilotId = normalizeFilePart(pilotId, 'pilot');
   const baseName = `pilot-telemetry-${safePilotName}-${safePilotId}`;
   const batFileName = `run-${baseName}.bat`;
+  const stageCatalog = buildPilotTelemetryStageCatalog(stages);
+  const gameStageRegistry = buildPilotTelemetryGameStageRegistryTemplate(stages);
 
   return {
     channelId,
     pilotId,
     pilotName,
-    maxRpm: Number.isFinite(pilotMaxRpm) && pilotMaxRpm > 0 ? pilotMaxRpm : null,
     batFileName,
+    stageCatalog,
+    gameStageRegistry,
     telemetryUrl: telemetryUrl || ''
   };
 };

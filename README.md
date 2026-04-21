@@ -69,6 +69,9 @@ Notes:
 - If the key is missing, WebSocket mode will fail to connect.
 - The pilot telemetry page is `/pilot-telemetry?ws=...&pilotId=...` and it can export a standalone BAT launcher with a bundled PowerShell reader plus a short-lived Ably token for that pilot.
 - The launcher token is generated in the browser from the existing Ably key the app already uses, and only the short-lived token is embedded in the exported BAT.
+- The launcher also embeds the race stage catalog and a game/stage registry template so the first useful telemetry packet can resolve the active stage from track length + start position.
+- Stage metadata lives on each stage as `game` and `gameStageName`. The generated launcher groups stage ids by `game`, then matches the game stage fingerprint against the telemetry start packet.
+- The frontend reads the runtime registry from [frontend/public/pilot-telemetry-stage-registry.json](frontend/public/pilot-telemetry-stage-registry.json). The docs copy at [docs/pilot-telemetry-stage-registry.example.json](docs/pilot-telemetry-stage-registry.example.json) is the reference shape. The stage ids come from the app; the fingerprint string is captured from the first useful start packet (`track length + start position`).
 - For the exact websocket package formats, see [WebSocket Package Reference](docs/websocket-packages.md).
 
 ### Channel Layout

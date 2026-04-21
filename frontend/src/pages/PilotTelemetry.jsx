@@ -24,7 +24,7 @@ import {
 
 export default function PilotTelemetry() {
   const { t } = useTranslation();
-  const { pilots, pilotTelemetryByPilotId } = useRally();
+  const { pilots, stages, pilotTelemetryByPilotId } = useRally();
   const {
     wsChannelKey,
     wsConnectionStatus,
@@ -75,8 +75,9 @@ export default function PilotTelemetry() {
   const launchArtifacts = useMemo(() => buildPilotTelemetryLaunchArtifacts({
     channelKey: resolvedChannelKey,
     pilot: selectedPilot,
+    stages,
     telemetryUrl: pageUrl
-  }), [pageUrl, resolvedChannelKey, selectedPilot]);
+  }), [pageUrl, resolvedChannelKey, selectedPilot, stages]);
 
   useEffect(() => {
     document.title = selectedPilot
@@ -145,7 +146,8 @@ export default function PilotTelemetry() {
         channelId: launchArtifacts.channelId,
         pilotId: launchArtifacts.pilotId,
         pilotName: launchArtifacts.pilotName,
-        maxRpm: launchArtifacts.maxRpm,
+        stageCatalog: launchArtifacts.stageCatalog,
+        gameStageRegistry: launchArtifacts.gameStageRegistry,
         telemetryUrl: pageUrl
       });
 

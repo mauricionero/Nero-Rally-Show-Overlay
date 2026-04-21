@@ -202,6 +202,29 @@ Notes:
 - The launcher is Windows-only and depends on PowerShell, not Python.
 - The launcher keeps timing values separate from the live telemetry payload. `arrivalTime`, `runTime`, and `lapTime` belong to the timing package flow, not the live telemetry HUD.
 
+### Stage registry for launcher identification
+
+The exported BAT also bundles the current stage catalog and a game-scoped stage registry template so the launcher can resolve which stage is running from the first useful telemetry packet.
+
+The registry shape is:
+
+```json
+{
+  "dirtRally2": {
+    "stage-id": ["7077.21, 1397.82", "US, Pikes Peak (Gravel) - Sector 3"]
+  }
+}
+```
+
+Notes:
+
+- The outer key is the game id, for example `dirtRally2`.
+- The inner key is the stage id from the app.
+- The first array item is the stage fingerprint string built from track length + starting position. In practice, this is captured from the first useful telemetry packet at stage start.
+- The second array item is the in-game stage name that the launcher can show or store alongside the resolved id.
+- The frontend stage editor reads the live runtime copy from [frontend/public/pilot-telemetry-stage-registry.json](../frontend/public/pilot-telemetry-stage-registry.json).
+- A copy of this structure lives in [docs/pilot-telemetry-stage-registry.example.json](docs/pilot-telemetry-stage-registry.example.json).
+
 ## How To Use It
 
 ### When sending normal state

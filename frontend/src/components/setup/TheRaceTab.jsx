@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -46,6 +46,11 @@ const getDefaultStageDate = (stages) => {
 };
 
 const DEFAULT_LAP_RACE_TOTAL_TIME_MODE = 'cumulative';
+const PREFERRED_STAGE_REGISTRY_PATHS = [
+  '/pilot-telemetry-stage-registry.json',
+  '/docs/pilot-telemetry-stage-registry.json'
+];
+const EMPTY_SELECT_VALUE = '__blank__';
 
 const formatEditableDateInput = (value) => {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -101,6 +106,82 @@ export default function TheRaceTab() {
     [mapPlacemarks]
   );
 
+  const [stageRegistry, setStageRegistry] = useState({});
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadStageRegistry = async () => {
+      for (const path of PREFERRED_STAGE_REGISTRY_PATHS) {
+        try {
+          const response = await fetch(path, { cache: 'no-store' });
+          if (!response.ok) {
+            continue;
+          }
+
+          const json = await response.json();
+          if (isMounted) {
+            setStageRegistry((json && typeof json === 'object') ? json : {});
+          }
+          return;
+        } catch (error) {
+          // Try the next path.
+        }
+      }
+
+      if (isMounted) {
+        setStageRegistry({});
+      }
+    };
+
+    loadStageRegistry();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const stageRegistryGames = useMemo(
+    () => Object.keys(stageRegistry || {}).filter(Boolean).sort((a, b) => a.localeCompare(b)),
+    [stageRegistry]
+  );
+
+  const gameOptions = useMemo(() => {
+    if (stageRegistryGames.length > 0) {
+      return stageRegistryGames;
+    }
+
+    const uniqueGames = new Set();
+    stages.forEach((stage) => {
+      const game = String(stage.game || '').trim();
+      if (game) {
+        uniqueGames.add(game);
+      }
+    });
+    return [...uniqueGames].sort((a, b) => a.localeCompare(b));
+  }, [stageRegistryGames, stages]);
+
+  const getGameStageNameOptions = (game) => {
+    const normalizedGame = String(game || '').trim();
+    if (!normalizedGame) {
+      return [];
+    }
+
+    const registryStageEntries = stageRegistry?.[normalizedGame];
+    if (registryStageEntries && typeof registryStageEntries === 'object') {
+      return Object.values(registryStageEntries)
+        .map((entry) => String(Array.isArray(entry) ? entry[1] : entry?.gameStageName || '').trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+    }
+
+    return stages
+      .filter((stage) => String(stage.game || '').trim() === normalizedGame)
+      .map((stage) => String(stage.gameStageName || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  };
+
   const STAGE_TYPES = [
     { id: 'SS', name: t('theRace.stageTypes.ss'), description: 'Point-to-point timed stage', icon: Flag },
     { id: SUPER_PRIME_STAGE_TYPE, name: t('theRace.stageTypes.superPrime'), description: 'Head-to-head timed stage with manual starts', icon: Flag },
@@ -111,7 +192,7 @@ export default function TheRaceTab() {
 
   const defaultStageDate = getDefaultStageDate(stages);
 
-  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
+  const [newStage, setNewStage] = useState({ name: '', type: 'SS', ssNumber: '', date: defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', game: '', gameStageName: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
   const [editingStage, setEditingStage] = useState(null);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
 
@@ -125,7 +206,7 @@ export default function TheRaceTab() {
       return;
     }
     addStage(newStage);
-    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
+    setNewStage({ name: '', type: 'SS', ssNumber: '', date: newStage.date || defaultStageDate, distance: '', startTime: '', realStartTime: '', endTime: '', mapPlacemarkId: '', game: '', gameStageName: '', numberOfLaps: '', lapRaceTotalTimeMode: DEFAULT_LAP_RACE_TOTAL_TIME_MODE, lapRaceMaxTimeMinutes: '', lapRaceVariableLaps: false });
     toast.success('Stage added successfully');
   };
 
@@ -203,6 +284,25 @@ export default function TheRaceTab() {
         : prev.lapRaceTotalTimeMode
     }) : prev);
   };
+
+  const handleStageGameChange = (setter, game) => {
+    setter((prev) => ({
+      ...prev,
+      game,
+      gameStageName: ''
+    }));
+  };
+
+  const handleStageGameStageNameChange = (setter, gameStageName) => {
+    setter((prev) => ({
+      ...prev,
+      gameStageName
+    }));
+  };
+
+  const handleNullableSelectValue = (value) => (
+    value === EMPTY_SELECT_VALUE ? '' : value
+  );
 
   const getStageTypeIcon = (type) => {
     const stageType = STAGE_TYPES.find(t => t.id === type);
@@ -309,6 +409,41 @@ export default function TheRaceTab() {
                     className="bg-[#09090B] border-zinc-700 text-white"
                     data-testid="input-stage-name"
                   />
+                </div>
+                <div className="xl:col-span-3 min-w-0">
+                  <Label className="text-white">{t('theRace.game')}</Label>
+                  <Select
+                    value={newStage.game || ''}
+                    onValueChange={(value) => handleStageGameChange(setNewStage, handleNullableSelectValue(value))}
+                  >
+                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                      <SelectValue placeholder={t('theRace.placeholder.game')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
+                      {gameOptions.map((game) => (
+                        <SelectItem key={game} value={game}>{game}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="xl:col-span-5 min-w-0">
+                  <Label className="text-white">{t('theRace.gameStageName')}</Label>
+                  <Select
+                    value={newStage.gameStageName || ''}
+                    onValueChange={(value) => handleStageGameStageNameChange(setNewStage, handleNullableSelectValue(value))}
+                    disabled={!newStage.game || getGameStageNameOptions(newStage.game).length === 0}
+                  >
+                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                      <SelectValue placeholder={t('theRace.placeholder.gameStageName')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
+                      {getGameStageNameOptions(newStage.game).map((gameStageName) => (
+                        <SelectItem key={gameStageName} value={gameStageName}>{gameStageName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="xl:col-span-2 min-w-0">
                   <Label className="text-white">{t('theRace.distance')}</Label>
@@ -430,6 +565,41 @@ export default function TheRaceTab() {
                   className="bg-[#09090B] border-zinc-700 text-white"
                   data-testid="input-stage-name"
                 />
+              </div>
+              <div>
+                <Label className="text-white">{t('theRace.game')}</Label>
+                <Select
+                  value={newStage.game || ''}
+                  onValueChange={(value) => handleStageGameChange(setNewStage, handleNullableSelectValue(value))}
+                >
+                  <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                    <SelectValue placeholder={t('theRace.placeholder.game')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
+                    {gameOptions.map((game) => (
+                      <SelectItem key={game} value={game}>{game}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-2">
+                <Label className="text-white">{t('theRace.gameStageName')}</Label>
+                <Select
+                  value={newStage.gameStageName || ''}
+                  onValueChange={(value) => handleStageGameStageNameChange(setNewStage, handleNullableSelectValue(value))}
+                  disabled={!newStage.game || getGameStageNameOptions(newStage.game).length === 0}
+                >
+                  <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                    <SelectValue placeholder={t('theRace.placeholder.gameStageName')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
+                    {getGameStageNameOptions(newStage.game).map((gameStageName) => (
+                      <SelectItem key={gameStageName} value={gameStageName}>{gameStageName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {isSSType && (
@@ -570,6 +740,8 @@ export default function TheRaceTab() {
                       {stage.distance && <span>{stage.distance} km</span>}
                       {getDisplayedStageSchedule(stage) && <span>{getDisplayedStageSchedule(stage)}</span>}
                       {linkedPlacemark && <span>{t('theRace.mapPlacemark')}: {linkedPlacemark.name}</span>}
+                      {stage.game && <span>{t('theRace.game')}: {stage.game}</span>}
+                      {stage.gameStageName && <span>{t('theRace.gameStageName')}: {stage.gameStageName}</span>}
                       {isLapTimingStageType(stage.type) && getLapRaceMetaParts(stage).map((part) => (
                         <span key={`${stage.id}-${part}`} className="text-[#FACC15]">{part}</span>
                       ))}
@@ -580,11 +752,16 @@ export default function TheRaceTab() {
                       setStageDialogOpen(open);
                       if (!open) setEditingStage(null);
                     }}>
-                      <DialogTrigger asChild>
+                          <DialogTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setEditingStage({ ...stage, date: formatDateForEditing(stage.date) })}
+                          onClick={() => setEditingStage({
+                            ...stage,
+                            game: stage.game || 'dirtRally2',
+                            gameStageName: stage.gameStageName || '',
+                            date: formatDateForEditing(stage.date)
+                          })}
                           className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
                           data-testid={`button-edit-stage-${stage.id}`}
                         >
@@ -617,6 +794,41 @@ export default function TheRaceTab() {
                                 onChange={(e) => setEditingStage({ ...editingStage, name: e.target.value })}
                                 className="bg-[#09090B] border-zinc-700 text-white"
                               />
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('theRace.game')}</Label>
+                              <Select
+                                value={editingStage.game || ''}
+                                onValueChange={(value) => handleStageGameChange(setEditingStage, handleNullableSelectValue(value))}
+                              >
+                                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                  <SelectValue placeholder={t('theRace.placeholder.game')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
+                                  {gameOptions.map((game) => (
+                                    <SelectItem key={game} value={game}>{game}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-white">{t('theRace.gameStageName')}</Label>
+                              <Select
+                                value={editingStage.gameStageName || ''}
+                                onValueChange={(value) => handleStageGameStageNameChange(setEditingStage, handleNullableSelectValue(value))}
+                                disabled={!editingStage.game || getGameStageNameOptions(editingStage.game).length === 0}
+                              >
+                                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                  <SelectValue placeholder={t('theRace.placeholder.gameStageName')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
+                                  {getGameStageNameOptions(editingStage.game).map((gameStageName) => (
+                                    <SelectItem key={gameStageName} value={gameStageName}>{gameStageName}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
                             {isSpecialStageType(editingStage.type) && (
                               <div>
