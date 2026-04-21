@@ -34,8 +34,10 @@ export const normalizeTimingSource = (value) => {
   if (
     rawValue === TIMING_SOURCES.MOBILE
     || rawValue === 'android-app'
+    || rawValue === 'win-telemetry'
     || compactValue.includes('mobile')
     || compactValue.includes('android')
+    || compactValue.includes('wintelemetry')
   ) {
     return TIMING_SOURCES.MOBILE;
   }

@@ -115,8 +115,10 @@ export const normalizeSyncRole = (value) => {
   if (
     rawRole === SYNC_ROLES.MOBILE
     || rawRole === 'android-app'
+    || rawRole === 'win-telemetry'
     || compactRole.includes('mobile')
     || compactRole.includes('android')
+    || compactRole.includes('wintelemetry')
   ) {
     return SYNC_ROLES.MOBILE;
   }

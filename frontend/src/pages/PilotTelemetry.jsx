@@ -145,6 +145,7 @@ export default function PilotTelemetry() {
         channelId: launchArtifacts.channelId,
         pilotId: launchArtifacts.pilotId,
         pilotName: launchArtifacts.pilotName,
+        maxRpm: launchArtifacts.maxRpm,
         telemetryUrl: pageUrl
       });
 
@@ -226,6 +227,7 @@ export default function PilotTelemetry() {
                     name={selectedPilot.name}
                     className="absolute inset-0"
                     forceMute
+                    forceFullscreen
                   />
                 ) : (
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,69,0,0.22),transparent_45%),linear-gradient(180deg,#111113_0%,#09090B_100%)]" />

@@ -1065,7 +1065,7 @@ const buildDeltaBatchChangesFromEntries = (entries = []) => {
 };
 
 const normalizeMessageSource = (source) => String(source || '').trim().toLowerCase();
-const TRUSTED_PILOT_TELEMETRY_SOURCES = new Set(['android-app', 'setup-relay', 'pilot-script', 'dirt-rally-2']);
+const TRUSTED_PILOT_TELEMETRY_SOURCES = new Set(['android-app', 'win-telemetry', 'setup-relay', 'pilot-script', 'dirt-rally-2']);
 
 export const RallyProvider = ({ children }) => {
   // Event configuration
@@ -1366,6 +1366,7 @@ export const RallyProvider = ({ children }) => {
       || details?.sourceRole
       || ''
     ).trim().toLowerCase();
+    const normalizedSourceRole = normalizeSyncRole(source);
     const hasArrivalTimes = section === 'arrivalTimes' || isPlainObject(payload.arrivalTimes);
 
     if (channelType === 'telemetry') {
@@ -1382,7 +1383,7 @@ export const RallyProvider = ({ children }) => {
       return false;
     }
 
-    if (source === 'android-app' && section !== 'stageSos' && messageType !== 'pilot-telemetry' && !hasArrivalTimes) {
+    if (normalizedSourceRole === SYNC_ROLES.MOBILE && section !== 'stageSos' && messageType !== 'pilot-telemetry' && !hasArrivalTimes) {
       return false;
     }
 
@@ -2657,7 +2658,9 @@ export const RallyProvider = ({ children }) => {
     const incomingTimingSource = normalizeTimingSource(sourceRole);
     const isSnapshotPackage = metadata?.packageType === 'snapshot';
 
-    if (!isSnapshotPackage && normalizedChanges.arrivalTimes !== undefined && (sourceRole === 'mobile' || sourceRole === 'android-app')) {
+    const normalizedSourceRole = normalizeSyncRole(sourceRole);
+
+    if (!isSnapshotPackage && normalizedChanges.arrivalTimes !== undefined && normalizedSourceRole === SYNC_ROLES.MOBILE) {
       const nextArrivalTimes = {};
       const nextLapTimes = isPlainObject(normalizedChanges.lapTimes) ? { ...normalizedChanges.lapTimes } : {};
       const nextTimes = isPlainObject(normalizedChanges.times) ? { ...normalizedChanges.times } : {};
@@ -3438,6 +3441,7 @@ export const RallyProvider = ({ children }) => {
       || data?.origin
       || data?.clientSource
     );
+    const normalizedMessageSourceRole = normalizeSyncRole(messageSource);
     if (syncInboundServiceRef.current.shouldIgnoreAndroidPayload(data)) {
       setWsLastMessageAt(Date.now());
       isPublishing.current = true;
@@ -3585,7 +3589,7 @@ export const RallyProvider = ({ children }) => {
       normalizedData = flat;
     }
 
-    if (isPlainObject(normalizedData) && (messageSource === 'mobile' || messageSource === 'android-app')) {
+    if (isPlainObject(normalizedData) && normalizedMessageSourceRole === SYNC_ROLES.MOBILE) {
       const legacyTimingEntries = Object.entries(normalizedData).filter(([key]) => TIMING_BY_STAGE_FIELDS.has(key));
 
       if (legacyTimingEntries.length > 0) {
@@ -3663,7 +3667,7 @@ export const RallyProvider = ({ children }) => {
       if (wsRoleRef.current === 'setup') {
         suppressNextSetupTimingCapture('stageSos');
       }
-      if (messageSource === 'android-app' || data?.section === 'stageSos') {
+      if (normalizedMessageSourceRole === SYNC_ROLES.MOBILE || data?.section === 'stageSos') {
         setStageSosState((prev) => mergePilotStageFlagMap(prev, normalizedData.stageSos, {
           resolvePilotId: (pilotId) => resolveKnownEntityId(pilotId, pilotsRef.current, 'pilot'),
           resolveStageId: (stageId) => resolveKnownEntityId(stageId, stagesRef.current, 'stage'),

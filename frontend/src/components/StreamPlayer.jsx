@@ -73,6 +73,10 @@ const getStreamProvider = (streamUrl) => {
   return 'generic';
 };
 
+const hasPositionUtility = (className = '') => (
+  /\b(static|fixed|absolute|relative|sticky)\b/.test(String(className || ''))
+);
+
 export const StreamPlayer = ({ 
   pilotId, 
   streamUrl, 
@@ -81,7 +85,8 @@ export const StreamPlayer = ({
   showControls = false,
   showMuteIndicator = true, // Show/hide the mute icon
   forceUnmute = false, // Force unmute (for inline expanded streams)
-  forceMute = false // Force mute (for small preview streams)
+  forceMute = false, // Force mute (for small preview streams)
+  forceFullscreen = false
 }) => {
   const { getStreamConfig, streamConfigs, globalAudio } = useRally();
   const iframeRef = useRef(null);
@@ -112,6 +117,7 @@ export const StreamPlayer = ({
   const streamProvider = useMemo(() => getStreamProvider(streamUrl), [streamUrl]);
   const supportsVdoIframeApi = streamProvider === 'vdo';
   const supportsYouTubeIframeApi = streamProvider === 'youtube';
+  const positionClassName = hasPositionUtility(className) ? '' : 'relative';
 
   const iframeSrc = useMemo(() => {
     if (!streamUrl) {
@@ -124,6 +130,10 @@ export const StreamPlayer = ({
       if (supportsVdoIframeApi) {
         url.searchParams.set('cleanoutput', '1');
         url.searchParams.set('cleanviewer', '1');
+
+        if (forceFullscreen) {
+          url.searchParams.set('cover', '2');
+        }
 
         if (!showControls) {
           url.searchParams.set('nomouseevents', '1');
@@ -143,7 +153,7 @@ export const StreamPlayer = ({
     } catch {
       return streamUrl;
     }
-  }, [showControls, streamUrl, supportsVdoIframeApi, supportsYouTubeIframeApi]);
+  }, [forceFullscreen, showControls, streamUrl, supportsVdoIframeApi, supportsYouTubeIframeApi]);
 
   useEffect(() => {
     if (!supportsYouTubeIframeApi || !streamUrl || !iframeRef.current) {
@@ -242,13 +252,13 @@ export const StreamPlayer = ({
   }
 
   return (
-    <div className={`bg-black relative overflow-hidden ${className}`} style={filterStyle}>
+    <div className={`bg-black ${positionClassName} overflow-hidden ${className}`.trim()} style={filterStyle}>
       <iframe
         ref={iframeRef}
         src={iframeSrc}
         className="w-full h-full"
         frameBorder="0"
-        allow="autoplay"
+        allow="autoplay; fullscreen; picture-in-picture"
         title={name}
         style={{ pointerEvents: showControls ? 'auto' : 'none' }}
         onLoad={() => {

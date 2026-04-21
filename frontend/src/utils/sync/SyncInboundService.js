@@ -138,7 +138,7 @@ export class SyncInboundService {
     );
 
     if (
-      messageSource === 'android-app'
+      (messageSource === 'android-app' || messageSource === 'win-telemetry')
       && payload?.messageType !== 'pilot-telemetry'
       && data?.section !== 'pilotTelemetry'
       && data?.section !== 'stageSos'

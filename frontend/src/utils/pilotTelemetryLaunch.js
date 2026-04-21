@@ -19,6 +19,7 @@ const buildPilotTelemetryPowerShellScript = ({
   channelId,
   pilotId,
   pilotName,
+  maxRpm,
   telemetryUrl
 }) => {
   const renderedTokenDetails = renderJsonString(tokenDetails);
@@ -26,6 +27,7 @@ const buildPilotTelemetryPowerShellScript = ({
     channelId,
     pilotId,
     pilotName: pilotName || pilotId || 'Pilot',
+    maxRpm: Number.isFinite(Number(maxRpm)) && Number(maxRpm) > 0 ? Number(maxRpm) : null,
     telemetryUrl: telemetryUrl || ''
   });
 
@@ -43,6 +45,7 @@ ${renderedTokenDetails}
 $Script:AblyToken = $null
 $Script:AblyTokenExpiresAt = 0
 $Script:HttpClient = $null
+$Script:LastPublishedPacketSignature = $null
 $Script:UdpPort = 20777
 $Script:PublishIntervalSeconds = 1.0
 $Script:ChannelName = "rally-telemetry:$($LaunchConfig.channelId)"
@@ -120,11 +123,30 @@ function Initialize-HttpClient {
     return
   }
 
+  Add-Type -AssemblyName System.Net.Http
   $client = New-Object System.Net.Http.HttpClient
   $client.DefaultRequestHeaders.ConnectionClose = $false
   $client.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new("Bearer", $Script:AblyToken)
   $client.Timeout = [TimeSpan]::FromSeconds(15)
   $Script:HttpClient = $client
+}
+
+function Get-MaxRpm {
+  if ($LaunchConfig.PSObject.Properties.Name -contains "maxRpm") {
+    $maxRpm = [double]$LaunchConfig.maxRpm
+    if ($maxRpm -gt 0) {
+      return $maxRpm
+    }
+  }
+
+  return 8000.0
+}
+
+function Get-DirtRallyRpm {
+  param([double]$RawRpm)
+
+  # Dirt Rally 2 UDP reports RPM in tenths of an RPM.
+  return [math]::Round($RawRpm * 10.0, 1)
 }
 
 function Ensure-GameTelemetryEnabled {
@@ -180,14 +202,13 @@ function Read-TelemetryPacket {
     $distanceDrivenLap = [double](Get-FloatAtIndex -Data $Data -Index 2)
     $distanceDrivenOverall = [double](Get-FloatAtIndex -Data $Data -Index 3)
     $posX = [double](Get-FloatAtIndex -Data $Data -Index 4)
-    $posY = [double](Get-FloatAtIndex -Data $Data -Index 5)
     $posZ = [double](Get-FloatAtIndex -Data $Data -Index 6)
     $speedMs = [double](Get-FloatAtIndex -Data $Data -Index 7)
     $yaw = [double](Get-FloatAtIndex -Data $Data -Index 16)
     $gear = [int]([math]::Round((Get-FloatAtIndex -Data $Data -Index 33)))
     $gForceLat = [double](Get-FloatAtIndex -Data $Data -Index 34)
     $gForceLon = [double](Get-FloatAtIndex -Data $Data -Index 35)
-    $rpmReal = [double](Get-FloatAtIndex -Data $Data -Index 37)
+    $rawRpm = [double](Get-FloatAtIndex -Data $Data -Index 37)
   } catch {
     return $null
   }
@@ -200,9 +221,10 @@ function Read-TelemetryPacket {
 
   $gForce = [math]::Round([math]::Sqrt(($gForceLat * $gForceLat) + ($gForceLon * $gForceLon)), 2)
   $rpmPercentage = $null
-  $maxRpm = 8000.0
+  $rpmDisplay = Get-DirtRallyRpm -RawRpm $rawRpm
+  $maxRpm = Get-MaxRpm
   if ($maxRpm -gt 0) {
-    $rpmPercentage = [math]::Round(($rpmReal / $maxRpm) * 100.0, 1)
+    $rpmPercentage = [math]::Round([math]::Max(0, [math]::Min(100, ($rpmDisplay / $maxRpm) * 100.0)), 1)
   }
 
   $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -210,7 +232,7 @@ function Read-TelemetryPacket {
   $packet = [pscustomobject]@{
     messageType = "pilot-telemetry"
     pilotId = $LaunchConfig.pilotId
-    source = "dirt-rally-2"
+    source = "win-telemetry"
     latLong = (Format-NormalizedLatLong -PosX $posX -PosZ $posZ)
     distance = [math]::Round($distanceDrivenOverall, 3)
     distanceDrivenLap = [math]::Round($distanceDrivenLap, 3)
@@ -218,14 +240,10 @@ function Read-TelemetryPacket {
     speed = $speedKmh
     heading = $headingDeg
     gForce = $gForce
-    longitudinalG = [math]::Round($gForceLon, 2)
-    lateralG = [math]::Round($gForceLat, 2)
-    rpmReal = [math]::Round($rpmReal, 1)
     rpmPercentage = $rpmPercentage
+    rpmDisplay = $rpmDisplay
+    maxRpm = [math]::Round($maxRpm, 1)
     gear = $gear
-    posX = [math]::Round($posX, 3)
-    posY = [math]::Round($posY, 3)
-    posZ = [math]::Round($posZ, 3)
     lastTelemetryAt = $nowMs
     latlongTimestamp = $nowMs
   }
@@ -244,8 +262,42 @@ function Publish-TelemetryPacket {
     Initialize-HttpClient
   }
 
+  $packetSignature = [pscustomobject]@{
+    pilotId = $Packet.pilotId
+    source = $Packet.source
+    latLong = $Packet.latLong
+    distance = $Packet.distance
+    distanceDrivenLap = $Packet.distanceDrivenLap
+    distanceDrivenOverall = $Packet.distanceDrivenOverall
+    speed = $Packet.speed
+    heading = $Packet.heading
+    gForce = $Packet.gForce
+    rpmPercentage = $Packet.rpmPercentage
+    gear = $Packet.gear
+  } | ConvertTo-Json -Depth 5 -Compress
+
+  if ($packetSignature -eq $Script:LastPublishedPacketSignature) {
+    return $true
+  }
+
   $uri = "https://main.realtime.ably.net/channels/$($Script:ChannelName)/messages"
-  $body = @{ name = "update"; data = $Packet } | ConvertTo-Json -Depth 20 -Compress
+  $publishPacket = [pscustomobject]@{
+    messageType = $Packet.messageType
+    pilotId = $Packet.pilotId
+    source = $Packet.source
+    latLong = $Packet.latLong
+    distance = $Packet.distance
+    distanceDrivenLap = $Packet.distanceDrivenLap
+    distanceDrivenOverall = $Packet.distanceDrivenOverall
+    speed = $Packet.speed
+    heading = $Packet.heading
+    gForce = $Packet.gForce
+    rpmPercentage = $Packet.rpmPercentage
+    gear = $Packet.gear
+    lastTelemetryAt = $Packet.lastTelemetryAt
+    latlongTimestamp = $Packet.latlongTimestamp
+  }
+  $body = @{ name = "update"; data = $publishPacket } | ConvertTo-Json -Depth 20 -Compress
   $content = New-Object System.Net.Http.StringContent($body, [System.Text.Encoding]::UTF8, "application/json")
 
   try {
@@ -258,10 +310,11 @@ function Publish-TelemetryPacket {
         throw "Ably token rejected or expired. Generate a new launcher from the pilot telemetry page."
       }
 
-      throw "Publish failed with status $statusCode: $responseBody"
+      throw "Publish failed with status \${statusCode}: \${responseBody}"
     }
 
     $response.Dispose()
+    $Script:LastPublishedPacketSignature = $packetSignature
     return $true
   } catch {
     $statusCode = $null
@@ -290,7 +343,7 @@ function Main {
   $udpClient.Client.ReceiveTimeout = 1000
   $remoteEndpoint = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
 
-  Write-Info ("Listening for Dirt Rally 2 telemetry on UDP {0}..." -f $Script:UdpPort)
+  Write-Info ("Listening for win-telemetry on UDP {0}..." -f $Script:UdpPort)
   $lastPublishAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
   $lastStatusLine = ""
 
@@ -324,7 +377,7 @@ function Main {
     }
 
     $lastPublishAt = $nowMs
-    $statusLine = ([char]13) + ("Speed: {0,6:N1} km/h | G: {1,4:N2} | Heading: {2,6:N1}°" -f [double]$packet.speed, [double]$packet.gForce, [double]$packet.heading)
+    $statusLine = ([char]13) + ("Speed: {0,6:N1} km/h | G: {1,4:N2} | Heading: {2,6:N1} deg | RPM: {3,6:N1} / {4,6:N1}" -f [double]$packet.speed, [double]$packet.gForce, [double]$packet.heading, [double]$packet.rpmDisplay, [double]$packet.maxRpm)
     if ($statusLine -ne $lastStatusLine) {
       Write-Host -NoNewline $statusLine
       $lastStatusLine = $statusLine
@@ -434,6 +487,7 @@ export const buildPilotTelemetryLaunchArtifacts = ({
   }
 
   const pilotName = String(pilot?.name || pilotId || 'Pilot').trim();
+  const pilotMaxRpm = Number(pilot?.maxRpm);
   const safePilotName = normalizeFilePart(pilotName, 'pilot');
   const safePilotId = normalizeFilePart(pilotId, 'pilot');
   const baseName = `pilot-telemetry-${safePilotName}-${safePilotId}`;
@@ -443,6 +497,7 @@ export const buildPilotTelemetryLaunchArtifacts = ({
     channelId,
     pilotId,
     pilotName,
+    maxRpm: Number.isFinite(pilotMaxRpm) && pilotMaxRpm > 0 ? pilotMaxRpm : null,
     batFileName,
     telemetryUrl: telemetryUrl || ''
   };
