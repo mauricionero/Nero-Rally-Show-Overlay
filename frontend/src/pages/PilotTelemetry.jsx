@@ -22,6 +22,29 @@ import {
   requestPilotTelemetryLaunchToken
 } from '../utils/pilotTelemetryLaunch.js';
 
+const PREFERRED_STAGE_REGISTRY_PATHS = [
+  '/pilot-telemetry-stage-registry.json',
+  '/docs/pilot-telemetry-stage-registry.json'
+];
+
+const loadPilotTelemetryStageRegistry = async () => {
+  for (const path of PREFERRED_STAGE_REGISTRY_PATHS) {
+    try {
+      const response = await fetch(path, { cache: 'no-store' });
+      if (!response.ok) {
+        continue;
+      }
+
+      const json = await response.json();
+      return (json && typeof json === 'object') ? json : {};
+    } catch {
+      // Try the next path.
+    }
+  }
+
+  return {};
+};
+
 export default function PilotTelemetry() {
   const { t } = useTranslation();
   const { pilots, stages, pilotTelemetryByPilotId } = useRally();
@@ -39,6 +62,7 @@ export default function PilotTelemetry() {
   const [hideStream, setHideStream] = useState(false);
   const [isDownloadingLauncher, setIsDownloadingLauncher] = useState(false);
   const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
+  const [stageRegistry, setStageRegistry] = useState({});
   const pageNow = useSecondAlignedClock();
   const wsActivity = useWsActivityCounters({
     enabled: true,
@@ -76,14 +100,32 @@ export default function PilotTelemetry() {
     channelKey: resolvedChannelKey,
     pilot: selectedPilot,
     stages,
+    gameStageRegistry: stageRegistry,
     telemetryUrl: pageUrl
-  }), [pageUrl, resolvedChannelKey, selectedPilot, stages]);
+  }), [pageUrl, resolvedChannelKey, selectedPilot, stageRegistry, stages]);
 
   useEffect(() => {
     document.title = selectedPilot
       ? `${t('header.title')} - ${selectedPilot.name} ${t('pilotTelemetry.title')}`
       : `${t('header.title')} - ${t('pilotTelemetry.title')}`;
   }, [selectedPilot, t]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadStageRegistry = async () => {
+      const nextStageRegistry = await loadPilotTelemetryStageRegistry();
+      if (isMounted) {
+        setStageRegistry(nextStageRegistry);
+      }
+    };
+
+    loadStageRegistry();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const wsKey = searchParams.get('ws') || wsChannelKey;
@@ -136,23 +178,42 @@ export default function PilotTelemetry() {
 
     try {
       setIsDownloadingLauncher(true);
+      const registryForLauncher = Object.keys(stageRegistry || {}).length > 0
+        ? stageRegistry
+        : await loadPilotTelemetryStageRegistry();
+      if (Object.keys(stageRegistry || {}).length === 0 && Object.keys(registryForLauncher || {}).length > 0) {
+        setStageRegistry(registryForLauncher);
+      }
+      const artifactsForDownload = buildPilotTelemetryLaunchArtifacts({
+        channelKey: resolvedChannelKey,
+        pilot: selectedPilot,
+        stages,
+        gameStageRegistry: registryForLauncher,
+        telemetryUrl: pageUrl
+      });
+
+      if (!artifactsForDownload) {
+        toast.error(t('pilotTelemetry.connectWebSocketFirst'));
+        return;
+      }
+
       const tokenDetails = await requestPilotTelemetryLaunchToken({
-        channelId: launchArtifacts.channelId,
-        pilotId: launchArtifacts.pilotId
+        channelId: artifactsForDownload.channelId,
+        pilotId: artifactsForDownload.pilotId
       });
 
       const batContent = buildPilotTelemetryBatScript({
         tokenDetails,
-        channelId: launchArtifacts.channelId,
-        pilotId: launchArtifacts.pilotId,
-        pilotName: launchArtifacts.pilotName,
-        stageCatalog: launchArtifacts.stageCatalog,
-        gameStageRegistry: launchArtifacts.gameStageRegistry,
+        channelId: artifactsForDownload.channelId,
+        pilotId: artifactsForDownload.pilotId,
+        pilotName: artifactsForDownload.pilotName,
+        stageCatalog: artifactsForDownload.stageCatalog,
+        gameStageRegistry: artifactsForDownload.gameStageRegistry,
         telemetryUrl: pageUrl
       });
 
-      downloadTextFile(launchArtifacts.batFileName, batContent);
-      toast.success(t('pilotTelemetry.launcherDownloaded', { fileName: launchArtifacts.batFileName }));
+      downloadTextFile(artifactsForDownload.batFileName, batContent);
+      toast.success(t('pilotTelemetry.launcherDownloaded', { fileName: artifactsForDownload.batFileName }));
     } catch (error) {
       console.error('Could not build pilot launcher:', error);
       toast.error(t('pilotTelemetry.tokenRequestFailed'));

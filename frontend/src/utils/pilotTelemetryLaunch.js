@@ -27,29 +27,6 @@ const buildPilotTelemetryStageCatalog = (stages = []) => (
     .filter((entry) => entry.stageId)
 );
 
-const buildPilotTelemetryGameStageRegistryTemplate = (stages = []) => {
-  const registry = {};
-
-  (Array.isArray(stages) ? stages : []).forEach((stage) => {
-    const stageId = String(stage?.id || '').trim();
-    const gameId = normalizeGameId(stage?.game);
-    if (!stageId || !gameId) {
-      return;
-    }
-
-    if (!registry[gameId]) {
-      registry[gameId] = {};
-    }
-
-    registry[gameId][stageId] = [
-      '',
-      String(stage?.gameStageName || '').trim()
-    ];
-  });
-
-  return registry;
-};
-
 const buildPilotTelemetryPowerShellScript = ({
   tokenDetails,
   channelId,
@@ -103,13 +80,39 @@ $Script:ChannelName = "rally-telemetry:$($LaunchConfig.channelId)"
 
 class GameStageIdentifier {
   [object]$Registry
+  [object[]]$StageCatalog
 
-  GameStageIdentifier([object]$Registry) {
+  GameStageIdentifier([object]$Registry, [object[]]$StageCatalog) {
     $this.Registry = $Registry
+    $this.StageCatalog = $StageCatalog
   }
 
   [string] GetFingerprint([double]$TrackLengthMeters, [double]$StartPoint) {
-    return ("{0:F2}, {1:F2}" -f $TrackLengthMeters, $StartPoint)
+    $normalizedTrackLength = [math]::Floor($TrackLengthMeters / 10.0) * 10
+    $normalizedStartPoint = [math]::Floor($StartPoint / 10.0) * 10
+    return ("{0:F0}, {1:F0}" -f $normalizedTrackLength, $normalizedStartPoint)
+  }
+
+  [string] NormalizeKnownFingerprint([string]$Fingerprint) {
+    if (-not $Fingerprint) {
+      return ""
+    }
+
+    $parts = $Fingerprint.Split(",")
+    if ($parts.Count -lt 2) {
+      return ""
+    }
+
+    $trackLength = 0.0
+    $startPoint = 0.0
+    if (
+      [double]::TryParse($parts[0].Trim(), [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$trackLength) -and
+      [double]::TryParse($parts[1].Trim(), [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$startPoint)
+    ) {
+      return $this.GetFingerprint($trackLength, $startPoint)
+    }
+
+    return ""
   }
 
   [object] Resolve([double]$TrackLengthMeters, [double]$StartPoint) {
@@ -129,20 +132,50 @@ class GameStageIdentifier {
           continue
         }
 
-        $knownFingerprint = [string]$entry[0]
+        $knownFingerprint = $this.NormalizeKnownFingerprint([string]$entry[0])
         $gameStageName = [string]$entry[1]
         if ($knownFingerprint -and $knownFingerprint -eq $fingerprint) {
+          $rallyStageId = ""
+          $rallyStageName = ""
+
+          foreach ($stage in $this.StageCatalog) {
+            if (-not $stage) {
+              continue
+            }
+
+            $stageGameIdProperty = $stage.PSObject.Properties["gameId"]
+            $stageGameStageNameProperty = $stage.PSObject.Properties["gameStageName"]
+            $stageGameId = if ($stageGameIdProperty) { [string]$stageGameIdProperty.Value } else { "" }
+            $stageGameStageName = if ($stageGameStageNameProperty) { [string]$stageGameStageNameProperty.Value } else { "" }
+            if ($stageGameId -eq $gameId -and $stageGameStageName -eq $gameStageName) {
+              $rallyStageIdProperty = $stage.PSObject.Properties["stageId"]
+              $rallyStageNameProperty = $stage.PSObject.Properties["stageName"]
+              $rallyStageId = if ($rallyStageIdProperty) { [string]$rallyStageIdProperty.Value } else { "" }
+              $rallyStageName = if ($rallyStageNameProperty) { [string]$rallyStageNameProperty.Value } else { "" }
+              break
+            }
+          }
+
           return [pscustomobject]@{
             gameId = $gameId
-            stageId = $stageId
+            gameStageId = $stageId
             gameStageName = $gameStageName
+            stageId = $rallyStageId
+            stageName = $rallyStageName
             fingerprint = $fingerprint
           }
         }
       }
     }
 
-    return $null
+    return [pscustomobject]@{
+      gameId = ""
+      gameStageId = ""
+      gameStageName = ""
+      stageId = ""
+      stageName = ""
+      fingerprint = $fingerprint
+    }
   }
 }
 
@@ -193,6 +226,25 @@ function Write-Info {
   Write-Host $Message
 }
 
+function Get-ObjectProperty {
+  param(
+    [object]$Object,
+    [string]$Name,
+    [object]$Default = $null
+  )
+
+  if (-not $Object -or -not $Name) {
+    return $Default
+  }
+
+  $property = $Object.PSObject.Properties[$Name]
+  if ($property) {
+    return $property.Value
+  }
+
+  return $Default
+}
+
 function Initialize-AblyToken {
   if (-not $TokenDetails -or -not $TokenDetails.token) {
     throw "Launcher token missing."
@@ -232,7 +284,7 @@ function Initialize-StageIdentifier {
     return
   }
 
-  $Script:StageIdentifier = [GameStageIdentifier]::new($GameStageRegistry)
+  $Script:StageIdentifier = [GameStageIdentifier]::new($GameStageRegistry, @($StageCatalog))
 }
 
 function Resolve-CurrentStageIdentity {
@@ -247,11 +299,11 @@ function Resolve-CurrentStageIdentity {
   }
 
   $resolved = $Script:StageIdentifier.Resolve($TrackLengthMeters, $StartPoint)
-  if ($resolved) {
+  if ($resolved -and $resolved.gameStageName) {
     $Script:ResolvedStageIdentity = $resolved
   }
 
-  return $Script:ResolvedStageIdentity
+  return $resolved
 }
 
 function Get-DirtRallyRpm {
@@ -378,11 +430,15 @@ function Publish-TelemetryPacket {
     Initialize-HttpClient
   }
 
+  $gameId = Get-ObjectProperty -Object $Packet -Name "gameId"
+  $stageId = Get-ObjectProperty -Object $Packet -Name "stageId"
+  $gameStageName = Get-ObjectProperty -Object $Packet -Name "gameStageName"
+
   $packetSignature = [pscustomobject]@{
     pilotId = $Packet.pilotId
     source = $Packet.source
-    gameId = $Packet.gameId
-    stageId = $Packet.stageId
+    gameId = $gameId
+    stageId = $stageId
     latLong = $Packet.latLong
     distance = $Packet.distance
     distanceDrivenLap = $Packet.distanceDrivenLap
@@ -403,9 +459,6 @@ function Publish-TelemetryPacket {
     messageType = $Packet.messageType
     pilotId = $Packet.pilotId
     source = $Packet.source
-    gameId = $Packet.gameId
-    stageId = $Packet.stageId
-    gameStageName = $Packet.gameStageName
     latLong = $Packet.latLong
     distance = $Packet.distance
     distanceDrivenLap = $Packet.distanceDrivenLap
@@ -418,6 +471,17 @@ function Publish-TelemetryPacket {
     lastTelemetryAt = $Packet.lastTelemetryAt
     latlongTimestamp = $Packet.latlongTimestamp
   }
+
+  if ($gameId) {
+    $publishPacket | Add-Member -NotePropertyName gameId -NotePropertyValue $gameId -Force
+  }
+  if ($stageId) {
+    $publishPacket | Add-Member -NotePropertyName stageId -NotePropertyValue $stageId -Force
+  }
+  if ($gameStageName) {
+    $publishPacket | Add-Member -NotePropertyName gameStageName -NotePropertyValue $gameStageName -Force
+  }
+
   $body = @{ name = "update"; data = $publishPacket } | ConvertTo-Json -Depth 20 -Compress
   $content = New-Object System.Net.Http.StringContent($body, [System.Text.Encoding]::UTF8, "application/json")
 
@@ -505,15 +569,26 @@ function Main {
     if (-not $Script:ResolvedStageIdentity -and $packet.trackLengthTotal -gt 0) {
       $resolvedStage = Resolve-CurrentStageIdentity -TrackLengthMeters $packet.trackLengthTotal -StartPoint $packet.posZ
       if ($resolvedStage) {
-        $packet | Add-Member -NotePropertyName gameId -NotePropertyValue $resolvedStage.gameId -Force
-        $packet | Add-Member -NotePropertyName stageId -NotePropertyValue $resolvedStage.stageId -Force
-        $packet | Add-Member -NotePropertyName gameStageName -NotePropertyValue $resolvedStage.gameStageName -Force
+        if ($resolvedStage.gameStageName) {
+          $packet | Add-Member -NotePropertyName gameId -NotePropertyValue $resolvedStage.gameId -Force
+          $packet | Add-Member -NotePropertyName stageId -NotePropertyValue $resolvedStage.stageId -Force
+          $packet | Add-Member -NotePropertyName gameStageName -NotePropertyValue $resolvedStage.gameStageName -Force
+        }
 
-        $resolvedStageSignature = "{0}|{1}|{2}" -f $resolvedStage.gameId, $resolvedStage.stageId, $resolvedStage.fingerprint
+        $resolvedStageSignature = "{0}|{1}|{2}|{3}" -f $resolvedStage.fingerprint, $resolvedStage.gameId, $resolvedStage.gameStageId, $resolvedStage.stageId
         if ($Script:LastResolvedStageSignature -ne $resolvedStageSignature) {
           Write-Host ""
-          Write-Info ("Resolved stage: {0} ({1})" -f $resolvedStage.gameStageName, $resolvedStage.stageId)
           Write-Info ("Fingerprint: {0}" -f $resolvedStage.fingerprint)
+          if ($resolvedStage.gameStageName) {
+            Write-Info ("Registry stage: {0} ({1})" -f $resolvedStage.gameStageName, $resolvedStage.gameStageId)
+            if ($resolvedStage.stageId) {
+              Write-Info ("Rally stage: {0} ({1})" -f $resolvedStage.stageName, $resolvedStage.stageId)
+            } else {
+              Write-Info "Rally stage: no matching stage in this event"
+            }
+          } else {
+            Write-Info "Registry stage: no match"
+          }
           $Script:LastResolvedStageSignature = $resolvedStageSignature
         }
       }
@@ -639,6 +714,7 @@ export const buildPilotTelemetryLaunchArtifacts = ({
   channelKey,
   pilot,
   stages,
+  gameStageRegistry,
   telemetryUrl
 } = {}) => {
   const { valid, channelId } = parseChannelKey(channelKey);
@@ -654,7 +730,6 @@ export const buildPilotTelemetryLaunchArtifacts = ({
   const baseName = `pilot-telemetry-${safePilotName}-${safePilotId}`;
   const batFileName = `run-${baseName}.bat`;
   const stageCatalog = buildPilotTelemetryStageCatalog(stages);
-  const gameStageRegistry = buildPilotTelemetryGameStageRegistryTemplate(stages);
 
   return {
     channelId,
@@ -662,7 +737,7 @@ export const buildPilotTelemetryLaunchArtifacts = ({
     pilotName,
     batFileName,
     stageCatalog,
-    gameStageRegistry,
+    gameStageRegistry: (gameStageRegistry && typeof gameStageRegistry === 'object') ? gameStageRegistry : {},
     telemetryUrl: telemetryUrl || ''
   };
 };
