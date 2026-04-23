@@ -3,6 +3,7 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Switch } from '../ui/switch';
 import DebugIdText from './DebugIdText.jsx';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import {
@@ -37,7 +38,7 @@ const getStageTypeColor = (type) => {
 
 export default function CurrentStageCard({ showDebugIds = false }) {
   const { t } = useTranslation();
-  const { stages, currentStageId, setCurrentStageId } = useRally();
+  const { stages, currentStageId, setCurrentStageId, eventIsOver, setEventIsOver } = useRally();
 
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   const currentStage = stages.find((stage) => stage.id === currentStageId);
@@ -61,26 +62,40 @@ export default function CurrentStageCard({ showDebugIds = false }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
-          <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" data-testid="select-current-stage">
-            <SelectValue placeholder={t('common.select')} />
-          </SelectTrigger>
-          <SelectContent>
-            {sortedStages.map((stage) => {
-              const Icon = getStageTypeIcon(stage.type);
-              return (
-                <SelectItem key={stage.id} value={stage.id}>
-                  <div className="flex items-center gap-2">
-                    <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
-                    {getStageTitle(stage)}
-                    {showDebugIds && <DebugIdText id={stage.id} />}
-                    {isLapTimingStageType(stage.type) && getLapRaceMetaText(stage) && ` (${getLapRaceMetaText(stage)})`}
-                  </div>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start">
+          <div className="min-w-0 flex-1">
+            <Select value={currentStageId || ''} onValueChange={setCurrentStageId}>
+              <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white" data-testid="select-current-stage">
+                <SelectValue placeholder={t('common.select')} />
+              </SelectTrigger>
+              <SelectContent>
+                {sortedStages.map((stage) => {
+                  const Icon = getStageTypeIcon(stage.type);
+                  return (
+                    <SelectItem key={stage.id} value={stage.id}>
+                      <div className="flex items-center gap-2">
+                        <Icon className={`w-4 h-4 ${getStageTypeColor(stage.type)}`} />
+                        {getStageTitle(stage)}
+                        {showDebugIds && <DebugIdText id={stage.id} />}
+                        {isLapTimingStageType(stage.type) && getLapRaceMetaText(stage) && ` (${getLapRaceMetaText(stage)})`}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-[#09090B] px-4 py-3 md:w-[300px] md:shrink-0">
+            <Switch
+              checked={eventIsOver}
+              onCheckedChange={(checked) => setEventIsOver(checked === true)}
+            />
+            <div>
+              <p className="text-sm text-white">{t('config.eventIsOver')}</p>
+              <p className="text-xs text-zinc-500">{t('config.eventIsOverHint')}</p>
+            </div>
+          </label>
+        </div>
         {currentStage && (
           <div className="mt-2 space-y-1">
             <p className="text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>

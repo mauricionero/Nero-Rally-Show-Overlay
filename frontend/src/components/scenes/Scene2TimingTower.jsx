@@ -26,6 +26,7 @@ import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { formatDurationMs, formatSecondsValue } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
+import { buildPilotOverlayPlaybackMap } from '../../utils/overlayReplayResolver.js';
 
 const TIMING_TOWER_WIDTH_KEY = 'scene2TimingTowerWidth';
 const SCENE_2_CONFIG_KEY = 'scene2Config';
@@ -54,7 +55,7 @@ const abbreviateCompactName = (name) => {
 export default function Scene2TimingTower({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate, pilotTelemetryByPilotId
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate, pilotTelemetryByPilotId, eventIsOver
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -153,6 +154,19 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const displayOrderByPilotId = useMemo(() => (
     new Map(displaySortedPilots.map((pilot, index) => [pilot.id, index]))
   ), [displaySortedPilots]);
+  const pilotPlaybackById = useMemo(() => (
+    buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver
+    })
+  ), [currentStageId, eventIsOver, pilots]);
+  const overlayPilots = useMemo(() => (
+    pilots.map((pilot) => ({
+      ...pilot,
+      streamUrl: pilotPlaybackById.get(pilot.id)?.streamUrl || ''
+    }))
+  ), [pilotPlaybackById, pilots]);
 
   const sortedLapRacePilotsData = useMemo(() => {
     if (!currentStageId || !currentStage || !isLapRace) return [];
@@ -239,19 +253,19 @@ export default function Scene2TimingTower({ hideStreams = false }) {
 
   useEffect(() => {
     if (!selectedFeedValue && sortedPilotsData.length > 0) {
-      const activePilot = sortedPilotsData.find(d => d.pilot.isActive && d.pilot.streamUrl);
+      const activePilot = sortedPilotsData.find((d) => d.pilot.isActive && pilotPlaybackById.get(d.pilot.id)?.hasVideo);
       if (activePilot) {
         setSelectedFeedValue(getFeedOptionValue('pilot', activePilot.pilot.id));
       }
     }
-  }, [sortedPilotsData, selectedFeedValue]);
+  }, [pilotPlaybackById, selectedFeedValue, sortedPilotsData]);
 
   // Build list of available feeds (cameras first, then pilots with streams)
   // MUST be before any early returns to follow React Hook rules
   const availableFeeds = useMemo(() => {
     const pilotPositions = Object.fromEntries(sortedPilotsData.map((data) => [data.pilot.id, data.position]));
-    return buildFeedOptions({ pilots, cameras, externalMedia, stages, mapPlacemarks, pilotPositions });
-  }, [pilots, cameras, externalMedia, stages, mapPlacemarks, sortedPilotsData]);
+    return buildFeedOptions({ pilots: overlayPilots, cameras, externalMedia, stages, mapPlacemarks, pilotPositions });
+  }, [overlayPilots, cameras, externalMedia, stages, mapPlacemarks, sortedPilotsData]);
 
   useEffect(() => {
     if (!selectedFeedValue && availableFeeds.length > 0) {
@@ -299,12 +313,12 @@ export default function Scene2TimingTower({ hideStreams = false }) {
         category: categoryById.get(pilot.categoryId) || null,
         fullName: pilot.name,
         compactName: abbreviateCompactName(pilot.name),
-        hasStream: Boolean(pilot.streamUrl),
+        hasStream: Boolean(pilotPlaybackById.get(pilot.id)?.hasVideo),
         alert: currentStageId ? alertByPilotId.has(pilot.id) : false,
         jumpStart: currentStageId ? jumpStartByPilotId.has(pilot.id) : false
       }
     ]))
-  ), [alertByPilotId, categoryById, currentStageId, jumpStartByPilotId, pilots]);
+  ), [alertByPilotId, categoryById, currentStageId, jumpStartByPilotId, pilotPlaybackById, pilots]);
 
   const towerItems = useMemo(() => {
     const onStage = sortedPilotsData.filter((data) => data.status === 'racing' || data.preStart);
@@ -389,6 +403,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const leader = isLapRace ? sortedLapRacePilotsData[0] : finished[0];
   const selectedFeed = findFeedByValue(availableFeeds, selectedFeedValue);
   const selectedPilot = selectedFeed?.type === 'pilot' ? pilots.find((pilot) => pilot.id === selectedFeed.id) : null;
+  const selectedPilotPlayback = selectedPilot ? pilotPlaybackById.get(selectedPilot.id) : null;
   const selectedPilotData = selectedFeed?.type === 'pilot'
     ? sortedPilotsData.find((data) => data.pilot.id === selectedFeed.id)
     : null;
@@ -421,7 +436,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   };
 
   const handleRowClick = (pilotId) => {
-    if (!pilots.find(p => p.id === pilotId)?.streamUrl) return;
+    if (!pilotPlaybackById.get(pilotId)?.hasVideo) return;
     setExpandedPilotId(expandedPilotId === pilotId ? null : pilotId);
   };
 
@@ -436,6 +451,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
   const renderPilotRow = (data, index) => {
     const { pilot, completedLaps, totalTimeMs, totalTimeText, totalTimeMode, isFinished, isRacing, startTime, finishTime, retired } = data;
     const pilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id);
+    const pilotPlayback = pilotPlaybackById.get(pilot.id);
     const pilotUiMeta = pilotUiMetaById.get(pilot.id) || {};
     const category = pilotUiMeta.category || null;
     const isExpanded = expandedPilotId === pilot.id;
@@ -610,7 +626,7 @@ export default function Scene2TimingTower({ hideStreams = false }) {
           <div className="relative h-32 bg-black m-2 rounded overflow-hidden">
             <StreamPlayer
               pilotId={pilot.id}
-              streamUrl={pilot.streamUrl}
+              streamUrl={pilotPlayback?.streamUrl || ''}
               name={pilot.name}
               className="w-full h-full"
               muted={true}
@@ -821,12 +837,12 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               </div>
             </div>
           </>
-        ) : selectedPilot && selectedPilot.streamUrl && !hideStreams ? (
+        ) : selectedPilot && selectedPilotPlayback?.hasVideo && !hideStreams ? (
           /* Pilot Feed */
           <>
             <StreamPlayer
               pilotId={selectedPilot.id}
-              streamUrl={selectedPilot.streamUrl}
+              streamUrl={selectedPilotPlayback?.streamUrl || ''}
               name={selectedPilot.name}
               className="w-full h-full"
             />

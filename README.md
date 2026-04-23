@@ -62,6 +62,7 @@ The frontend uses Ably directly in the browser. You only need to provide an Ably
 1. Create an Ably app and copy the **API key**.
 2. In `frontend`, create a `.env` file (or use your shell env):
    - `REACT_APP_ABLY_KEY=your-ably-api-key`
+   - Optional for replay chapter import from YouTube descriptions: `REACT_APP_YOUTUBE_API_KEY=your-youtube-data-api-key`
 3. Restart `yarn start` if it was already running.
 
 Notes:

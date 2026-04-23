@@ -24,6 +24,7 @@ import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatClockFromDate, formatDurationMs } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
+import { buildPilotOverlayPlaybackMap } from '../../utils/overlayReplayResolver.js';
 import {
   getStageNumberLabel,
   getStageTitle,
@@ -146,7 +147,7 @@ function Scene4StageTimeValue({
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId
+    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId, eventIsOver
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -322,7 +323,20 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   }, [sortedStages, focusPilot, lapTimes, startTimes, times, retiredStages, sceneNow, t, timeDecimals]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
-  const availableFeeds = useMemo(() => buildFeedOptions({ pilots, cameras, externalMedia, stages, mapPlacemarks }), [pilots, cameras, externalMedia, stages, mapPlacemarks]);
+  const pilotPlaybackById = useMemo(() => (
+    buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver
+    })
+  ), [currentStageId, eventIsOver, pilots]);
+  const overlayPilots = useMemo(() => (
+    pilots.map((pilot) => ({
+      ...pilot,
+      streamUrl: pilotPlaybackById.get(pilot.id)?.streamUrl || ''
+    }))
+  ), [pilotPlaybackById, pilots]);
+  const availableFeeds = useMemo(() => buildFeedOptions({ pilots: overlayPilots, cameras, externalMedia, stages, mapPlacemarks }), [overlayPilots, cameras, externalMedia, stages, mapPlacemarks]);
   const selectedMainFeed = selectedMainFeedValue === 'none' ? null : findFeedByValue(availableFeeds, selectedMainFeedValue);
   const selectedMainPilot = selectedMainFeed?.type === 'pilot'
     ? pilots.find((pilot) => pilot.id === selectedMainFeed.id)
@@ -334,8 +348,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const SelectedMediaIcon = selectedMainFeed?.type === 'media'
     ? getExternalMediaIconComponent(selectedMainFeed.icon)
     : null;
+  const focusPilotPlayback = focusPilot ? pilotPlaybackById.get(focusPilot.id) : null;
   const showFocusPilotPip = !!selectedMainFeed
-    && !!focusPilot?.streamUrl
+    && !!focusPilotPlayback?.hasVideo
     && !hideStreams
     && !(selectedMainFeed.type === 'pilot' && selectedMainFeed.id === focusPilot.id);
 
@@ -369,7 +384,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
     <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
       <StreamPlayer
         pilotId={focusPilot.id}
-        streamUrl={focusPilot.streamUrl}
+        streamUrl={focusPilotPlayback?.streamUrl || ''}
         name={focusPilot.name}
         className="w-full h-full"
       />
@@ -683,12 +698,12 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   focusPilotPip
                 )}
               </div>
-            ) : focusPilot.streamUrl && !hideStreams ? (
+            ) : focusPilotPlayback?.hasVideo && !hideStreams ? (
               /* Pilot stream as main (original behavior) */
               <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
                 <StreamPlayer
                   pilotId={focusPilot.id}
-                  streamUrl={focusPilot.streamUrl}
+                  streamUrl={focusPilotPlayback?.streamUrl || ''}
                   name={focusPilot.name}
                   className="w-full h-full"
                 />
@@ -719,7 +734,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   </div>
                 )}
               </div>
-            ) : hideStreams && (focusPilot.streamUrl || selectedMainFeed) ? (
+            ) : hideStreams && (focusPilotPlayback?.hasVideo || selectedMainFeed) ? (
               <div className="h-full rounded overflow-hidden border-2 border-[#FF4500] relative" style={{ backgroundColor: chromaKey }}>
                 <CurrentStageBadge
                   stage={focusPilotCurrentStage}

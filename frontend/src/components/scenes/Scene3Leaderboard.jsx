@@ -30,11 +30,12 @@ import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useFastClock } from '../../hooks/useFastClock.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatDurationMs, formatDurationSeconds, formatSecondsValue } from '../../utils/timeFormat.js';
+import { buildPilotOverlayPlaybackMap } from '../../utils/overlayReplayResolver.js';
 
 const SCENE_3_CONFIG_KEY = 'scene3Config';
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals } = useRally();
+  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals, eventIsOver } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
@@ -57,6 +58,13 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     )
   ), [debugDate, fastClockEnabled, currentFastTime, currentSecondAlignedTime]);
   const alertStageId = selectedStageId || currentStageId || null;
+  const pilotPlaybackById = useMemo(() => (
+    buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver
+    })
+  ), [currentStageId, eventIsOver, pilots]);
   
   // Filter stages by type
   const ssStages = stages.filter((stage) => isSpecialStageType(stage.type) && !isLapTimingStageType(stage.type));
@@ -539,11 +547,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {/* 16:9 Stream thumbnail or avatar fallback */}
-                        {pilot.streamUrl && pilot.isActive && !hideStreams ? (
+                        {pilotPlaybackById.get(pilot.id)?.hasVideo && pilot.isActive && !hideStreams ? (
                           <div className="w-32 h-18 rounded overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
                             <StreamPlayer
                               pilotId={pilot.id}
-                              streamUrl={pilot.streamUrl}
+                              streamUrl={pilotPlaybackById.get(pilot.id)?.streamUrl || ''}
                               name={pilot.name}
                               className="w-full h-full"
                             />

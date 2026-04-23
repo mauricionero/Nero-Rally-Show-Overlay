@@ -28,6 +28,7 @@ import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
+import { buildPilotOverlayPlaybackMap } from '../../utils/overlayReplayResolver.js';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -61,7 +62,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
-    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, pilotTelemetryByPilotId, timeDecimals
+    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, pilotTelemetryByPilotId, timeDecimals, eventIsOver
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -104,12 +105,25 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     )
   ), [currentFastTime, currentSecondAlignedTime, debugDate, lapFastClockEnabled]);
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
+  const pilotPlaybackById = useMemo(() => (
+    buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver
+    })
+  ), [currentStageId, eventIsOver, pilots]);
+  const overlayPilots = useMemo(() => (
+    pilots.map((pilot) => ({
+      ...pilot,
+      streamUrl: pilotPlaybackById.get(pilot.id)?.streamUrl || ''
+    }))
+  ), [pilotPlaybackById, pilots]);
   const validSlotIds = useMemo(() => new Set([
-    ...pilots.filter((pilot) => pilot.isActive && pilot.streamUrl).map((pilot) => pilot.id),
+    ...overlayPilots.filter((pilot) => pilot.isActive && pilot.streamUrl).map((pilot) => pilot.id),
     ...activeCameras.map((camera) => camera.id),
     ...activeMedia.map((media) => `media-${media.id}`),
     ...activeStageMaps.map((feed) => feed.value)
-  ]), [pilots, activeCameras, activeMedia, activeStageMaps]);
+  ]), [overlayPilots, activeCameras, activeMedia, activeStageMaps]);
   const displaySortedPilots = useMemo(() => (
     sortPilotsByDisplayOrder(pilots, categories)
   ), [pilots, categories]);
@@ -132,7 +146,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const draftLayout = LAYOUTS.find(l => l.id === draftSelectedLayout) || LAYOUTS[3];
-  const activePilots = pilots.filter(p => p.isActive && p.streamUrl);
+  const activePilots = overlayPilots.filter((pilot) => pilot.isActive && pilot.streamUrl);
   const specialStageTickerBaseItems = useMemo(() => {
     if (!currentStageId || !currentStage || isLapRace || !isSSStage) {
       return [];
@@ -424,7 +438,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
       if (media) return { type: 'media', ...media };
     }
     // Otherwise it's a pilot
-    const pilot = pilots.find(p => p.id === slotId);
+    const pilot = overlayPilots.find((p) => p.id === slotId);
     return pilot ? { type: 'pilot', ...pilot } : null;
   };
 

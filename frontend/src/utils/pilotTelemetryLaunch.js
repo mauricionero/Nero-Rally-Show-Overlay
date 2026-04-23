@@ -12,7 +12,17 @@ const normalizeFilePart = (value, fallback = 'pilot') => {
   return normalized || fallback;
 };
 
-const renderJsonString = (value) => JSON.stringify(value ?? {});
+const renderBase64JsonString = (value) => {
+  const json = JSON.stringify(value ?? {});
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+
+  return btoa(binary);
+};
 
 const normalizeGameId = (value) => String(value ?? '').trim();
 
@@ -36,34 +46,34 @@ const buildPilotTelemetryPowerShellScript = ({
   gameStageRegistry,
   telemetryUrl
 }) => {
-  const renderedTokenDetails = renderJsonString(tokenDetails);
-  const renderedLaunchConfig = renderJsonString({
+  const renderedTokenDetails = renderBase64JsonString(tokenDetails);
+  const renderedLaunchConfig = renderBase64JsonString({
     channelId,
     pilotId,
     pilotName: pilotName || pilotId || 'Pilot',
     telemetryUrl: telemetryUrl || ''
   });
-  const renderedStageCatalog = renderJsonString(stageCatalog || []);
-  const renderedGameStageRegistry = renderJsonString(gameStageRegistry || {});
+  const renderedStageCatalog = renderBase64JsonString(stageCatalog || []);
+  const renderedGameStageRegistry = renderBase64JsonString(gameStageRegistry || {});
 
   return `$ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$LaunchConfig = @'
+$LaunchConfig = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(@'
 ${renderedLaunchConfig}
-'@ | ConvertFrom-Json
+'@)) | ConvertFrom-Json
 
-$TokenDetails = @'
+$TokenDetails = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(@'
 ${renderedTokenDetails}
-'@ | ConvertFrom-Json
+'@)) | ConvertFrom-Json
 
-$StageCatalog = @'
+$StageCatalog = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(@'
 ${renderedStageCatalog}
-'@ | ConvertFrom-Json
+'@)) | ConvertFrom-Json
 
-$GameStageRegistry = @'
+$GameStageRegistry = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(@'
 ${renderedGameStageRegistry}
-'@ | ConvertFrom-Json
+'@)) | ConvertFrom-Json
 
 $Script:AblyToken = $null
 $Script:AblyTokenExpiresAt = 0
@@ -218,7 +228,7 @@ function Format-NormalizedLatLong {
 
   $lat = [math]::Max(-89.9999999, [math]::Min(89.9999999, [math]::Round($PosZ / 100000.0, 7)))
   $lng = [math]::Max(-179.9999999, [math]::Min(179.9999999, [math]::Round($PosX / 100000.0, 7)))
-  return ("{0:F7},{1:F7}" -f $lat, $lng)
+  return ([string]::Format([System.Globalization.CultureInfo]::InvariantCulture, "{0:F7},{1:F7}", $lat, $lng))
 }
 
 function Write-Info {

@@ -24,6 +24,7 @@ common:
   apply: "Aplicar"
   custom: "Personalizado"
   copy: "Copiar"
+  openInNewTab: "Abrir em nova aba"
   send: "Enviar"
   yes: "Sim"
   no: "Não"
@@ -108,8 +109,23 @@ pilots:
   currentStage: "Etapa Atual"
   category: "Categoria"
   activeStatus: "Status"
+  editPilotTab: "Editar Piloto"
+  replayTab: "Replay"
   pictureUrl: "URL da Foto"
   streamUrl: "URL do Stream"
+  replayVideoUrl: "URL do Video Replay"
+  replayNoUrl: "Adicione uma URL de replay para visualizar o video aqui."
+  replayDescription: "Descricao do Video"
+  replayDescriptionUnavailable: "A descricao nao esta disponivel para este provedor sem uma API dedicada."
+  replayDescriptionApiKeyHint: "Defina REACT_APP_YOUTUBE_API_KEY para importar automaticamente a descricao real e os capitulos do YouTube."
+  replayMarkers: "Marcadores do Replay"
+  replayMarkersHint: "Relacione a linha do tempo do replay com cada etapa deste evento. Campos em branco sao ignorados."
+  replayChapterSource: "Fonte dos Capitulos"
+  replayChapterSourcePlaceholder: "Cole aqui os capitulos do YouTube, por exemplo:\n02:31 SS1 Especial\n05:12 SS2 Rally Formosa"
+  replayImportChapters: "Importar Capitulos"
+  replayImportNoChapters: "Nenhum capitulo valido foi encontrado no texto informado."
+  replayImportNoMatches: "Os capitulos foram encontrados, mas nenhum correspondeu as etapas atuais do evento."
+  replayImportSuccess: "Capitulos do replay importados"
   addPilot: "Adicionar Piloto"
   exportTitle: "Exportar Pilotos"
   exportDescription: "Escolha as colunas para exportar. Se voce selecionar apenas uma coluna, o arquivo sera exportado com um valor por linha."
@@ -129,6 +145,7 @@ pilots:
     timeOffsetMinutes: "2"
     pictureUrl: "https://..."
     streamUrl: "https://ninja.vdo/..."
+    replayVideoUrl: "https://youtube.com/watch?v=..."
 
 # ===========================================
 # ABA CATEGORIAS
@@ -251,7 +268,7 @@ times:
 # ===========================================
 pilotTelemetry:
   title: "Telemetria do piloto"
-  description: "Esta página mostra apenas a telemetria. O launcher exportado lê os dados UDP do Dirt Rally 2.0 e publica diretamente no Ably no canal atual do rally."
+  description: "Esta página mostra apenas a telemetria. O launcher exportado lê os dados UDP do Dirt Rally 2.0 e envia a telemetria."
   hideStream: "Ocultar stream"
   pilotNotSelected: "Piloto não selecionado"
   pilotNotSelectedDescription: "Abra esta página com um `pilotId` na URL para visualizar o overlay de telemetria e exportar o launcher independente."
@@ -266,7 +283,7 @@ pilotTelemetry:
   distance: "Distância"
   latLong: "Lat/Lon"
   standaloneLauncher: "Launcher independente"
-  standaloneLauncherDescription: "Baixe um único launcher BAT autocontido para o piloto e o canal Ably atuais."
+  standaloneLauncherDescription: "Baixe um único launcher BAT autocontido para o piloto e o envio de telemetria."
   pilotId: "ID do piloto:"
   channelId: "ID do canal:"
   file: "Arquivo:"
@@ -340,6 +357,9 @@ config:
   
   language: "Idioma"
   selectLanguage: "Selecionar Idioma"
+  eventStatus: "Status do Evento"
+  eventIsOver: "Evento Encerrado"
+  eventIsOverHint: "Usa os videos de replay no lugar dos streams ao vivo nas cenas do overlay."
   
   liveSync: "Sincronização ao Vivo (WebSocket)"
   liveSyncDesc: "Compartilhe os dados do painel em tempo real com a página de overlay"

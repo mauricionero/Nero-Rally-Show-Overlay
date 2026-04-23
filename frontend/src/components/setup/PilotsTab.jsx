@@ -5,12 +5,15 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
+import { TimeInput } from '../TimeInput.jsx';
 import { StreamThumbnail } from '../StreamThumbnail.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
 import { toast } from 'sonner';
@@ -20,6 +23,8 @@ import { normalizePilotId } from '../../utils/pilotIdentity.js';
 import { getWebSocketPilotTelemetryUrl } from '../../utils/overlayUrls.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { getStageTitle } from '../../utils/stageTypes.js';
+import { normalizeTimingInput } from '../../utils/timeConversion.js';
+import { formatDurationSeconds } from '../../utils/timeFormat.js';
 import DebugIdText from './DebugIdText.jsx';
 
 const escapeCsvValue = (value) => {
@@ -106,16 +111,228 @@ const buildTelemetryPayload = (editingPilot) => {
   return payload;
 };
 
+const normalizeReplayStageTimes = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([stageId, timeValue]) => [
+        String(stageId || '').trim(),
+        normalizeTimingInput(String(timeValue ?? ''), 0).trim()
+      ])
+      .filter(([stageId, timeValue]) => stageId && timeValue)
+  );
+};
+
+const parseYouTubeStartSeconds = (value) => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return 0;
+  }
+
+  if (/^\d+$/.test(rawValue)) {
+    return Number(rawValue);
+  }
+
+  const hours = Number((rawValue.match(/(\d+)h/) || [])[1] || 0);
+  const minutes = Number((rawValue.match(/(\d+)m/) || [])[1] || 0);
+  const seconds = Number((rawValue.match(/(\d+)s/) || [])[1] || 0);
+  return (hours * 3600) + (minutes * 60) + seconds;
+};
+
+const buildReplayEmbedUrl = (value) => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return '';
+  }
+
+  try {
+    const url = new URL(rawValue);
+    const host = url.hostname.toLowerCase();
+    const searchParams = url.searchParams;
+
+    if (host.includes('youtu.be') || host.includes('youtube.com') || host.includes('youtube-nocookie.com')) {
+      let videoId = '';
+
+      if (host.includes('youtu.be')) {
+        videoId = url.pathname.replace(/^\/+/, '').split('/')[0] || '';
+      } else if (url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/embed/')[1]?.split('/')[0] || '';
+      } else if (url.pathname.startsWith('/live/')) {
+        videoId = url.pathname.split('/live/')[1]?.split('/')[0] || '';
+      } else {
+        videoId = searchParams.get('v') || '';
+      }
+
+      if (!videoId) {
+        return rawValue;
+      }
+
+      const startSeconds = parseYouTubeStartSeconds(searchParams.get('t') || searchParams.get('start'));
+      const embedUrl = new URL(`https://www.youtube.com/embed/${videoId}`);
+      embedUrl.searchParams.set('rel', '0');
+      if (startSeconds > 0) {
+        embedUrl.searchParams.set('start', String(startSeconds));
+      }
+      return embedUrl.toString();
+    }
+
+    return rawValue;
+  } catch {
+    return rawValue;
+  }
+};
+
+const getYouTubeVideoId = (value) => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return '';
+  }
+
+  try {
+    const url = new URL(rawValue);
+    const host = url.hostname.toLowerCase();
+
+    if (host.includes('youtu.be')) {
+      return url.pathname.replace(/^\/+/, '').split('/')[0] || '';
+    }
+
+    if (url.pathname.startsWith('/embed/')) {
+      return url.pathname.split('/embed/')[1]?.split('/')[0] || '';
+    }
+
+    if (url.pathname.startsWith('/live/')) {
+      return url.pathname.split('/live/')[1]?.split('/')[0] || '';
+    }
+
+    if (host.includes('youtube.com') || host.includes('youtube-nocookie.com')) {
+      return url.searchParams.get('v') || '';
+    }
+  } catch {
+    return '';
+  }
+
+  return '';
+};
+
+const parseReplayTimestampToSeconds = (value) => {
+  const parts = String(value || '').trim().split(':').map((part) => Number(part));
+  if (parts.some((part) => !Number.isFinite(part))) {
+    return null;
+  }
+
+  if (parts.length === 2) {
+    return (parts[0] * 60) + parts[1];
+  }
+
+  if (parts.length === 3) {
+    return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+  }
+
+  return null;
+};
+
+const formatReplayTimestamp = (seconds) => (
+  formatDurationSeconds(seconds, 0, {
+    fallback: '',
+    padMinutes: true
+  })
+);
+
+const normalizeReplayText = (value) => (
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+);
+
+const parseReplayChapters = (value) => (
+  String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)$/);
+      if (!match) {
+        return null;
+      }
+
+      const seconds = parseReplayTimestampToSeconds(match[1]);
+      if (!Number.isFinite(seconds)) {
+        return null;
+      }
+
+      return {
+        raw: line,
+        timestamp: match[1],
+        seconds,
+        title: match[2].trim()
+      };
+    })
+    .filter(Boolean)
+);
+
+const findStageForReplayChapter = (chapter, stages = []) => {
+  if (!chapter || !Array.isArray(stages)) {
+    return null;
+  }
+
+  const title = String(chapter.title || '').trim();
+  const ssMatch = title.match(/\bSS\s*0*(\d+)\b/i);
+  if (ssMatch) {
+    const chapterSsNumber = String(Number(ssMatch[1]));
+    const matchedBySs = stages.find((stage) => String(Number(stage?.ssNumber || '')).trim() === chapterSsNumber);
+    if (matchedBySs) {
+      return matchedBySs;
+    }
+  }
+
+  const normalizedTitle = normalizeReplayText(title);
+  if (!normalizedTitle) {
+    return null;
+  }
+
+  return stages.find((stage) => {
+    const stageName = normalizeReplayText(stage?.name || '');
+    const stageTitle = normalizeReplayText(getStageTitle(stage));
+    return (
+      (stageName && normalizedTitle.includes(stageName))
+      || (stageTitle && normalizedTitle.includes(stageTitle))
+    );
+  }) || null;
+};
+
+const buildReplayStageTimesFromChapters = (chapters = [], stages = []) => {
+  const nextReplayStageTimes = {};
+
+  chapters.forEach((chapter) => {
+    const matchedStage = findStageForReplayChapter(chapter, stages);
+    if (!matchedStage?.id) {
+      return;
+    }
+
+    nextReplayStageTimes[matchedStage.id] = formatReplayTimestamp(chapter.seconds);
+  });
+
+  return nextReplayStageTimes;
+};
+
 export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
   const { t } = useTranslation();
   const { displayIdsInSetup } = useRally();
   const {
     pilots,
     stages,
+    pilotTelemetryByPilotId,
     categories,
     addPilot,
     updatePilot,
     setPilotCurrentStage,
+    syncPilotCurrentStageFromTelemetry,
     setPilotTelemetry,
     getPilotTelemetry,
     getPersistedPilotTelemetry,
@@ -131,6 +348,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     currentStageId: '',
     picture: '',
     streamUrl: '',
+    replayVideoUrl: '',
     categoryId: null,
     startOrder: '',
     timeOffsetMinutes: '',
@@ -138,6 +356,10 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
   });
   const [editingPilot, setEditingPilot] = useState(null);
   const [pilotDialogOpen, setPilotDialogOpen] = useState(false);
+  const [pilotDialogTab, setPilotDialogTab] = useState('edit');
+  const [replayMetadata, setReplayMetadata] = useState(null);
+  const [replayMetadataStatus, setReplayMetadataStatus] = useState('idle');
+  const [replayChapterSource, setReplayChapterSource] = useState('');
   const [selectedExportColumns, setSelectedExportColumns] = useState([]);
 
   useEffect(() => {
@@ -159,6 +381,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
 
       return {
         ...prev,
+        replayStageTimes: normalizeReplayStageTimes(prev.replayStageTimes),
         latLong: liveTelemetry.latLong ?? livePilot.latLong ?? prev.latLong ?? '',
         latlongTimestamp: liveTelemetry.latlongTimestamp ?? liveTelemetry.lastLatLongUpdatedAt ?? prev.latlongTimestamp ?? prev.lastLatLongUpdatedAt ?? '',
         lastLatLongUpdatedAt: liveTelemetry.lastLatLongUpdatedAt ?? prev.lastLatLongUpdatedAt ?? '',
@@ -174,6 +397,123 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
       };
     });
   }, [editingPilot?.id, pilotDialogOpen, getPersistedPilotTelemetry, pilots]);
+
+  useEffect(() => {
+    if (!pilotDialogOpen || !editingPilot?.replayVideoUrl) {
+      setReplayMetadata(null);
+      setReplayMetadataStatus('idle');
+      setReplayChapterSource('');
+      return;
+    }
+
+    const replayUrl = String(editingPilot.replayVideoUrl || '').trim();
+    if (!replayUrl) {
+      setReplayMetadata(null);
+      setReplayMetadataStatus('idle');
+      setReplayChapterSource('');
+      return;
+    }
+
+    let cancelled = false;
+    setReplayMetadataStatus('loading');
+
+    (async () => {
+      const youtubeVideoId = getYouTubeVideoId(replayUrl);
+      const youtubeApiKey = String(process.env.REACT_APP_YOUTUBE_API_KEY || '').trim();
+
+      if (youtubeVideoId && youtubeApiKey) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${encodeURIComponent(youtubeVideoId)}&key=${encodeURIComponent(youtubeApiKey)}`
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const snippet = data?.items?.[0]?.snippet || null;
+
+            if (!cancelled && snippet) {
+              const description = String(snippet.description || '').trim();
+              setReplayMetadata({
+                title: String(snippet.title || '').trim(),
+                authorName: String(snippet.channelTitle || '').trim(),
+                providerName: 'YouTube',
+                description
+              });
+              setReplayChapterSource(description);
+              setReplayMetadataStatus('ready');
+              return;
+            }
+          }
+        } catch {
+          // Fall through to best-effort metadata providers.
+        }
+      }
+
+      const encodedUrl = encodeURIComponent(replayUrl);
+      const metadataEndpoints = [
+        `https://www.youtube.com/oembed?url=${encodedUrl}&format=json`,
+        `https://noembed.com/embed?url=${encodedUrl}`
+      ];
+
+      for (const endpoint of metadataEndpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (!response.ok) {
+            continue;
+          }
+
+          const data = await response.json();
+          if (cancelled) {
+            return;
+          }
+
+          const description = String(data?.description || data?.html_description || '').trim();
+          const nextMetadata = {
+            title: String(data?.title || '').trim(),
+            authorName: String(data?.author_name || '').trim(),
+            providerName: String(data?.provider_name || '').trim(),
+            description
+          };
+
+          if (nextMetadata.title || nextMetadata.authorName || nextMetadata.providerName || nextMetadata.description) {
+            setReplayMetadata(nextMetadata);
+            setReplayChapterSource(description);
+            setReplayMetadataStatus('ready');
+            return;
+          }
+        } catch {
+          // Try the next metadata endpoint.
+        }
+      }
+
+      if (!cancelled) {
+        setReplayMetadata(null);
+        setReplayChapterSource('');
+        setReplayMetadataStatus(youtubeVideoId && !youtubeApiKey ? 'missing_api_key' : 'error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingPilot?.replayVideoUrl, pilotDialogOpen]);
+
+  useEffect(() => {
+    if (!Array.isArray(pilots) || pilots.length === 0) {
+      return;
+    }
+
+    pilots.forEach((pilot) => {
+      const telemetry = pilotTelemetryByPilotId?.[pilot.id];
+      const nextStageId = String(telemetry?.stageId || '').trim();
+
+      if (!nextStageId || pilot.currentStageId === nextStageId) {
+        return;
+      }
+
+      syncPilotCurrentStageFromTelemetry(pilot.id, telemetry);
+    });
+  }, [pilotTelemetryByPilotId, pilots, syncPilotCurrentStageFromTelemetry]);
 
   const handleAddPilot = () => {
     if (!newPilot.name.trim()) {
@@ -194,6 +534,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
       currentStageId: '',
       picture: '',
       streamUrl: '',
+      replayVideoUrl: '',
       categoryId: null,
       startOrder: '',
       timeOffsetMinutes: '',
@@ -219,6 +560,63 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     ));
   };
 
+  const openUrlInNewTab = (value) => {
+    const nextUrl = String(value || '').trim();
+    if (!nextUrl) {
+      return;
+    }
+
+    window.open(nextUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleReplayStageTimeChange = (stageId, value) => {
+    setEditingPilot((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      const nextReplayStageTimes = {
+        ...(prev.replayStageTimes || {}),
+        [stageId]: value
+      };
+
+      if (!String(value || '').trim()) {
+        delete nextReplayStageTimes[stageId];
+      }
+
+      return {
+        ...prev,
+        replayStageTimes: nextReplayStageTimes
+      };
+    });
+  };
+
+  const handleImportReplayChapters = () => {
+    const chapters = parseReplayChapters(replayChapterSource);
+    if (chapters.length === 0) {
+      toast.error(t('pilots.replayImportNoChapters'));
+      return;
+    }
+
+    const importedReplayStageTimes = buildReplayStageTimesFromChapters(chapters, sortedStages);
+    if (Object.keys(importedReplayStageTimes).length === 0) {
+      toast.error(t('pilots.replayImportNoMatches'));
+      return;
+    }
+
+    setEditingPilot((prev) => (
+      prev ? {
+        ...prev,
+        replayStageTimes: {
+          ...(prev.replayStageTimes || {}),
+          ...importedReplayStageTimes
+        }
+      } : prev
+    ));
+
+    toast.success(t('pilots.replayImportSuccess'));
+  };
+
   const handleUpdatePilot = () => {
     if (!editingPilot.name.trim()) {
       toast.error(t('pilots.pilotName') + ' is required');
@@ -226,6 +624,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     }
     const pilotData = {
       ...editingPilot,
+      replayStageTimes: normalizeReplayStageTimes(editingPilot.replayStageTimes),
       startOrder: parseInt(editingPilot.startOrder) || 999,
       timeOffsetMinutes: parseInt(editingPilot.timeOffsetMinutes) || 0
     };
@@ -268,6 +667,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     { id: 'currentStageId', label: t('pilots.currentStage'), getValue: (pilot) => pilot.currentStageId || '' },
     { id: 'picture', label: t('pilots.pictureUrl'), getValue: (pilot) => pilot.picture || '' },
     { id: 'streamUrl', label: t('pilots.streamUrl'), getValue: (pilot) => pilot.streamUrl || '' },
+    { id: 'replayVideoUrl', label: t('pilots.replayVideoUrl'), getValue: (pilot) => pilot.replayVideoUrl || '' },
     { id: 'isActive', label: t('pilots.activeStatus'), getValue: (pilot) => (pilot.isActive ? t('status.active') : t('status.inactive')) }
   ]), [categoryById, getPilotTelemetry, t]);
 
@@ -401,30 +801,56 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                   data-testid="input-pilot-offset"
                 />
               </div>
-              <div>
-                <Label htmlFor="pilot-picture" className="text-white">{t('pilots.pictureUrl')}</Label>
-                <Input
-                  id="pilot-picture"
-                  value={newPilot.picture}
-                  onChange={(e) => setNewPilot({ ...newPilot, picture: e.target.value })}
-                  placeholder={t('pilots.placeholder.pictureUrl')}
-                  className="bg-[#09090B] border-zinc-700 text-white"
-                  data-testid="input-pilot-picture"
-                />
-              </div>
-              <div>
-                <Label htmlFor="pilot-stream" className="text-white">{t('pilots.streamUrl')}</Label>
-                <Input
-                  id="pilot-stream"
-                  value={newPilot.streamUrl}
-                  onChange={(e) => setNewPilot({ ...newPilot, streamUrl: e.target.value })}
-                  placeholder={t('pilots.placeholder.streamUrl')}
-                  className="bg-[#09090B] border-zinc-700 text-white"
-                  data-testid="input-pilot-stream"
-                />
+              <div className="md:col-span-2 lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="pilot-picture" className="text-white">{t('pilots.pictureUrl')}</Label>
+                  <Input
+                    id="pilot-picture"
+                    value={newPilot.picture}
+                    onChange={(e) => setNewPilot({ ...newPilot, picture: e.target.value })}
+                    placeholder={t('pilots.placeholder.pictureUrl')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    data-testid="input-pilot-picture"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pilot-stream" className="text-white">{t('pilots.streamUrl')}</Label>
+                  <Input
+                    id="pilot-stream"
+                    value={newPilot.streamUrl}
+                    onChange={(e) => setNewPilot({ ...newPilot, streamUrl: e.target.value })}
+                    placeholder={t('pilots.placeholder.streamUrl')}
+                    className="bg-[#09090B] border-zinc-700 text-white"
+                    data-testid="input-pilot-stream"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pilot-replay-video" className="text-white">{t('pilots.replayVideoUrl')}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="pilot-replay-video"
+                      value={newPilot.replayVideoUrl}
+                      onChange={(e) => setNewPilot({ ...newPilot, replayVideoUrl: e.target.value })}
+                      placeholder={t('pilots.placeholder.replayVideoUrl')}
+                      className="bg-[#09090B] border-zinc-700 text-white"
+                      data-testid="input-pilot-replay-video"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0 border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                      onClick={() => openUrlInNewTab(newPilot.replayVideoUrl)}
+                      disabled={!String(newPilot.replayVideoUrl || '').trim()}
+                      title={t('common.openInNewTab')}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
               <div className="flex items-end">
-                <div className="flex items-center gap-2 rounded border border-zinc-700 bg-[#09090B] px-3 py-2 w-full h-[42px]">
+                <div className="flex items-center gap-2 px-1 py-2 min-h-[42px]">
                   <Switch
                     checked={newPilot.isActive}
                     onCheckedChange={(checked) => setNewPilot({ ...newPilot, isActive: Boolean(checked) })}
@@ -563,13 +989,28 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                   </Button>
                   <Dialog open={pilotDialogOpen && editingPilot?.id === pilot.id} onOpenChange={(open) => {
                     setPilotDialogOpen(open);
-                    if (!open) setEditingPilot(null);
+                    if (!open) {
+                      setEditingPilot(null);
+                      setPilotDialogTab('edit');
+                      setReplayMetadata(null);
+                      setReplayMetadataStatus('idle');
+                      setReplayChapterSource('');
+                    }
                   }}>
                     <DialogTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setEditingPilot({ ...pilot })}
+                        onClick={() => {
+                          setPilotDialogTab('edit');
+                          setReplayMetadata(null);
+                          setReplayMetadataStatus('idle');
+                          setReplayChapterSource('');
+                          setEditingPilot({
+                            ...pilot,
+                            replayStageTimes: normalizeReplayStageTimes(pilot.replayStageTimes)
+                          });
+                        }}
                         className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
                         data-testid={`button-edit-pilot-${pilot.id}`}
                       >
@@ -581,102 +1022,135 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                         <DialogTitle className="text-white">{t('common.edit')} {t('tabs.pilots')}</DialogTitle>
                       </DialogHeader>
                       {editingPilot && (
-                        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-white">{t('pilots.pilotName')} *</Label>
-                              <Input
-                                value={editingPilot.name}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, name: e.target.value })}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-white">{t('pilots.team')}</Label>
-                              <Input
-                                value={editingPilot.team || ''}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, team: e.target.value })}
-                                placeholder={t('pilots.placeholder.team')}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-white">{t('pilots.car')}</Label>
-                              <Input
-                                value={editingPilot.car || ''}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, car: e.target.value })}
-                                placeholder={t('pilots.placeholder.car')}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-white">{t('pilots.carNumber')}</Label>
-                              <Input
-                                value={editingPilot.carNumber || ''}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, carNumber: e.target.value })}
-                                placeholder={t('pilots.placeholder.carNumber')}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-white">{t('pilots.startOrder')}</Label>
-                              <Input
-                                type="number"
-                                value={editingPilot.startOrder || ''}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, startOrder: e.target.value })}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
-                              <Input
-                                type="number"
-                                value={editingPilot.timeOffsetMinutes ?? ''}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value })}
-                                placeholder={t('pilots.placeholder.timeOffsetMinutes')}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                            <div className="md:col-span-2">
-                              <Label className="text-white">{t('pilots.category')}</Label>
-                              <Select value={editingPilot.categoryId || 'none'} onValueChange={(val) => setEditingPilot({ ...editingPilot, categoryId: val === 'none' ? null : val })}>
-                                <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                                  <SelectValue placeholder={t('common.select')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">{t('common.none')}</SelectItem>
-                                  {sortedCategories.map((cat) => (
-                                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-white">{t('pilots.pictureUrl')}</Label>
-                              <Input
-                                value={editingPilot.picture || ''}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, picture: e.target.value })}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-white">{t('pilots.streamUrl')}</Label>
-                              <Input
-                                value={editingPilot.streamUrl || ''}
-                                onChange={(e) => setEditingPilot({ ...editingPilot, streamUrl: e.target.value })}
-                                className="bg-[#09090B] border-zinc-700 text-white"
-                              />
-                            </div>
-                          </div>
+                        <Tabs value={pilotDialogTab} onValueChange={setPilotDialogTab} className="space-y-4">
+                          <TabsList className="bg-[#09090B] border border-zinc-800">
+                            <TabsTrigger value="edit" className="text-white data-[state=active]:bg-[#FF4500]">
+                              {t('pilots.editPilotTab')}
+                            </TabsTrigger>
+                            <TabsTrigger value="replay" className="text-white data-[state=active]:bg-[#FF4500]">
+                              {t('pilots.replayTab')}
+                            </TabsTrigger>
+                          </TabsList>
 
-                          <Card className="bg-[#09090B] border-zinc-700 h-fit">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                                <MapPin className="w-4 h-4 text-[#FF4500]" />
-                                {t('pilots.telemetry')}
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
+                          <TabsContent value="edit" className="mt-0">
+                            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <Label className="text-white">{t('pilots.pilotName')} *</Label>
+                                  <Input
+                                    value={editingPilot.name}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, name: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('pilots.team')}</Label>
+                                  <Input
+                                    value={editingPilot.team || ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, team: e.target.value })}
+                                    placeholder={t('pilots.placeholder.team')}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('pilots.car')}</Label>
+                                  <Input
+                                    value={editingPilot.car || ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, car: e.target.value })}
+                                    placeholder={t('pilots.placeholder.car')}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('pilots.carNumber')}</Label>
+                                  <Input
+                                    value={editingPilot.carNumber || ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, carNumber: e.target.value })}
+                                    placeholder={t('pilots.placeholder.carNumber')}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('pilots.startOrder')}</Label>
+                                  <Input
+                                    type="number"
+                                    value={editingPilot.startOrder || ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, startOrder: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
+                                  <Input
+                                    type="number"
+                                    value={editingPilot.timeOffsetMinutes ?? ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value })}
+                                    placeholder={t('pilots.placeholder.timeOffsetMinutes')}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div className="md:col-span-2">
+                                  <Label className="text-white">{t('pilots.category')}</Label>
+                                  <Select value={editingPilot.categoryId || 'none'} onValueChange={(val) => setEditingPilot({ ...editingPilot, categoryId: val === 'none' ? null : val })}>
+                                    <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                      <SelectValue placeholder={t('common.select')} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">{t('common.none')}</SelectItem>
+                                      {sortedCategories.map((cat) => (
+                                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('pilots.pictureUrl')}</Label>
+                                  <Input
+                                    value={editingPilot.picture || ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, picture: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-white">{t('pilots.streamUrl')}</Label>
+                                  <Input
+                                    value={editingPilot.streamUrl || ''}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, streamUrl: e.target.value })}
+                                    className="bg-[#09090B] border-zinc-700 text-white"
+                                  />
+                                </div>
+                                <div className="md:col-span-2">
+                                  <Label className="text-white">{t('pilots.replayVideoUrl')}</Label>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={editingPilot.replayVideoUrl || ''}
+                                      onChange={(e) => setEditingPilot({ ...editingPilot, replayVideoUrl: e.target.value })}
+                                      placeholder={t('pilots.placeholder.replayVideoUrl')}
+                                      className="bg-[#09090B] border-zinc-700 text-white"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="shrink-0 border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                                      onClick={() => openUrlInNewTab(editingPilot.replayVideoUrl)}
+                                      disabled={!String(editingPilot.replayVideoUrl || '').trim()}
+                                      title={t('common.openInNewTab')}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <Card className="bg-[#09090B] border-zinc-700 h-fit">
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                                    <MapPin className="w-4 h-4 text-[#FF4500]" />
+                                    {t('pilots.telemetry')}
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
                               <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-[10px] font-mono text-zinc-500">
                                 {t('pilots.pilotId')}: {editingPilot.id}
                               </div>
@@ -967,9 +1441,148 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                               <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">
                                 {t('pilots.telemetryHint')}
                               </div>
-                            </CardContent>
-                          </Card>
-                        </div>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </TabsContent>
+
+                          <TabsContent value="replay" className="mt-0">
+                            <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                              <div className="space-y-4">
+                                <div>
+                                  <Label className="text-white">{t('pilots.replayVideoUrl')}</Label>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={editingPilot.replayVideoUrl || ''}
+                                      onChange={(e) => setEditingPilot({ ...editingPilot, replayVideoUrl: e.target.value })}
+                                      placeholder={t('pilots.placeholder.replayVideoUrl')}
+                                      className="bg-[#09090B] border-zinc-700 text-white"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="shrink-0 border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                                      onClick={() => openUrlInNewTab(editingPilot.replayVideoUrl)}
+                                      disabled={!String(editingPilot.replayVideoUrl || '').trim()}
+                                      title={t('common.openInNewTab')}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {editingPilot.replayVideoUrl ? (
+                                  <div className="overflow-hidden rounded-xl border border-zinc-800 bg-black/40">
+                                    <div className="aspect-video bg-black">
+                                      <iframe
+                                        src={buildReplayEmbedUrl(editingPilot.replayVideoUrl)}
+                                        className="h-full w-full"
+                                        frameBorder="0"
+                                        allow="autoplay; fullscreen; picture-in-picture"
+                                        allowFullScreen
+                                        title={editingPilot.name || t('pilots.replayTab')}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-black/20 px-6 text-center text-sm text-zinc-500">
+                                    {t('pilots.replayNoUrl')}
+                                  </div>
+                                )}
+
+                                <Card className="bg-[#09090B] border-zinc-700">
+                                  <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm uppercase tracking-[0.18em] text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                                      {t('pilots.replayDescription')}
+                                    </CardTitle>
+                                  </CardHeader>
+                                  <CardContent className="space-y-2 text-sm text-zinc-300">
+                                    {replayMetadata?.title && (
+                                      <div className="font-semibold text-white">{replayMetadata.title}</div>
+                                    )}
+                                    {(replayMetadata?.authorName || replayMetadata?.providerName) && (
+                                      <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                                        {[replayMetadata.authorName, replayMetadata.providerName].filter(Boolean).join(' • ')}
+                                      </div>
+                                    )}
+                                    {replayMetadataStatus === 'loading' && (
+                                      <p className="text-sm leading-relaxed text-zinc-400">
+                                        {t('common.loading')}
+                                      </p>
+                                    )}
+                                    {replayMetadata?.description && (
+                                      <p className="text-sm leading-relaxed text-zinc-400">
+                                        {replayMetadata.description}
+                                      </p>
+                                    )}
+                                    <div className="space-y-2 pt-2">
+                                      <Label className="text-xs uppercase tracking-[0.16em] text-zinc-500">
+                                        {t('pilots.replayChapterSource')}
+                                      </Label>
+                                      <Textarea
+                                        value={replayChapterSource}
+                                        onChange={(e) => setReplayChapterSource(e.target.value)}
+                                        placeholder={t('pilots.replayChapterSourcePlaceholder')}
+                                        className="min-h-[180px] border-zinc-700 bg-[#18181B] text-white"
+                                      />
+                                      <div className="flex justify-end">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                                          onClick={handleImportReplayChapters}
+                                        >
+                                          {t('pilots.replayImportChapters')}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </div>
+
+                              <Card className="bg-[#09090B] border-zinc-700">
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                                    {t('pilots.replayMarkers')}
+                                  </CardTitle>
+                                  <p className="text-xs text-zinc-500">
+                                    {t('pilots.replayMarkersHint')}
+                                  </p>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="space-y-3">
+                                    {sortedStages.map((stage) => (
+                                      <div key={stage.id} className="grid grid-cols-[minmax(0,1fr)_120px] gap-3 rounded-lg border border-zinc-800 bg-black/20 p-3">
+                                        <div className="min-w-0">
+                                          <div className="truncate text-sm font-medium text-white">
+                                            {getStageTitle(stage)}
+                                          </div>
+                                          <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                                            {stage.type || '-'}
+                                          </div>
+                                        </div>
+                                        <TimeInput
+                                          value={editingPilot.replayStageTimes?.[stage.id] || ''}
+                                          onChange={(value) => handleReplayStageTimeChange(stage.id, value)}
+                                          format="total"
+                                          decimals={0}
+                                          placeholder="MM:SS"
+                                          className="bg-[#18181B] border-zinc-700 text-white"
+                                        />
+                                      </div>
+                                    ))}
+                                    {sortedStages.length === 0 && (
+                                      <div className="rounded-lg border border-dashed border-zinc-700 bg-black/20 px-4 py-6 text-center text-sm text-zinc-500">
+                                        {t('theRace.noStages')}
+                                      </div>
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
                       )}
                       <DialogFooter>
                         <Button onClick={handleUpdatePilot} className="bg-[#FF4500] hover:bg-[#FF4500]/90">

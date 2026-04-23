@@ -14,13 +14,21 @@ export class SyncOutboundService {
   constructor({
     createPackageId,
     getNextLogicalTimestamp,
+    getSourceMetadata,
     deltaMessageType,
-    maxBytes
+    maxBytes,
+    normalizePilotId
   }) {
     this.createPackageId = createPackageId;
     this.getNextLogicalTimestamp = getNextLogicalTimestamp;
+    this.getSourceMetadata = typeof getSourceMetadata === 'function'
+      ? getSourceMetadata
+      : (() => ({}));
     this.deltaMessageType = deltaMessageType;
     this.maxBytes = maxBytes;
+    this.normalizePilotId = typeof normalizePilotId === 'function'
+      ? normalizePilotId
+      : ((pilotId) => String(pilotId || '').trim());
     this.provider = null;
     this.syncEngine = null;
   }
@@ -28,6 +36,13 @@ export class SyncOutboundService {
   setTransport({ provider, syncEngine }) {
     this.provider = provider || null;
     this.syncEngine = syncEngine || null;
+  }
+
+  buildSourceMetadata() {
+    const sourceMetadata = this.getSourceMetadata();
+    return sourceMetadata && typeof sourceMetadata === 'object'
+      ? sourceMetadata
+      : {};
   }
 
   async publishChanges(changes = {}, options = {}) {
@@ -64,7 +79,10 @@ export class SyncOutboundService {
     }
 
     if (isHighPriority) {
-      const published = await this.provider.publish(packageParts[0]);
+      const published = await this.provider.publish({
+        ...this.buildSourceMetadata(),
+        ...packageParts[0]
+      });
       if (!published) {
         return null;
       }
@@ -103,6 +121,47 @@ export class SyncOutboundService {
       packageType,
       highPriority: false
     };
+  }
+
+  async publishControl(controlType, changes = {}, extraMeta = {}) {
+    const normalizedControlType = String(controlType || '').trim();
+    if (!this.provider?.isConnected || !normalizedControlType) {
+      return false;
+    }
+
+    const message = {
+      messageType: this.deltaMessageType,
+      packageType: 'control',
+      controlType: normalizedControlType,
+      timestamp: this.getNextLogicalTimestamp(),
+      payload: changes && typeof changes === 'object' && !Array.isArray(changes) ? changes : {},
+      ...this.buildSourceMetadata(),
+      ...(extraMeta && typeof extraMeta === 'object' && !Array.isArray(extraMeta) ? extraMeta : {})
+    };
+
+    if (isOutboundDebugEnabled()) {
+      console.log('[SyncOutbound][TX][control]', {
+        controlType: normalizedControlType,
+        payloadKeys: Object.keys(message.payload || {})
+      });
+    }
+
+    return this.provider.publish(message);
+  }
+
+  async publishPilotTelemetry(pilotId, telemetry = {}) {
+    const normalizedPilotId = this.normalizePilotId(pilotId);
+    if (!normalizedPilotId || !telemetry || typeof telemetry !== 'object' || Array.isArray(telemetry)) {
+      return null;
+    }
+
+    return this.publishChanges({
+      pilotTelemetry: {
+        [normalizedPilotId]: telemetry
+      }
+    }, {
+      packageType: 'delta'
+    });
   }
 }
 

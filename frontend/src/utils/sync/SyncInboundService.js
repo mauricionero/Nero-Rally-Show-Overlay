@@ -16,12 +16,14 @@ export class SyncInboundService {
     syncMessageTypes,
     isPlainObject,
     normalizeMessageSource,
+    normalizeSyncRole,
     normalizePilotId,
     trustedPilotTelemetrySources
   }) {
     this.syncMessageTypes = syncMessageTypes;
     this.isPlainObject = isPlainObject;
     this.normalizeMessageSource = normalizeMessageSource;
+    this.normalizeSyncRole = normalizeSyncRole;
     this.normalizePilotId = normalizePilotId;
     this.trustedPilotTelemetrySources = trustedPilotTelemetrySources;
   }
@@ -122,9 +124,30 @@ export class SyncInboundService {
     applyLegacyIncomingData?.(data);
   }
 
-  shouldIgnoreAndroidPayload(data) {
-    const payload = data?.payload && typeof data.payload === 'object' ? data.payload : data;
-    const messageSource = this.normalizeMessageSource(
+  getNormalizedPayload(data) {
+    let normalizedData = data?.payload && typeof data.payload === 'object'
+      ? data.payload
+      : data;
+
+    if (data?.section === 'bundle' && this.isPlainObject(normalizedData)) {
+      const flat = {};
+      Object.values(normalizedData).forEach((sectionPayload) => {
+        if (sectionPayload && typeof sectionPayload === 'object') {
+          Object.assign(flat, sectionPayload);
+        }
+      });
+      normalizedData = flat;
+    }
+
+    return normalizedData;
+  }
+
+  getMessageSource(data, normalizedData = null) {
+    const payload = normalizedData && typeof normalizedData === 'object'
+      ? normalizedData
+      : this.getNormalizedPayload(data);
+
+    return this.normalizeMessageSource(
       payload?.source
       || payload?.origin
       || payload?.clientSource
@@ -132,6 +155,133 @@ export class SyncInboundService {
       || data?.origin
       || data?.clientSource
     );
+  }
+
+  getMessageSourceRole(data, normalizedData = null) {
+    const source = this.getMessageSource(data, normalizedData);
+    return this.normalizeSyncRole ? this.normalizeSyncRole(source) : source;
+  }
+
+  routeLegacyIncoming(data, context = {}) {
+    const {
+      onIgnored,
+      onPilotTelemetry,
+      onStageTimesDelta,
+      onStageUpsert,
+      onStageDelete,
+      onMapPlacemarkUpsert,
+      onLegacyTimingDelta,
+      onStatePayload
+    } = context;
+
+    if (!data) {
+      return { handled: false, reason: 'empty' };
+    }
+
+    let normalizedData = this.getNormalizedPayload(data);
+    const messageSource = this.getMessageSource(data, normalizedData);
+    const messageSourceRole = this.getMessageSourceRole(data, normalizedData);
+
+    if (this.shouldIgnoreAndroidPayload(data)) {
+      onIgnored?.({
+        data,
+        normalizedData,
+        messageSource,
+        messageSourceRole
+      });
+      return { handled: true, kind: 'ignored' };
+    }
+
+    if (normalizedData?.messageType === 'pilot-telemetry') {
+      const telemetryValidation = this.validatePilotTelemetrySource(normalizedData);
+      onPilotTelemetry?.({
+        data,
+        normalizedData,
+        telemetryValidation,
+        messageSource,
+        messageSourceRole
+      });
+      return { handled: true, kind: 'telemetry' };
+    }
+
+    if (data?.section === 'times' && data?.stageId && normalizedData?.times && typeof normalizedData.times === 'object') {
+      onStageTimesDelta?.({
+        data,
+        normalizedData,
+        stageId: data.stageId,
+        messageSource,
+        messageSourceRole
+      });
+      return { handled: true, kind: 'stage-times' };
+    }
+
+    if (data?.section === 'stages' && normalizedData?.stage) {
+      onStageUpsert?.({
+        data,
+        normalizedData,
+        messageSource,
+        messageSourceRole
+      });
+      return { handled: true, kind: 'stage-upsert' };
+    }
+
+    if (data?.section === 'stages' && normalizedData?.deletedStageId) {
+      onStageDelete?.({
+        data,
+        normalizedData,
+        messageSource,
+        messageSourceRole
+      });
+      return { handled: true, kind: 'stage-delete' };
+    }
+
+    if (data?.section === 'mapPlacemarks' && normalizedData?.mapPlacemark) {
+      onMapPlacemarkUpsert?.({
+        data,
+        normalizedData,
+        messageSource,
+        messageSourceRole
+      });
+      return { handled: true, kind: 'map-placemark-upsert' };
+    }
+
+    if (this.isPlainObject(normalizedData) && messageSourceRole === 'mobile') {
+      const legacyTimingEntries = Object.entries(normalizedData).filter(([key]) => context.timingByStageFields?.has(key));
+
+      if (legacyTimingEntries.length > 0) {
+        const remainingData = Object.fromEntries(
+          Object.entries(normalizedData).filter(([key]) => !context.timingByStageFields?.has(key))
+        );
+
+        onLegacyTimingDelta?.({
+          data,
+          normalizedData,
+          remainingData,
+          legacyTimingEntries,
+          messageSource,
+          messageSourceRole
+        });
+
+        normalizedData = remainingData;
+
+        if (Object.keys(normalizedData).length === 0) {
+          return { handled: true, kind: 'legacy-timing-only' };
+        }
+      }
+    }
+
+    onStatePayload?.({
+      data,
+      normalizedData,
+      messageSource,
+      messageSourceRole
+    });
+    return { handled: true, kind: 'state-payload' };
+  }
+
+  shouldIgnoreAndroidPayload(data) {
+    const payload = data?.payload && typeof data.payload === 'object' ? data.payload : data;
+    const messageSource = this.getMessageSource(data, payload);
     const hasArrivalTimes = (
       data?.section === 'arrivalTimes'
       || (payload && typeof payload === 'object' && payload.arrivalTimes && typeof payload.arrivalTimes === 'object')
