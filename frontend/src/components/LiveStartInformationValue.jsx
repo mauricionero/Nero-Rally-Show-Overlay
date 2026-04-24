@@ -45,7 +45,7 @@ function LiveStartInformationValueBase({
   liveStatus = '',
   debugDate = ''
 }) {
-  const { timeDecimals } = useRally();
+  const { timeDecimals, eventIsOver } = useRally();
   const initialNowRef = useRef(new Date());
   const initialNow = useMemo(() => (
     getReferenceNow(debugDate, initialNowRef.current)
@@ -152,6 +152,10 @@ function LiveStartInformationValueBase({
       retiredLabel
     });
   }, [animatedNow, finishTime, retired, retiredLabel, shouldAnimate, stageDate, startLabel, startTime, staticInfo, timeDecimals]);
+
+  if (eventIsOver && !finishTime && !retired) {
+    return null;
+  }
 
   return (
     <StartInformationValue

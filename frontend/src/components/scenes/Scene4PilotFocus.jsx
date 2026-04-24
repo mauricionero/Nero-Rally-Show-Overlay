@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
@@ -24,7 +24,7 @@ import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatClockFromDate, formatDurationMs } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
-import { buildPilotOverlayPlaybackMap } from '../../utils/overlayReplayResolver.js';
+import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
 import {
   getStageNumberLabel,
   getStageTitle,
@@ -147,7 +147,7 @@ function Scene4StageTimeValue({
 export default function Scene4PilotFocus({ hideStreams = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
-    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId, eventIsOver
+    lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -158,6 +158,54 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const [selectedMainFeedValue, setSelectedMainFeedValue] = useState(() => loadSceneConfig(SCENE_4_CONFIG_KEY, { selectedMainFeedValue: 'none' }).selectedMainFeedValue);
   const currentTime = useSecondAlignedClock();
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentTime), [debugDate, currentTime]);
+  const replayPilotStageSignature = useMemo(() => (
+    pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
+  ), [pilots]);
+  const replaySnapshotKey = eventIsOver
+    ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
+    : '';
+  const replayPlaybackSnapshotRef = useRef({ key: '', map: null });
+  if (!eventIsOver) {
+    replayPlaybackSnapshotRef.current = { key: '', map: null };
+  } else if (replayPlaybackSnapshotRef.current.key !== replaySnapshotKey) {
+    replayPlaybackSnapshotRef.current = {
+      key: replaySnapshotKey,
+      map: buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver: true,
+      stages,
+      times,
+      now: getReferenceNow(debugDate, new Date()),
+      replayStartDate: eventReplayStartDate,
+      replayStartTime: eventReplayStartTime,
+      replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+      })
+    };
+  }
+  const livePilotPlaybackById = useMemo(() => (
+    buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver: false
+    })
+  ), [currentStageId, pilots]);
+  const pilotPlaybackById = eventIsOver
+    ? (replayPlaybackSnapshotRef.current.map || new Map())
+    : livePilotPlaybackById;
+  const resolveReplayStreamUrlOnMount = useCallback((pilot) => (
+    resolvePilotOverlayPlayback({
+      pilot,
+      globalCurrentStageId: currentStageId,
+      eventIsOver: true,
+      stages,
+      times,
+      now: getReferenceNow(debugDate, new Date()),
+      replayStartDate: eventReplayStartDate,
+      replayStartTime: eventReplayStartTime,
+      replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+    }).streamUrl || ''
+  ), [currentStageId, debugDate, eventReplayStageIntervalSeconds, eventReplayStartDate, eventReplayStartTime, stages, times]);
   const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
   const selectedPilotCurrentStageId = useMemo(() => {
     const selectedPilot = pilots.find((pilot) => pilot.id === selectedPilotId);
@@ -323,13 +371,6 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   }, [sortedStages, focusPilot, lapTimes, startTimes, times, retiredStages, sceneNow, t, timeDecimals]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
-  const pilotPlaybackById = useMemo(() => (
-    buildPilotOverlayPlaybackMap({
-      pilots,
-      globalCurrentStageId: currentStageId,
-      eventIsOver
-    })
-  ), [currentStageId, eventIsOver, pilots]);
   const overlayPilots = useMemo(() => (
     pilots.map((pilot) => ({
       ...pilot,
@@ -341,6 +382,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const selectedMainPilot = selectedMainFeed?.type === 'pilot'
     ? pilots.find((pilot) => pilot.id === selectedMainFeed.id)
     : null;
+  const selectedMainPilotPlayback = selectedMainPilot ? pilotPlaybackById.get(selectedMainPilot.id) : null;
   const selectedMainPilotCurrentStage = useMemo(() => (
     stages.find((stage) => stage.id === String(selectedMainPilot?.currentStageId || '').trim()) || null
   ), [selectedMainPilot?.currentStageId, stages]);
@@ -383,10 +425,15 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const focusPilotPip = showFocusPilotPip ? (
     <div className="absolute bottom-6 right-6 w-64 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
       <StreamPlayer
+        key={focusPilotPlayback?.mode === 'replay' ? `${focusPilot.id}:${focusPilotPlayback?.baseUrl || ''}:${focusPilotPlayback?.effectiveStageId || ''}` : `live-${focusPilot.id}`}
         pilotId={focusPilot.id}
-        streamUrl={focusPilotPlayback?.streamUrl || ''}
+        streamUrl={focusPilotPlayback?.baseUrl || focusPilotPlayback?.streamUrl || ''}
         name={focusPilot.name}
         className="w-full h-full"
+        showControls={focusPilotPlayback?.mode === 'replay'}
+        interactive={focusPilotPlayback?.mode === 'replay'}
+        replayMountIdentity={focusPilotPlayback?.mode === 'replay' ? `${focusPilot.id}:${focusPilotPlayback?.baseUrl || ''}:${focusPilotPlayback?.effectiveStageId || ''}` : ''}
+        resolveStreamUrlOnMount={focusPilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(focusPilot) : null}
       />
       <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} trackLengthTotal={selectedStage?.distance} compact raised />
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
@@ -649,10 +696,15 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
                 {!hideStreams && selectedMainFeed.streamUrl && (
                   <StreamPlayer
+                    key={selectedMainPilotPlayback?.mode === 'replay' && selectedMainPilot ? `${selectedMainPilot.id}:${selectedMainPilotPlayback?.baseUrl || ''}:${selectedMainPilotPlayback?.effectiveStageId || ''}` : `live-${selectedMainFeed.id}`}
                     pilotId={selectedMainFeed.id}
                     streamUrl={selectedMainFeed.streamUrl}
                     name={selectedMainFeed.name}
                     className="w-full h-full"
+                    showControls={selectedMainPilotPlayback?.mode === 'replay'}
+                    interactive={selectedMainPilotPlayback?.mode === 'replay'}
+                    replayMountIdentity={selectedMainPilotPlayback?.mode === 'replay' && selectedMainPilot ? `${selectedMainPilot.id}:${selectedMainPilotPlayback?.baseUrl || ''}:${selectedMainPilotPlayback?.effectiveStageId || ''}` : ''}
+                    resolveStreamUrlOnMount={selectedMainPilotPlayback?.mode === 'replay' && selectedMainPilot ? () => resolveReplayStreamUrlOnMount(selectedMainPilot) : null}
                   />
                 )}
                 {selectedMainPilot && !hideStreams && (
@@ -702,10 +754,15 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
               /* Pilot stream as main (original behavior) */
               <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
                 <StreamPlayer
+                  key={focusPilotPlayback?.mode === 'replay' ? `${focusPilot.id}:${focusPilotPlayback?.baseUrl || ''}:${focusPilotPlayback?.effectiveStageId || ''}` : `live-${focusPilot.id}`}
                   pilotId={focusPilot.id}
-                  streamUrl={focusPilotPlayback?.streamUrl || ''}
+                  streamUrl={focusPilotPlayback?.baseUrl || focusPilotPlayback?.streamUrl || ''}
                   name={focusPilot.name}
                   className="w-full h-full"
+                  showControls={focusPilotPlayback?.mode === 'replay'}
+                  interactive={focusPilotPlayback?.mode === 'replay'}
+                  replayMountIdentity={focusPilotPlayback?.mode === 'replay' ? `${focusPilot.id}:${focusPilotPlayback?.baseUrl || ''}:${focusPilotPlayback?.effectiveStageId || ''}` : ''}
+                  resolveStreamUrlOnMount={focusPilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(focusPilot) : null}
                 />
                 <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} trackLengthTotal={selectedStage?.distance} />
                 <CurrentStageBadge

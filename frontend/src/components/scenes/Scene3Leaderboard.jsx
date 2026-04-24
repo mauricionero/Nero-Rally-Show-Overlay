@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
@@ -30,12 +30,12 @@ import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useFastClock } from '../../hooks/useFastClock.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatDurationMs, formatDurationSeconds, formatSecondsValue } from '../../utils/timeFormat.js';
-import { buildPilotOverlayPlaybackMap } from '../../utils/overlayReplayResolver.js';
+import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
 
 const SCENE_3_CONFIG_KEY = 'scene3Config';
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals, eventIsOver } = useRally();
+  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
@@ -58,13 +58,54 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     )
   ), [debugDate, fastClockEnabled, currentFastTime, currentSecondAlignedTime]);
   const alertStageId = selectedStageId || currentStageId || null;
-  const pilotPlaybackById = useMemo(() => (
+  const replayPilotStageSignature = useMemo(() => (
+    pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
+  ), [pilots]);
+  const replaySnapshotKey = eventIsOver
+    ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
+    : '';
+  const replayPlaybackSnapshotRef = useRef({ key: '', map: null });
+  if (!eventIsOver) {
+    replayPlaybackSnapshotRef.current = { key: '', map: null };
+  } else if (replayPlaybackSnapshotRef.current.key !== replaySnapshotKey) {
+    replayPlaybackSnapshotRef.current = {
+      key: replaySnapshotKey,
+      map: buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver: true,
+      stages,
+      times,
+      now: getReferenceNow(debugDate, new Date()),
+      replayStartDate: eventReplayStartDate,
+      replayStartTime: eventReplayStartTime,
+      replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+      })
+    };
+  }
+  const livePilotPlaybackById = useMemo(() => (
     buildPilotOverlayPlaybackMap({
       pilots,
       globalCurrentStageId: currentStageId,
-      eventIsOver
+      eventIsOver: false
     })
-  ), [currentStageId, eventIsOver, pilots]);
+  ), [currentStageId, pilots]);
+  const pilotPlaybackById = eventIsOver
+    ? (replayPlaybackSnapshotRef.current.map || new Map())
+    : livePilotPlaybackById;
+  const resolveReplayStreamUrlOnMount = useCallback((pilot) => (
+    resolvePilotOverlayPlayback({
+      pilot,
+      globalCurrentStageId: currentStageId,
+      eventIsOver: true,
+      stages,
+      times,
+      now: getReferenceNow(debugDate, new Date()),
+      replayStartDate: eventReplayStartDate,
+      replayStartTime: eventReplayStartTime,
+      replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+    }).streamUrl || ''
+  ), [currentStageId, debugDate, eventReplayStageIntervalSeconds, eventReplayStartDate, eventReplayStartTime, stages, times]);
   
   // Filter stages by type
   const ssStages = stages.filter((stage) => isSpecialStageType(stage.type) && !isLapTimingStageType(stage.type));
@@ -550,10 +591,15 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                         {pilotPlaybackById.get(pilot.id)?.hasVideo && pilot.isActive && !hideStreams ? (
                           <div className="w-32 h-18 rounded overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
                             <StreamPlayer
+                              key={pilotPlaybackById.get(pilot.id)?.mode === 'replay' ? `${pilot.id}:${pilotPlaybackById.get(pilot.id)?.baseUrl || ''}:${pilotPlaybackById.get(pilot.id)?.effectiveStageId || ''}` : `live-${pilot.id}`}
                               pilotId={pilot.id}
-                              streamUrl={pilotPlaybackById.get(pilot.id)?.streamUrl || ''}
+                              streamUrl={pilotPlaybackById.get(pilot.id)?.baseUrl || pilotPlaybackById.get(pilot.id)?.streamUrl || ''}
                               name={pilot.name}
                               className="w-full h-full"
+                              showControls={pilotPlaybackById.get(pilot.id)?.mode === 'replay'}
+                              interactive={pilotPlaybackById.get(pilot.id)?.mode === 'replay'}
+                              replayMountIdentity={pilotPlaybackById.get(pilot.id)?.mode === 'replay' ? `${pilot.id}:${pilotPlaybackById.get(pilot.id)?.baseUrl || ''}:${pilotPlaybackById.get(pilot.id)?.effectiveStageId || ''}` : ''}
+                              resolveStreamUrlOnMount={pilotPlaybackById.get(pilot.id)?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(pilot) : null}
                             />
                           </div>
                         ) : pilot.picture ? (

@@ -38,6 +38,11 @@ export default function DebugTab() {
       description: 'Show telemetry-specific debug and warning logs.'
     },
     {
+      key: 'replay',
+      title: 'Replay time calculations',
+      description: 'Show replay-stage timing calculations, chapter matches, offsets, and final video seek values.'
+    },
+    {
       key: 'connection',
       title: 'Connection lifecycle',
       description: 'Show connection bootstrap, replay, subscribe, and reconnect-service logs.'

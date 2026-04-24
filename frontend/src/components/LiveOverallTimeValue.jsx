@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useRally } from '../contexts/RallyContext.jsx';
 import { useFastClock } from '../hooks/useFastClock.js';
 import { useSecondAlignedClock } from '../hooks/useSecondAlignedClock.js';
 import {
@@ -34,6 +35,7 @@ function LiveOverallTimeValueBase({
   style,
   as: Component = 'span'
 }) {
+  const { eventIsOver } = useRally();
   const useFastDecimals = timeDecimals > 0;
   const fastClockNowMs = useFastClock(useFastDecimals);
   const secondAlignedNow = useSecondAlignedClock(!useFastDecimals);
@@ -63,7 +65,7 @@ function LiveOverallTimeValueBase({
         return;
       }
 
-      if (hasRunningStage) {
+      if (hasRunningStage || eventIsOver) {
         return;
       }
 
@@ -96,7 +98,7 @@ function LiveOverallTimeValueBase({
         fallback
       })
     };
-  }, [fallback, now, pilotId, retiredStages, stages, startTimes, timeDecimals, times]);
+  }, [eventIsOver, fallback, now, pilotId, retiredStages, stages, startTimes, timeDecimals, times]);
 
   if (!info.hasValue) {
     return null;

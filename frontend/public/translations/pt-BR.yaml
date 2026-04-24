@@ -168,6 +168,13 @@ categories:
 theRace:
   eventName: "Nome do Evento"
   eventNamePlaceholder: "ex: Campeonato Rally 2025"
+  replayStartDate: "Data Inicial do Replay"
+  replayStartDateHint: "Define o dia simulado da linha do tempo do evento em replay."
+  replayStartTime: "Tempo Inicial do Replay"
+  replayStartTimePlaceholder: "MM:SS"
+  replayStartTimeHint: "Define o timestamp do video para a primeira etapa competitiva."
+  replayStageIntervalSeconds: "Intervalo entre Etapas do Replay (s)"
+  replayStageIntervalSecondsHint: "Gap extra somado entre as largadas do replay depois da média arredondada mais o desvio."
   stages: "Etapas"
   addStage: "Adicionar Etapa"
   addNewStage: "Adicionar Nova Etapa"

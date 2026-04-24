@@ -19,6 +19,7 @@ import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../util
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
 import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceVisibleLapCount, getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
+import { calculateAverageAndDeviation, parseDurationStringToMs } from '../../utils/timingStats.js';
 import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw, Check, CheckCheck, CircleX, Download } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
 import RollingClockInput from '../RollingClockInput.jsx';
@@ -204,17 +205,7 @@ const parseClockTimeToSeconds = (value) => {
   return hours * 3600 + minutes * 60 + seconds;
 };
 
-const parseTotalTimeToMs = (timeStr) => {
-  if (!timeStr) return null;
-  const parts = timeStr.split(':');
-  if (parts.length < 2) return null;
-  const hours = parts.length === 3 ? parseInt(parts[0]) : 0;
-  const mins = parts.length === 3 ? parseInt(parts[1]) : parseInt(parts[0]);
-  const secsAndMs = parts.length === 3 ? parts[2] : parts[1];
-  const [secs, ms] = secsAndMs.split('.');
-  if (!Number.isFinite(mins)) return null;
-  return (hours * 3600 + mins * 60 + parseFloat(secs || 0) + parseFloat(`0.${ms || 0}`)) * 1000;
-};
+const parseTotalTimeToMs = (timeStr) => parseDurationStringToMs(timeStr);
 
 const getPilotStartOrderForTimes = (pilot) => {
   const numericValue = Number(pilot?.startOrder);
@@ -475,9 +466,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
           };
         }
 
-        const avg = values.reduce((sum, val) => sum + val, 0) / count;
-        const variance = values.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / count;
-        const deviation = Math.sqrt(variance);
+        const { avg, deviation } = calculateAverageAndDeviation(values);
 
         return {
           category: entry.category,

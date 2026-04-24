@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
@@ -28,7 +28,7 @@ import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
-import { buildPilotOverlayPlaybackMap } from '../../utils/overlayReplayResolver.js';
+import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
 
 const LAYOUTS = [
   { id: '1', name: '1 Stream', cols: 1, rows: 1, slots: 1 },
@@ -62,7 +62,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
-    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, pilotTelemetryByPilotId, timeDecimals, eventIsOver
+    cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, stageAlerts, pilotTelemetryByPilotId, timeDecimals, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -105,13 +105,54 @@ export default function Scene1LiveStage({ hideStreams = false }) {
     )
   ), [currentFastTime, currentSecondAlignedTime, debugDate, lapFastClockEnabled]);
   const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
-  const pilotPlaybackById = useMemo(() => (
+  const replayPilotStageSignature = useMemo(() => (
+    pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
+  ), [pilots]);
+  const replaySnapshotKey = eventIsOver
+    ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
+    : '';
+  const replayPlaybackSnapshotRef = useRef({ key: '', map: null });
+  if (!eventIsOver) {
+    replayPlaybackSnapshotRef.current = { key: '', map: null };
+  } else if (replayPlaybackSnapshotRef.current.key !== replaySnapshotKey) {
+    replayPlaybackSnapshotRef.current = {
+      key: replaySnapshotKey,
+      map: buildPilotOverlayPlaybackMap({
+      pilots,
+      globalCurrentStageId: currentStageId,
+      eventIsOver: true,
+      stages,
+      times,
+      now: rallyHelpers.getReferenceNow(debugDate, new Date()),
+      replayStartDate: eventReplayStartDate,
+      replayStartTime: eventReplayStartTime,
+      replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+      })
+    };
+  }
+  const livePilotPlaybackById = useMemo(() => (
     buildPilotOverlayPlaybackMap({
       pilots,
       globalCurrentStageId: currentStageId,
-      eventIsOver
+      eventIsOver: false
     })
-  ), [currentStageId, eventIsOver, pilots]);
+  ), [currentStageId, pilots]);
+  const pilotPlaybackById = eventIsOver
+    ? (replayPlaybackSnapshotRef.current.map || new Map())
+    : livePilotPlaybackById;
+  const resolveReplayStreamUrlOnMount = useCallback((pilot) => (
+    resolvePilotOverlayPlayback({
+      pilot,
+      globalCurrentStageId: currentStageId,
+      eventIsOver: true,
+      stages,
+      times,
+      now: rallyHelpers.getReferenceNow(debugDate, new Date()),
+      replayStartDate: eventReplayStartDate,
+      replayStartTime: eventReplayStartTime,
+      replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+    }).streamUrl || ''
+  ), [currentStageId, debugDate, eventReplayStageIntervalSeconds, eventReplayStartDate, eventReplayStartTime, stages, times]);
   const overlayPilots = useMemo(() => (
     pilots.map((pilot) => ({
       ...pilot,
@@ -781,6 +822,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
 
             // Pilot Stream Item
             const pilot = item;
+            const pilotPlayback = pilotPlaybackById.get(pilot.id);
             const pilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id);
             const pilotCurrentStage = stages.find((stage) => stage.id === String(pilot.currentStageId || '').trim()) || null;
             const category = categoryById.get(pilot.categoryId);
@@ -858,10 +900,15 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                 {!hideStreams && positionBadge}
                 {!hideStreams && (
                   <StreamPlayer
+                    key={pilotPlayback?.mode === 'replay' ? `${pilot.id}:${pilotPlayback?.baseUrl || ''}:${pilotPlayback?.effectiveStageId || ''}` : `live-${pilot.id}`}
                     pilotId={pilot.id}
-                    streamUrl={pilot.streamUrl}
+                    streamUrl={pilotPlayback?.baseUrl || pilot.streamUrl}
                     name={pilot.name}
                     className="w-full h-full"
+                    showControls={pilotPlayback?.mode === 'replay'}
+                    interactive={pilotPlayback?.mode === 'replay'}
+                    replayMountIdentity={pilotPlayback?.mode === 'replay' ? `${pilot.id}:${pilotPlayback?.baseUrl || ''}:${pilotPlayback?.effectiveStageId || ''}` : ''}
+                    resolveStreamUrlOnMount={pilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(pilot) : null}
                   />
                 )}
                 {!hideStreams && (

@@ -1102,6 +1102,16 @@ export const RallyProvider = ({ children }) => {
   const [mapPlacemarks, setMapPlacemarks] = useState(() => loadFromStorage('rally_map_placemarks', []));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [eventIsOver, setEventIsOver] = useState(() => loadFromStorage('rally_event_is_over', false) === true);
+  const [eventReplayStartDate, setEventReplayStartDate] = useState(() => loadFromStorage('rally_event_replay_start_date', ''));
+  const [eventReplayStartTime, setEventReplayStartTime] = useState(() => loadFromStorage('rally_event_replay_start_time', ''));
+  const [eventReplayStageIntervalSeconds, setEventReplayStageIntervalSeconds] = useState(() => {
+    const storedValue = Number(loadFromStorage('rally_event_replay_stage_interval_seconds', 0));
+    if (!Number.isFinite(storedValue) || storedValue < 0) {
+      return 0;
+    }
+
+    return Math.trunc(storedValue);
+  });
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
   const [displayIdsInSetup, setDisplayIdsInSetup] = useState(() => loadFromStorage(SETUP_DISPLAY_IDS_STORAGE_KEY, false) === true);
   const [timeDecimals, setTimeDecimals] = useState(() => {
@@ -1246,6 +1256,9 @@ export const RallyProvider = ({ children }) => {
       eventName,
       currentStageId,
       eventIsOver,
+      eventReplayStartDate,
+      eventReplayStartTime,
+      eventReplayStageIntervalSeconds,
       debugDate,
       timeDecimals,
       chromaKey,
@@ -3053,6 +3066,12 @@ export const RallyProvider = ({ children }) => {
       if (normalizedChanges.meta.eventName !== undefined) setEventName(normalizedChanges.meta.eventName);
       if (normalizedChanges.meta.currentStageId !== undefined) setCurrentStageId(normalizedChanges.meta.currentStageId);
       if (normalizedChanges.meta.eventIsOver !== undefined) setEventIsOver(normalizedChanges.meta.eventIsOver === true);
+      if (normalizedChanges.meta.eventReplayStartDate !== undefined) setEventReplayStartDate(normalizedChanges.meta.eventReplayStartDate || '');
+      if (normalizedChanges.meta.eventReplayStartTime !== undefined) setEventReplayStartTime(normalizedChanges.meta.eventReplayStartTime || '');
+      if (normalizedChanges.meta.eventReplayStageIntervalSeconds !== undefined) {
+        const nextReplayStageIntervalSeconds = Number(normalizedChanges.meta.eventReplayStageIntervalSeconds);
+        setEventReplayStageIntervalSeconds(Number.isFinite(nextReplayStageIntervalSeconds) && nextReplayStageIntervalSeconds >= 0 ? Math.trunc(nextReplayStageIntervalSeconds) : 0);
+      }
       if (normalizedChanges.meta.debugDate !== undefined) setDebugDate(normalizedChanges.meta.debugDate);
       if (normalizedChanges.meta.timeDecimals !== undefined) {
         setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(normalizedChanges.meta.timeDecimals) || 0))));
@@ -3628,6 +3647,12 @@ export const RallyProvider = ({ children }) => {
         if (normalizedData.mapPlacemarks !== undefined) setMapPlacemarks(normalizedData.mapPlacemarks);
         if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
         if (normalizedData.eventIsOver !== undefined) setEventIsOver(normalizedData.eventIsOver === true);
+        if (normalizedData.eventReplayStartDate !== undefined) setEventReplayStartDate(normalizedData.eventReplayStartDate || '');
+        if (normalizedData.eventReplayStartTime !== undefined) setEventReplayStartTime(normalizedData.eventReplayStartTime || '');
+        if (normalizedData.eventReplayStageIntervalSeconds !== undefined) {
+          const nextReplayStageIntervalSeconds = Number(normalizedData.eventReplayStageIntervalSeconds);
+          setEventReplayStageIntervalSeconds(Number.isFinite(nextReplayStageIntervalSeconds) && nextReplayStageIntervalSeconds >= 0 ? Math.trunc(nextReplayStageIntervalSeconds) : 0);
+        }
         if (normalizedData.debugDate !== undefined) setDebugDate(normalizedData.debugDate);
         if (normalizedData.timeDecimals !== undefined) {
           setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(normalizedData.timeDecimals) || 0))));
@@ -3745,6 +3770,9 @@ export const RallyProvider = ({ children }) => {
     mapPlacemarks,
     currentStageId,
     eventIsOver,
+    eventReplayStartDate,
+    eventReplayStartTime,
+    eventReplayStageIntervalSeconds,
     debugDate,
     timeDecimals,
     chromaKey,
@@ -3776,6 +3804,9 @@ export const RallyProvider = ({ children }) => {
     mapPlacemarks,
     currentStageId,
     eventIsOver,
+    eventReplayStartDate,
+    eventReplayStartTime,
+    eventReplayStageIntervalSeconds,
     debugDate,
     timeDecimals,
     chromaKey,
@@ -3801,6 +3832,9 @@ export const RallyProvider = ({ children }) => {
             eventName: snapshot.eventName,
             currentStageId: snapshot.currentStageId,
             eventIsOver: snapshot.eventIsOver,
+            eventReplayStartDate: snapshot.eventReplayStartDate,
+            eventReplayStartTime: snapshot.eventReplayStartTime,
+            eventReplayStageIntervalSeconds: snapshot.eventReplayStageIntervalSeconds,
             debugDate: snapshot.debugDate,
             timeDecimals: snapshot.timeDecimals,
             chromaKey: snapshot.chromaKey,
@@ -5002,6 +5036,57 @@ export const RallyProvider = ({ children }) => {
       value: eventIsOver
     }]);
   }, [captureSetupPatchEntries, eventIsOver, updateDataVersion]);
+
+  useEffect(() => {
+    const previousEventReplayStartDate = previousSetupSyncStateRef.current.meta.eventReplayStartDate;
+    previousSetupSyncStateRef.current.meta = {
+      ...(previousSetupSyncStateRef.current.meta || {}),
+      eventReplayStartDate
+    };
+    if (hydratingDomainsRef.current.has('meta')) return;
+    localStorage.setItem('rally_event_replay_start_date', JSON.stringify(eventReplayStartDate));
+    updateDataVersion('meta');
+    captureSetupPatchEntries('meta', areValuesEqual(previousEventReplayStartDate, eventReplayStartDate) ? [] : [{
+      kind: 'meta',
+      section: 'meta',
+      field: 'eventReplayStartDate',
+      value: eventReplayStartDate
+    }]);
+  }, [captureSetupPatchEntries, eventReplayStartDate, updateDataVersion]);
+
+  useEffect(() => {
+    const previousEventReplayStartTime = previousSetupSyncStateRef.current.meta.eventReplayStartTime;
+    previousSetupSyncStateRef.current.meta = {
+      ...(previousSetupSyncStateRef.current.meta || {}),
+      eventReplayStartTime
+    };
+    if (hydratingDomainsRef.current.has('meta')) return;
+    localStorage.setItem('rally_event_replay_start_time', JSON.stringify(eventReplayStartTime));
+    updateDataVersion('meta');
+    captureSetupPatchEntries('meta', areValuesEqual(previousEventReplayStartTime, eventReplayStartTime) ? [] : [{
+      kind: 'meta',
+      section: 'meta',
+      field: 'eventReplayStartTime',
+      value: eventReplayStartTime
+    }]);
+  }, [captureSetupPatchEntries, eventReplayStartTime, updateDataVersion]);
+
+  useEffect(() => {
+    const previousEventReplayStageIntervalSeconds = previousSetupSyncStateRef.current.meta.eventReplayStageIntervalSeconds;
+    previousSetupSyncStateRef.current.meta = {
+      ...(previousSetupSyncStateRef.current.meta || {}),
+      eventReplayStageIntervalSeconds
+    };
+    if (hydratingDomainsRef.current.has('meta')) return;
+    localStorage.setItem('rally_event_replay_stage_interval_seconds', JSON.stringify(eventReplayStageIntervalSeconds));
+    updateDataVersion('meta');
+    captureSetupPatchEntries('meta', areValuesEqual(previousEventReplayStageIntervalSeconds, eventReplayStageIntervalSeconds) ? [] : [{
+      kind: 'meta',
+      section: 'meta',
+      field: 'eventReplayStageIntervalSeconds',
+      value: eventReplayStageIntervalSeconds
+    }]);
+  }, [captureSetupPatchEntries, eventReplayStageIntervalSeconds, updateDataVersion]);
 
   useEffect(() => {
     const previousChromaKey = previousSetupSyncStateRef.current.meta.chromaKey;
@@ -6267,6 +6352,9 @@ export const RallyProvider = ({ children }) => {
       transitionImageUrl: loadFromStorage('rally_transition_image', ''),
       currentStageId: loadFromStorage('rally_current_stage', null),
       eventIsOver: loadFromStorage('rally_event_is_over', false) === true,
+      eventReplayStartDate: loadFromStorage('rally_event_replay_start_date', ''),
+      eventReplayStartTime: loadFromStorage('rally_event_replay_start_time', ''),
+      eventReplayStageIntervalSeconds: Number(loadFromStorage('rally_event_replay_stage_interval_seconds', 0)) || 0,
       chromaKey: loadFromStorage('rally_chroma_key', '#000000'),
       mapUrl: loadFromStorage('rally_map_url', ''),
       logoUrl: loadFromStorage('rally_logo_url', ''),
@@ -6307,6 +6395,12 @@ export const RallyProvider = ({ children }) => {
       if (data.transitionImageUrl !== undefined) setTransitionImageUrl(data.transitionImageUrl);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.eventIsOver !== undefined) setEventIsOver(data.eventIsOver === true);
+      if (data.eventReplayStartDate !== undefined) setEventReplayStartDate(data.eventReplayStartDate || '');
+      if (data.eventReplayStartTime !== undefined) setEventReplayStartTime(data.eventReplayStartTime || '');
+      if (data.eventReplayStageIntervalSeconds !== undefined) {
+        const nextReplayStageIntervalSeconds = Number(data.eventReplayStageIntervalSeconds);
+        setEventReplayStageIntervalSeconds(Number.isFinite(nextReplayStageIntervalSeconds) && nextReplayStageIntervalSeconds >= 0 ? Math.trunc(nextReplayStageIntervalSeconds) : 0);
+      }
       if (data.chromaKey) setChromaKey(data.chromaKey);
       if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
       if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
@@ -6320,7 +6414,7 @@ export const RallyProvider = ({ children }) => {
       console.error('Error importing data:', error);
       return false;
     }
-  }, [applyPilotTelemetryState, setArrivalTimes, setCategories, setCameras, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [applyPilotTelemetryState, setArrivalTimes, setCategories, setCameras, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
 
   const clearAllData = useCallback(() => {
     setEventName('');
@@ -6349,6 +6443,9 @@ export const RallyProvider = ({ children }) => {
     setGlobalAudio({ volume: 100, muted: false });
     setCurrentStageId(null);
     setEventIsOver(false);
+    setEventReplayStartDate('');
+    setEventReplayStartTime('');
+    setEventReplayStageIntervalSeconds(0);
     setChromaKey('#000000');
     setMapUrl('');
     setLogoUrl('');
@@ -6359,7 +6456,7 @@ export const RallyProvider = ({ children }) => {
     setMetaCurrentSession(null);
     updateDataVersion('pilotTelemetry');
     updateDataVersion(ALL_STORAGE_DOMAINS);
-  }, [applyPilotTelemetryState, setArrivalTimes, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [applyPilotTelemetryState, setArrivalTimes, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStageIntervalSeconds, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -6389,6 +6486,9 @@ export const RallyProvider = ({ children }) => {
     cameras,
     currentStageId,
     eventIsOver,
+    eventReplayStartDate,
+    eventReplayStartTime,
+    eventReplayStageIntervalSeconds,
     chromaKey,
     mapUrl,
     logoUrl,
@@ -6439,6 +6539,9 @@ export const RallyProvider = ({ children }) => {
     setTransitionImageUrl,
     setCurrentStageId,
     setEventIsOver,
+    setEventReplayStartDate,
+    setEventReplayStartTime,
+    setEventReplayStageIntervalSeconds,
     setGlobalAudio,
     // CRUD operations
     addPilot,
@@ -6523,6 +6626,9 @@ export const RallyProvider = ({ children }) => {
     cameras,
     timeDecimals,
     eventIsOver,
+    eventReplayStartDate,
+    eventReplayStartTime,
+    eventReplayStageIntervalSeconds,
     chromaKey,
     logoUrl,
     transitionImageUrl,
@@ -6532,6 +6638,9 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl,
     setTransitionImageUrl,
     setEventIsOver,
+    setEventReplayStartDate,
+    setEventReplayStartTime,
+    setEventReplayStageIntervalSeconds,
     addPilot,
     updatePilot,
     setPilotCurrentStage,
@@ -6556,6 +6665,9 @@ export const RallyProvider = ({ children }) => {
     cameras,
     timeDecimals,
     eventIsOver,
+    eventReplayStartDate,
+    eventReplayStartTime,
+    eventReplayStageIntervalSeconds,
     chromaKey,
     logoUrl,
     transitionImageUrl,
@@ -6565,6 +6677,9 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl,
     setTransitionImageUrl,
     setEventIsOver,
+    setEventReplayStartDate,
+    setEventReplayStartTime,
+    setEventReplayStageIntervalSeconds,
     addPilot,
     updatePilot,
     setPilotCurrentStage,
@@ -6589,8 +6704,11 @@ export const RallyProvider = ({ children }) => {
     stages,
     currentStageId,
     eventIsOver,
+    eventReplayStartDate,
+    eventReplayStartTime,
+    eventReplayStageIntervalSeconds,
     updateStage
-  }), [categories, currentStageId, eventIsOver, pilots, stages, updateStage]);
+  }), [categories, currentStageId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, pilots, stages, updateStage]);
 
   const timingValue = useMemo(() => ({
     times,

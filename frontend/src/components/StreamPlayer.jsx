@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
 
 let youtubeApiPromise = null;
@@ -83,16 +83,20 @@ export const StreamPlayer = ({
   name, 
   className = '', 
   showControls = false,
+  interactive = false,
   showMuteIndicator = true, // Show/hide the mute icon
   forceUnmute = false, // Force unmute (for inline expanded streams)
   forceMute = false, // Force mute (for small preview streams)
-  forceFullscreen = false
+  forceFullscreen = false,
+  replayMountIdentity = '',
+  resolveStreamUrlOnMount = null
 }) => {
   const { getStreamConfig, streamConfigs, globalAudio } = useRally();
   const iframeRef = useRef(null);
   const youtubePlayerRef = useRef(null);
   const effectiveVolumeRef = useRef(0);
   const isEffectivelyMutedRef = useRef(false);
+  const resolveStreamUrlOnMountRef = useRef(resolveStreamUrlOnMount);
   
   // Get the current stream config
   const config = getStreamConfig(pilotId);
@@ -114,18 +118,48 @@ export const StreamPlayer = ({
   const filterStyle = {
     filter: `saturate(${config.saturation}%) contrast(${config.contrast}%) brightness(${config.brightness}%)`
   };
-  const streamProvider = useMemo(() => getStreamProvider(streamUrl), [streamUrl]);
-  const supportsVdoIframeApi = streamProvider === 'vdo';
-  const supportsYouTubeIframeApi = streamProvider === 'youtube';
-  const positionClassName = hasPositionUtility(className) ? '' : 'relative';
-
-  const iframeSrc = useMemo(() => {
-    if (!streamUrl) {
+  const [mountedResolvedStreamUrl, setMountedResolvedStreamUrl] = useState(() => {
+    if (typeof resolveStreamUrlOnMount !== 'function') {
       return '';
     }
 
     try {
-      const url = new URL(streamUrl);
+      return resolveStreamUrlOnMount() || streamUrl || '';
+    } catch {
+      return streamUrl || '';
+    }
+  });
+  const effectiveStreamUrl = mountedResolvedStreamUrl || streamUrl;
+  const streamProvider = useMemo(() => getStreamProvider(effectiveStreamUrl), [effectiveStreamUrl]);
+  const supportsVdoIframeApi = streamProvider === 'vdo';
+  const supportsYouTubeIframeApi = streamProvider === 'youtube';
+  const positionClassName = hasPositionUtility(className) ? '' : 'relative';
+  const shouldAllowPointerEvents = interactive || showControls;
+
+  useEffect(() => {
+    resolveStreamUrlOnMountRef.current = resolveStreamUrlOnMount;
+  }, [resolveStreamUrlOnMount]);
+
+  useEffect(() => {
+    if (!replayMountIdentity || typeof resolveStreamUrlOnMountRef.current !== 'function') {
+      setMountedResolvedStreamUrl('');
+      return;
+    }
+
+    try {
+      setMountedResolvedStreamUrl(resolveStreamUrlOnMountRef.current() || streamUrl || '');
+    } catch {
+      setMountedResolvedStreamUrl(streamUrl || '');
+    }
+  }, [replayMountIdentity, streamUrl]);
+
+  const iframeSrc = useMemo(() => {
+    if (!effectiveStreamUrl) {
+      return '';
+    }
+
+    try {
+      const url = new URL(effectiveStreamUrl);
 
       if (supportsVdoIframeApi) {
         url.searchParams.set('cleanoutput', '1');
@@ -151,12 +185,19 @@ export const StreamPlayer = ({
 
       return url.toString();
     } catch {
-      return streamUrl;
+      return effectiveStreamUrl;
     }
-  }, [forceFullscreen, showControls, streamUrl, supportsVdoIframeApi, supportsYouTubeIframeApi]);
+  }, [effectiveStreamUrl, forceFullscreen, showControls, supportsVdoIframeApi, supportsYouTubeIframeApi]);
+  const shouldAutoplay = useMemo(() => {
+    try {
+      return new URL(iframeSrc).searchParams.get('autoplay') === '1';
+    } catch {
+      return false;
+    }
+  }, [iframeSrc]);
 
   useEffect(() => {
-    if (!supportsYouTubeIframeApi || !streamUrl || !iframeRef.current) {
+    if (!supportsYouTubeIframeApi || !effectiveStreamUrl || !iframeRef.current) {
       return undefined;
     }
 
@@ -181,6 +222,14 @@ export const StreamPlayer = ({
                 youtubePlayerRef.current.unMute();
                 youtubePlayerRef.current.setVolume(effectiveVolumeRef.current);
               }
+
+              if (shouldAutoplay) {
+                try {
+                  youtubePlayerRef.current.playVideo();
+                } catch {
+                  // Ignore autoplay failures; user interaction can still start playback.
+                }
+              }
             }
           }
         });
@@ -198,7 +247,7 @@ export const StreamPlayer = ({
 
       youtubePlayerRef.current = null;
     };
-  }, [supportsYouTubeIframeApi, streamUrl]);
+  }, [effectiveStreamUrl, shouldAutoplay, supportsYouTubeIframeApi]);
 
   useEffect(() => {
     if (supportsYouTubeIframeApi) {
@@ -220,7 +269,7 @@ export const StreamPlayer = ({
       return undefined;
     }
 
-    if (!supportsVdoIframeApi || !streamUrl) {
+    if (!supportsVdoIframeApi || !effectiveStreamUrl) {
       return undefined;
     }
 
@@ -239,9 +288,9 @@ export const StreamPlayer = ({
     }
 
     return undefined;
-  }, [streamUrl, isEffectivelyMuted, effectiveVolume, supportsVdoIframeApi, supportsYouTubeIframeApi]);
+  }, [effectiveStreamUrl, isEffectivelyMuted, effectiveVolume, supportsVdoIframeApi, supportsYouTubeIframeApi]);
 
-  if (!streamUrl) {
+  if (!effectiveStreamUrl) {
     return (
       <div className={`bg-zinc-800 flex items-center justify-center ${className}`}>
         <span className="text-lg font-bold text-zinc-600">
@@ -260,7 +309,7 @@ export const StreamPlayer = ({
         frameBorder="0"
         allow="autoplay; fullscreen; picture-in-picture"
         title={name}
-        style={{ pointerEvents: showControls ? 'auto' : 'none' }}
+        style={{ pointerEvents: shouldAllowPointerEvents ? 'auto' : 'none' }}
         onLoad={() => {
           if (supportsYouTubeIframeApi) {
             return;
