@@ -32,6 +32,59 @@ export const getStageDateTime = (stageDate, clockTime) => {
   return date;
 };
 
+const pad2 = (value) => String(value).padStart(2, '0');
+
+const formatClockTimeFromDate = (dateTime = null) => {
+  if (!(dateTime instanceof Date) || Number.isNaN(dateTime.getTime())) {
+    return '';
+  }
+
+  return `${pad2(dateTime.getHours())}:${pad2(dateTime.getMinutes())}`;
+};
+
+export const getResolvedStageStartDateTime = ({
+  stageId = '',
+  stageDate = '',
+  startTime = '',
+  replayStageScheduleById = null
+} = {}) => {
+  const normalizedStageId = String(stageId || '').trim();
+  if (replayStageScheduleById instanceof Map && normalizedStageId) {
+    const replayStageSchedule = replayStageScheduleById.get(normalizedStageId);
+    if (replayStageSchedule?.replayStartDateTime instanceof Date && !Number.isNaN(replayStageSchedule.replayStartDateTime.getTime())) {
+      return replayStageSchedule.replayStartDateTime;
+    }
+  }
+
+  return getStageDateTime(stageDate, startTime);
+};
+
+export const getResolvedStageFinishDateTime = ({
+  stageId = '',
+  stageDate = '',
+  startTime = '',
+  finishTime = '',
+  replayStageScheduleById = null
+} = {}) => {
+  const resolvedStartDateTime = getResolvedStageStartDateTime({
+    stageId,
+    stageDate,
+    startTime,
+    replayStageScheduleById
+  });
+  const finishSeconds = parseClockTimeToSeconds(finishTime, 'duration');
+
+  if (!(resolvedStartDateTime instanceof Date) || Number.isNaN(resolvedStartDateTime.getTime())) {
+    return null;
+  }
+
+  if (!Number.isFinite(finishSeconds) || finishSeconds <= 0) {
+    return null;
+  }
+
+  return new Date(resolvedStartDateTime.getTime() + (finishSeconds * 1000));
+};
+
 export const hasStageDateTimePassed = (clockTime, stageDate, now = new Date()) => {
   const stageDateTime = getStageDateTime(stageDate, clockTime);
   if (!stageDateTime) return false;
@@ -46,10 +99,41 @@ export const isPilotAlertForStage = (pilotId, stageId, stageAlerts) => {
   return !!stageAlerts?.[pilotId]?.[stageId];
 };
 
-export const parseClockTimeToSeconds = (value) => {
+export const parseClockTimeToSeconds = (value, mode = 'clock') => {
   if (!value) return null;
   const parts = value.split(':');
   if (parts.length < 2) return null;
+
+  const safeMode = mode === 'duration' ? 'duration' : 'clock';
+
+  if (safeMode === 'duration') {
+    if (parts.length === 2) {
+      const minutes = Number(parts[0]);
+      const [secs, fraction = ''] = parts[1].split('.');
+      const seconds = Number(secs) + (fraction ? Number(`0.${fraction}`) : 0);
+
+      if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+        return null;
+      }
+
+      return (minutes * 60) + seconds;
+    }
+
+    if (parts.length >= 3) {
+      const hours = Number(parts[0]);
+      const minutes = Number(parts[1]);
+      const [secs, fraction = ''] = parts[2].split('.');
+      const seconds = Number(secs) + (fraction ? Number(`0.${fraction}`) : 0);
+
+      if (!Number.isFinite(hours) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+        return null;
+      }
+
+      return (hours * 3600) + (minutes * 60) + seconds;
+    }
+
+    return null;
+  }
 
   const hours = Number(parts[0]);
   const minutes = Number(parts[1]);
@@ -108,11 +192,13 @@ const getZeroDurationText = (decimals = 3) => (
   `00:00${clampTimeDecimals(decimals) > 0 ? `.${'0'.repeat(clampTimeDecimals(decimals))}` : ''}`
 );
 
-export const getRunningTime = (startTime, stageDate, now = new Date(), decimals = 3) => {
-  if (!startTime) return getZeroDurationText(decimals);
+export const getRunningTime = (startTime, stageDate, now = new Date(), decimals = 3, stageStartDateTime = null) => {
+  if (!startTime && !(stageStartDateTime instanceof Date)) return getZeroDurationText(decimals);
   
   try {
-    const startDate = getStageDateTime(stageDate, startTime);
+    const startDate = stageStartDateTime instanceof Date && !Number.isNaN(stageStartDateTime.getTime())
+      ? stageStartDateTime
+      : getStageDateTime(stageDate, startTime);
     if (!startDate) return getZeroDurationText(decimals);
     
     if (now < startDate) return getZeroDurationText(decimals);
@@ -138,6 +224,8 @@ export const startInformationTime = ({
   times,
   retiredStages,
   stageDate,
+  stageFinishDateTime = null,
+  replayStageScheduleById = null,
   now = new Date(),
   decimals = 3,
   includeLabel = true,
@@ -147,11 +235,28 @@ export const startInformationTime = ({
   const startTime = startTimes[pilotId]?.[stageId] || '';
   const finishTime = times[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
+  const stageStartDateTime = getResolvedStageStartDateTime({
+    stageId,
+    stageDate,
+    startTime,
+    replayStageScheduleById
+  });
+  const resolvedStageFinishDateTime = stageFinishDateTime instanceof Date && !Number.isNaN(stageFinishDateTime.getTime())
+    ? stageFinishDateTime
+    : getResolvedStageFinishDateTime({
+        stageId,
+        stageDate,
+        startTime,
+        finishTime,
+        replayStageScheduleById
+      });
   return getStartInformationFromValues({
     startTime,
     finishTime,
     retired,
     stageDate,
+    stageStartDateTime,
+    stageFinishDateTime: resolvedStageFinishDateTime,
     now,
     decimals,
     includeLabel,
@@ -165,32 +270,53 @@ export const getStartInformationFromValues = ({
   finishTime = '',
   retired = false,
   stageDate,
+  stageStartDateTime = null,
+  stageFinishDateTime = null,
   now = new Date(),
   decimals = 3,
   includeLabel = true,
   startLabel = 'Start',
   retiredLabel = 'Retired'
 }) => {
-  const stageStartDateTime = getStageDateTime(stageDate, startTime);
-  const remainingToStartMs = stageStartDateTime ? (stageStartDateTime.getTime() - now.getTime()) : null;
-  const elapsedSinceStartMs = stageStartDateTime ? (now.getTime() - stageStartDateTime.getTime()) : null;
+  const resolvedStageStartDateTime = stageStartDateTime instanceof Date && !Number.isNaN(stageStartDateTime.getTime())
+    ? stageStartDateTime
+    : getStageDateTime(stageDate, startTime);
+  const resolvedStageFinishDateTime = stageFinishDateTime instanceof Date && !Number.isNaN(stageFinishDateTime.getTime())
+    ? stageFinishDateTime
+    : null;
+  const resolvedStartTime = resolvedStageStartDateTime
+    ? formatClockTimeFromDate(resolvedStageStartDateTime)
+    : startTime;
+  const shouldUseReplayFinishGate = resolvedStageFinishDateTime instanceof Date;
+  const remainingToStartMs = resolvedStageStartDateTime ? (resolvedStageStartDateTime.getTime() - now.getTime()) : null;
+  const elapsedSinceStartMs = resolvedStageStartDateTime ? (now.getTime() - resolvedStageStartDateTime.getTime()) : null;
   let status = 'not_started';
 
   if (finishTime) {
-    status = 'finished';
+    if (shouldUseReplayFinishGate) {
+      if (now >= resolvedStageFinishDateTime) {
+        status = 'finished';
+      } else if (resolvedStageStartDateTime && now >= resolvedStageStartDateTime) {
+        status = 'racing';
+      } else {
+        status = 'not_started';
+      }
+    } else {
+      status = 'finished';
+    }
   } else if (retired) {
     status = 'retired';
-  } else if (startTime && hasStageDateTimePassed(startTime, stageDate, now)) {
+  } else if (resolvedStageStartDateTime && now >= resolvedStageStartDateTime) {
     status = 'racing';
   }
 
   const shouldShowStartCountdown = status === 'not_started'
-    && startTime
+    && resolvedStartTime
     && remainingToStartMs !== null
     && remainingToStartMs > 0
     && remainingToStartMs <= 60000;
   const shouldShowRedSignal = status === 'not_started'
-    && startTime
+    && resolvedStartTime
     && remainingToStartMs !== null
     && remainingToStartMs > 0
     && remainingToStartMs <= 5000;
@@ -221,21 +347,21 @@ export const getStartInformationFromValues = ({
   if (status === 'retired') {
     label = retiredLabel;
     text = includeLabel ? retiredLabel : '';
-  } else if (status === 'racing' && startTime) {
+  } else if (status === 'racing' && resolvedStartTime) {
     if (shouldShowGreenSignal) {
       label = startLabel;
     }
-    timer = getRunningTime(startTime, stageDate, now, decimals);
+    timer = getRunningTime(resolvedStartTime, stageDate, now, decimals, resolvedStageStartDateTime);
     text = timer;
   } else if (status === 'finished' && finishTime) {
     timer = finishTime;
     label = retired ? 'RET' : '';
     text = retired && includeLabel ? `${finishTime} RET` : finishTime;
-  } else if (startTime) {
+  } else if (resolvedStartTime) {
     label = startLabel;
-    timer = shouldShowStartCountdown ? formatCountdownTime(remainingToStartMs) : startTime;
+    timer = shouldShowStartCountdown ? formatCountdownTime(remainingToStartMs) : resolvedStartTime;
     isCountdown = shouldShowStartCountdown;
-    text = includeLabel ? `${startLabel}: ${startTime}` : startTime;
+    text = includeLabel ? `${startLabel}: ${resolvedStartTime}` : resolvedStartTime;
     if (shouldShowStartCountdown) {
       text = includeLabel ? `${startLabel}: ${timer}` : timer;
     }
@@ -248,9 +374,10 @@ export const getStartInformationFromValues = ({
     text,
     isCountdown,
     signal,
-    startTime,
+    startTime: resolvedStartTime,
     finishTime,
-    retired
+    retired,
+    stageStartDateTime: resolvedStageStartDateTime
   };
 };
 
@@ -555,6 +682,7 @@ export const getPilotStageTimingInfo = ({
   times = {},
   lapTimes = {},
   retiredStages = {},
+  replayStageScheduleById = null,
   now = new Date(),
   timeDecimals = 3,
   includeLabel = true,
@@ -591,6 +719,12 @@ export const getPilotStageTimingInfo = ({
       finishTime: '',
       retired: lapInfo.retired,
       stageDate: stage.date,
+      stageStartDateTime: getResolvedStageStartDateTime({
+        stageId: stage.id,
+        stageDate: stage.date,
+        startTime: lapInfo.startTime || '',
+        replayStageScheduleById
+      }),
       now,
       decimals: timeDecimals,
       includeLabel,
@@ -623,6 +757,13 @@ export const getPilotStageTimingInfo = ({
   }
 
   if (isSpecialStageType(stage.type)) {
+    const stageFinishDateTime = getResolvedStageFinishDateTime({
+      stageId: stage.id,
+      stageDate: stage.date,
+      startTime: startTimes?.[pilotId]?.[stage.id] || getPilotScheduledStartTime(stage, pilot) || '',
+      finishTime: times?.[pilotId]?.[stage.id] || '',
+      replayStageScheduleById
+    });
     const startInfo = startInformationTime({
       pilotId,
       stageId: stage.id,
@@ -630,6 +771,8 @@ export const getPilotStageTimingInfo = ({
       times,
       retiredStages,
       stageDate: stage.date,
+      stageFinishDateTime,
+      replayStageScheduleById,
       now,
       decimals: timeDecimals,
       includeLabel,
@@ -641,7 +784,11 @@ export const getPilotStageTimingInfo = ({
       ...startInfo,
       stageType: 'special',
       displayText: startInfo.text || '',
-      totalTimeMs: startInfo.finishTime ? Math.max(0, parseTime(startInfo.finishTime) * 1000) : 0,
+      totalTimeMs: startInfo.status === 'finished'
+        ? Math.max(0, parseTime(startInfo.finishTime) * 1000)
+        : (startInfo.status === 'racing' && startInfo.timer
+          ? Math.max(0, parseTime(startInfo.timer) * 1000)
+          : 0),
       totalTimeText: startInfo.timer || '',
       hasTime: Boolean(startInfo.finishTime || startInfo.startTime),
       isFinished: startInfo.status === 'finished',

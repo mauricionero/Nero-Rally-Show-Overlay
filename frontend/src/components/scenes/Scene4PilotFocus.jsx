@@ -25,6 +25,7 @@ import { formatClockFromDate, formatDurationMs } from '../../utils/timeFormat.js
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
+import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
 import {
   getStageNumberLabel,
   getStageTitle,
@@ -164,6 +165,17 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
   const replaySnapshotKey = eventIsOver
     ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
     : '';
+  const replayStageScheduleById = useMemo(() => (
+    eventIsOver
+      ? buildReplayStageScheduleMap({
+          stages,
+          times,
+          replayStartDate: eventReplayStartDate,
+          replayStartTime: eventReplayStartTime,
+          replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+        })
+      : null
+  ), [eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, stages, times]);
   const replayPlaybackSnapshotRef = useRef({ key: '', map: null });
   if (!eventIsOver) {
     replayPlaybackSnapshotRef.current = { key: '', map: null };
@@ -288,6 +300,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           times,
           lapTimes,
           retiredStages,
+          replayStageScheduleById,
           now: sceneNow,
           timeDecimals,
           startLabel: t('status.start'),
@@ -320,6 +333,7 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
           startTimes,
           times,
           retiredStages,
+          replayStageScheduleById,
           now: sceneNow,
           timeDecimals,
           startLabel: t('status.start'),

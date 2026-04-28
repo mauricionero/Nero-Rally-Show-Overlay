@@ -23,6 +23,7 @@ import { normalizePilotId } from '../../utils/pilotIdentity.js';
 import { getWebSocketPilotTelemetryUrl } from '../../utils/overlayUrls.js';
 import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { getStageTitle } from '../../utils/stageTypes.js';
+import { isReplayCompetitiveStage } from '../../utils/replaySchedule.js';
 import { normalizeTimingInput } from '../../utils/timeConversion.js';
 import { formatDurationSeconds } from '../../utils/timeFormat.js';
 import DebugIdText from './DebugIdText.jsx';
@@ -250,6 +251,16 @@ const normalizeReplayText = (value) => (
     .trim()
 );
 
+const normalizeReplayStageNumber = (value) => {
+  const rawValue = String(value ?? '').trim();
+  if (!rawValue) {
+    return '';
+  }
+
+  const numericValue = Number(rawValue);
+  return Number.isFinite(numericValue) ? String(numericValue) : rawValue;
+};
+
 const parseReplayChapters = (value) => (
   String(value || '')
     .split(/\r?\n/)
@@ -284,9 +295,9 @@ const findStageForReplayChapter = (chapter, stages = []) => {
   const title = String(chapter.title || '').trim();
   const ssMatch = title.match(/\bSS\s*0*(\d+)\b/i);
   if (ssMatch) {
-    const chapterSsNumber = String(Number(ssMatch[1]));
-    const matchedBySs = stages.find((stage) => String(Number(stage?.ssNumber || '')).trim() === chapterSsNumber);
-    if (matchedBySs) {
+    const chapterSsNumber = normalizeReplayStageNumber(ssMatch[1]);
+    const matchedBySs = stages.find((stage) => normalizeReplayStageNumber(stage?.ssNumber) === chapterSsNumber);
+    if (matchedBySs && isReplayCompetitiveStage(matchedBySs)) {
       return matchedBySs;
     }
   }
@@ -297,6 +308,10 @@ const findStageForReplayChapter = (chapter, stages = []) => {
   }
 
   return stages.find((stage) => {
+    if (!isReplayCompetitiveStage(stage)) {
+      return false;
+    }
+
     const stageName = normalizeReplayText(stage?.name || '');
     const stageTitle = normalizeReplayText(getStageTitle(stage));
     return (

@@ -107,6 +107,7 @@ export default function TheRaceTab() {
   );
 
   const [stageRegistry, setStageRegistry] = useState({});
+  const [eventNameDraft, setEventNameDraft] = useState(eventName || '');
 
   useEffect(() => {
     let isMounted = true;
@@ -140,6 +141,10 @@ export default function TheRaceTab() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    setEventNameDraft(eventName || '');
+  }, [eventName]);
 
   const stageRegistryGames = useMemo(
     () => Object.keys(stageRegistry || {}).filter(Boolean).sort((a, b) => a.localeCompare(b)),
@@ -285,6 +290,13 @@ export default function TheRaceTab() {
     }) : prev);
   };
 
+  const commitEventName = () => {
+    const nextValue = String(eventNameDraft || '');
+    if (nextValue !== String(eventName || '')) {
+      setEventName(nextValue);
+    }
+  };
+
   const handleStageGameChange = (setter, game) => {
     setter((prev) => ({
       ...prev,
@@ -348,8 +360,9 @@ export default function TheRaceTab() {
         </CardHeader>
         <CardContent>
           <Input
-            value={eventName}
-            onChange={(e) => setEventName(e.target.value)}
+            value={eventNameDraft}
+            onChange={(e) => setEventNameDraft(e.target.value)}
+            onBlur={commitEventName}
             placeholder={t('theRace.eventNamePlaceholder')}
             className="bg-[#09090B] border-zinc-700 text-white text-lg"
             data-testid="input-event-name"

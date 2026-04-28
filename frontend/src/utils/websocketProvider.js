@@ -163,6 +163,11 @@ const buildWebSocketLogPrefix = (direction, eventName, channelType, data, namesp
   return `[${namespace}][${emoji}][${eventName}][${getLogChannelLabel(channelType)}][${getLogMessageLabel(data)}]`;
 };
 
+const hasUsableSnapshotBootstrapData = (snapshotData = {}) => (
+  Array.isArray(snapshotData?.pilots) && snapshotData.pilots.length > 0
+  && Array.isArray(snapshotData?.stages) && snapshotData.stages.length > 0
+);
+
 /**
  * WebSocket Provider Class - Ably Implementation
  */
@@ -428,6 +433,18 @@ class WebSocketProvider {
     const latestSnapshotData = latestSnapshotMessage ? getHistoryMessageData(latestSnapshotMessage) : {};
     const latestAvailableSnapshotTimestamp = latestSnapshotMessage ? this.getMessageTimestamp(latestSnapshotMessage) : 0;
     const latestAvailableSnapshotVersion = Number(latestSnapshotData?.snapshotVersion || 0);
+    const latestSnapshotHasCoreData = hasUsableSnapshotBootstrapData(latestSnapshotData);
+
+    if (shouldUseSnapshot && latestSnapshotMessage && !latestSnapshotHasCoreData) {
+      if (isTransportDebugEnabled()) {
+        console.log('[WebSocket][RX][bootstrap] Skipping empty snapshot bootstrap', {
+          snapshotTimestamp: latestAvailableSnapshotTimestamp,
+          snapshotVersion: latestAvailableSnapshotVersion
+        });
+      }
+    }
+
+    const shouldBootstrapFromSnapshot = shouldUseSnapshot && latestSnapshotHasCoreData;
 
     const loadPagedHistory = async (channel, stopWhen) => {
       const collected = [];
@@ -453,7 +470,7 @@ class WebSocketProvider {
       return collected;
     };
 
-    const snapshotCollected = shouldUseSnapshot && snapshotChannel
+    const snapshotCollected = shouldBootstrapFromSnapshot && snapshotChannel
       ? await loadPagedHistory(snapshotChannel, (collected) => {
           const snapshotItems = collected.filter((message) => this.isSnapshotBatchMessage(message));
           if (snapshotItems.length === 0) {
@@ -469,7 +486,7 @@ class WebSocketProvider {
         })
       : [];
 
-    const snapshotMessages = shouldUseSnapshot
+    const snapshotMessages = shouldBootstrapFromSnapshot
       ? snapshotCollected
         .filter((message) => this.isSnapshotBatchMessage(message))
         .sort((a, b) => {
@@ -487,7 +504,7 @@ class WebSocketProvider {
       ? Math.max(...snapshotMessages.map((message) => this.getMessageTimestamp(message)))
       : latestAvailableSnapshotTimestamp;
 
-    if (requireSnapshotBootstrap && snapshotMessages.length === 0) {
+    if (requireSnapshotBootstrap && snapshotMessages.length === 0 && shouldBootstrapFromSnapshot) {
       this.bootstrapState = {
         mode: 'await-snapshot',
         messages: [],
@@ -526,7 +543,7 @@ class WebSocketProvider {
             ...collected.map((message) => this.getMessageTimestamp(message)).filter((value) => Number.isFinite(value) && value > 0)
           );
 
-          if (shouldUseSnapshot) {
+          if (shouldBootstrapFromSnapshot) {
             return snapshotTimestamp > 0 && Number.isFinite(oldestLoadedTimestamp) && oldestLoadedTimestamp > 0 && oldestLoadedTimestamp < snapshotTimestamp;
           }
 
@@ -543,7 +560,7 @@ class WebSocketProvider {
             ...collected.map((message) => this.getMessageTimestamp(message)).filter((value) => Number.isFinite(value) && value > 0)
           );
 
-          if (shouldUseSnapshot) {
+          if (shouldBootstrapFromSnapshot) {
             return snapshotTimestamp > 0 && Number.isFinite(oldestLoadedTimestamp) && oldestLoadedTimestamp > 0 && oldestLoadedTimestamp < snapshotTimestamp;
           }
 
@@ -570,7 +587,7 @@ class WebSocketProvider {
 
     const messages = updateMessages
       .filter((message) => {
-        if (shouldUseSnapshot) {
+        if (shouldBootstrapFromSnapshot) {
           if (this.isSnapshotBatchMessage(message)) {
             if (snapshotMessages.length === 0) {
               return false;
@@ -609,7 +626,7 @@ class WebSocketProvider {
     const priorityMessages = priorityCollected
       .filter((message) => this.isUpdateHistoryMessage(message))
       .filter((message) => (
-        shouldUseSnapshot
+        shouldBootstrapFromSnapshot
           ? this.getMessageTimestamp(message) > snapshotTimestamp
           : this.isMessageAfterMarker(message, boundaryMarker)
       ))
@@ -624,7 +641,7 @@ class WebSocketProvider {
       });
 
     this.bootstrapState = {
-      mode: shouldUseSnapshot && snapshotMessages.length > 0 ? 'snapshot' : 'replay',
+      mode: shouldBootstrapFromSnapshot && snapshotMessages.length > 0 ? 'snapshot' : 'replay',
       messages,
       snapshotMessages,
       priorityMessages,
@@ -657,7 +674,7 @@ class WebSocketProvider {
       snapshotVersion,
       historyComplete: true,
       hasSnapshotBootstrap: snapshotMessages.length > 0,
-      mode: shouldUseSnapshot && snapshotMessages.length > 0 ? 'snapshot' : 'replay'
+      mode: shouldBootstrapFromSnapshot && snapshotMessages.length > 0 ? 'snapshot' : 'replay'
     };
   }
 

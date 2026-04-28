@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
@@ -20,6 +20,11 @@ export default function DebugTab() {
     wsLastSnapshotReceivedAt
   } = useRallyWs();
   const [debugFlags, setDebugFlags] = useState(() => loadDebugFlags());
+  const [debugDateDraft, setDebugDateDraft] = useState(debugDate || '');
+
+  useEffect(() => {
+    setDebugDateDraft(debugDate || '');
+  }, [debugDate]);
 
   const debugOptions = useMemo(() => ([
     {
@@ -101,8 +106,9 @@ export default function DebugTab() {
             <Label className="text-white">{t('debug.simulatedDate')}</Label>
             <Input
               type="date"
-              value={debugDate || ''}
-              onChange={(e) => setDebugDate(e.target.value)}
+              value={debugDateDraft}
+              onChange={(e) => setDebugDateDraft(e.target.value)}
+              onBlur={() => setDebugDate(debugDateDraft)}
               className="bg-[#09090B] border-zinc-700 text-white"
               data-testid="input-debug-date"
             />

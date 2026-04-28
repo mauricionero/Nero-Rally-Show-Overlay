@@ -6066,11 +6066,12 @@ export const RallyProvider = ({ children }) => {
     realStartTimes[pilotId]?.[stageId] || ''
   ), [realStartTimes]);
 
-  const bulkImportTimingEntries = (entries) => {
+  const bulkImportTimingEntries = (entries, options = {}) => {
     if (!Array.isArray(entries) || entries.length === 0) {
       return;
     }
 
+    const replaceExisting = options?.replaceExisting === true;
     const manualTimingSource = getManualTimingSourceForRole(clientRole);
 
     const applyBulkUpdates = (previousState, valueKey) => {
@@ -6079,17 +6080,30 @@ export const RallyProvider = ({ children }) => {
 
       entries.forEach((entry) => {
         const nextValue = entry[valueKey];
+        const currentPilotState = nextState[entry.pilotId] || {};
+
+        if (replaceExisting && currentPilotState[entry.stageId] !== undefined) {
+          const clearedPilotState = { ...currentPilotState };
+          delete clearedPilotState[entry.stageId];
+          if (Object.keys(clearedPilotState).length > 0) {
+            nextState[entry.pilotId] = clearedPilotState;
+          } else {
+            delete nextState[entry.pilotId];
+          }
+          changed = true;
+        }
+
         if (nextValue === undefined || nextValue === null || nextValue === '') {
           return;
         }
 
-        const currentPilotState = nextState[entry.pilotId] || {};
-        if (currentPilotState[entry.stageId] === nextValue) {
+        const refreshedPilotState = nextState[entry.pilotId] || {};
+        if (refreshedPilotState[entry.stageId] === nextValue) {
           return;
         }
 
         nextState[entry.pilotId] = {
-          ...currentPilotState,
+          ...refreshedPilotState,
           [entry.stageId]: nextValue
         };
         changed = true;
@@ -6104,6 +6118,9 @@ export const RallyProvider = ({ children }) => {
     setSourceFinishTime((prev) => {
       let next = prev;
       entries.forEach((entry) => {
+        if (replaceExisting) {
+          next = setNestedStageValue(next, entry.pilotId, entry.stageId, '');
+        }
         if (entry.totalTime !== undefined && entry.totalTime !== null && entry.totalTime !== '') {
           next = setNestedStageValue(next, entry.pilotId, entry.stageId, manualTimingSource);
           return;

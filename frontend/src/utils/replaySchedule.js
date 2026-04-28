@@ -1,9 +1,13 @@
 import { getStageDateTime } from './rallyHelpers.js';
+import { isReplayDebugEnabled } from './debugFlags.js';
 import { compareStagesBySchedule } from './stageSchedule.js';
-import { isLapTimingStageType, isSpecialStageType } from './stageTypes.js';
+import { getStageTitle, isLapTimingStageType, isSpecialStageType, SS_STAGE_TYPE } from './stageTypes.js';
 import { getStageTimingStats, roundSecondsUpToNextMinute } from './timingStats.js';
+import { formatDurationSeconds } from './timeFormat.js';
 
 const MAX_REPLAY_DERIVED_STAGE_DURATION_SECONDS = 3 * 60 * 60;
+let lastReplayScheduleCacheKey = '';
+let lastReplayScheduleCacheValue = null;
 
 const getReplayIntervalSeconds = (value) => {
   const parsed = Number(value);
@@ -40,9 +44,82 @@ const getReplayDerivedDurationSeconds = (stageStats = null) => {
   return roundedDurationSeconds;
 };
 
+const pad2 = (value) => String(value).padStart(2, '0');
+
+const formatReplayDebugDateTime = (value) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return 'n/a';
+  }
+
+  const localDateTime = `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())} ${pad2(value.getHours())}:${pad2(value.getMinutes())}:${pad2(value.getSeconds())}`;
+
+  try {
+    return `${localDateTime} local [${value.toISOString()}]`;
+  } catch {
+    return localDateTime;
+  }
+};
+
+const formatReplayDebugDuration = (value) => (
+  Number.isFinite(value)
+    ? formatDurationSeconds(value, 3, { fallback: 'n/a', showHoursIfNeeded: true, padMinutes: true })
+    : 'n/a'
+);
+
+const formatReplayDebugDurationMs = (value) => (
+  Number.isFinite(value)
+    ? formatDurationSeconds(value / 1000, 3, { fallback: 'n/a', showHoursIfNeeded: true, padMinutes: true })
+    : 'n/a'
+);
+
+const logReplayStageSchedule = ({
+  stage = null,
+  competitive = true,
+  originalScheduledDateTime = null,
+  replayStartDateTime = null,
+  scheduleMode = '',
+  stageGapSeconds = null,
+  derivedDurationSeconds = null,
+  intervalSeconds = null,
+  avgMs = null,
+  deviationMs = null,
+  reason = ''
+} = {}) => {
+  if (!isReplayDebugEnabled()) {
+    return;
+  }
+
+  const stageLabel = stage ? getStageTitle(stage) : 'No stage';
+  const stageId = String(stage?.id || 'n/a');
+  const stageType = String(stage?.type || 'n/a');
+  const offsetLabel = scheduleMode === 'baseline'
+    ? formatReplayDebugDuration(0)
+    : formatReplayDebugDuration(derivedDurationSeconds);
+  const details = competitive
+    ? `original=${formatReplayDebugDateTime(originalScheduledDateTime)} replayStart=${formatReplayDebugDateTime(replayStartDateTime)} mode=${String(scheduleMode || 'n/a')} calc=(avg=${formatReplayDebugDurationMs(avgMs)}, deviation=${formatReplayDebugDurationMs(deviationMs)}, offset=${offsetLabel}, interval=${formatReplayDebugDuration(intervalSeconds)}) gap=${formatReplayDebugDuration(stageGapSeconds)}`
+    : `skipped=${String(reason || 'not-competitive')}`;
+
+  console.log(
+    `[ReplaySchedule] stage=${stageLabel} stageId=${stageId} type=${stageType} ${details}`
+  );
+};
+
 export const isReplayTimedStage = (stage = null) => (
   isSpecialStageType(stage?.type) || isLapTimingStageType(stage?.type)
 );
+
+export const isReplayCompetitiveStage = (stage = null) => {
+  if (!isReplayTimedStage(stage)) {
+    return false;
+  }
+
+  if (stage?.type === SS_STAGE_TYPE) {
+    const ssNumber = String(stage?.ssNumber ?? '').trim();
+    return ssNumber !== '0';
+  }
+
+  return true;
+};
 
 const getReplayStageFamily = (stage = null) => {
   if (isSpecialStageType(stage?.type)) {
@@ -58,7 +135,7 @@ const getReplayStageFamily = (stage = null) => {
 
 export const getFirstCompetitiveStage = (stages = []) => (
   [...(Array.isArray(stages) ? stages : [])]
-    .filter((stage) => isReplayTimedStage(stage))
+    .filter((stage) => isReplayCompetitiveStage(stage))
     .sort(compareStagesBySchedule)[0] || null
 );
 
@@ -69,14 +146,58 @@ export const buildReplayStageScheduleMap = ({
   replayStartTime = '',
   replayStageIntervalSeconds = 0
 } = {}) => {
-  const sortedCompetitiveStages = [...(Array.isArray(stages) ? stages : [])]
-    .filter((stage) => isReplayTimedStage(stage))
+  const cacheKey = JSON.stringify({
+    replayStartDate,
+    replayStartTime,
+    replayStageIntervalSeconds: getReplayIntervalSeconds(replayStageIntervalSeconds),
+    stages: (Array.isArray(stages) ? stages : [])
+      .map((stage) => ({
+        id: String(stage?.id || ''),
+        type: String(stage?.type || ''),
+        ssNumber: String(stage?.ssNumber ?? ''),
+        startTime: String(stage?.startTime || ''),
+        endTime: String(stage?.endTime || ''),
+        date: String(stage?.date || '')
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    times: Object.entries(times || {})
+      .map(([pilotId, stageTimes]) => ({
+        pilotId: String(pilotId),
+        stages: Object.entries(stageTimes || {})
+          .map(([stageId, time]) => `${String(stageId)}=${String(time || '')}`)
+          .sort()
+      }))
+      .sort((left, right) => left.pilotId.localeCompare(right.pilotId))
+  });
+
+  if (cacheKey === lastReplayScheduleCacheKey && lastReplayScheduleCacheValue instanceof Map) {
+    return lastReplayScheduleCacheValue;
+  }
+
+  const sortedStages = [...(Array.isArray(stages) ? stages : [])]
     .sort(compareStagesBySchedule);
+  const sortedCompetitiveStages = sortedStages.filter((stage) => isReplayCompetitiveStage(stage));
   const replayBaselineDateTime = getStageDateTime(replayStartDate, replayStartTime);
   const normalizedIntervalSeconds = getReplayIntervalSeconds(replayStageIntervalSeconds);
   const scheduleByStageId = new Map();
 
+  if (isReplayDebugEnabled()) {
+    sortedStages
+      .filter((stage) => isReplayTimedStage(stage) && !isReplayCompetitiveStage(stage))
+      .forEach((stage) => {
+        logReplayStageSchedule({
+          stage,
+          competitive: false,
+          reason: stage?.type === SS_STAGE_TYPE && String(stage?.ssNumber ?? '').trim() === '0'
+            ? 'SS0-shakedown'
+            : 'not-competitive'
+        });
+      });
+  }
+
   if (!(replayBaselineDateTime instanceof Date) || Number.isNaN(replayBaselineDateTime.getTime()) || sortedCompetitiveStages.length === 0) {
+    lastReplayScheduleCacheKey = cacheKey;
+    lastReplayScheduleCacheValue = scheduleByStageId;
     return scheduleByStageId;
   }
 
@@ -163,13 +284,29 @@ export const buildReplayStageScheduleMap = ({
         stageGapSeconds
       });
 
+      logReplayStageSchedule({
+        stage,
+        competitive: true,
+        originalScheduledDateTime,
+        replayStartDateTime,
+        scheduleMode,
+        stageGapSeconds,
+        derivedDurationSeconds,
+        intervalSeconds,
+        avgMs: currentStageStats.avg,
+        deviationMs: currentStageStats.deviation
+      });
+
       previousStage = stage;
       previousReplayStartDateTime = replayStartDateTime;
-      if (Number.isFinite(getReplayDerivedDurationSeconds(currentStageStats))) {
-        lastValidDerivedDurationSeconds = getReplayDerivedDurationSeconds(currentStageStats);
+      const currentStageDerivedDurationSeconds = getReplayDerivedDurationSeconds(currentStageStats);
+      if (Number.isFinite(currentStageDerivedDurationSeconds)) {
+        lastValidDerivedDurationSeconds = currentStageDerivedDurationSeconds;
       }
     });
   });
 
+  lastReplayScheduleCacheKey = cacheKey;
+  lastReplayScheduleCacheValue = scheduleByStageId;
   return scheduleByStageId;
 };

@@ -31,6 +31,7 @@ import { useFastClock } from '../../hooks/useFastClock.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatDurationMs, formatDurationSeconds, formatSecondsValue } from '../../utils/timeFormat.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
+import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
 
 const SCENE_3_CONFIG_KEY = 'scene3Config';
 
@@ -64,6 +65,17 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   const replaySnapshotKey = eventIsOver
     ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
     : '';
+  const replayStageScheduleById = useMemo(() => (
+    eventIsOver
+      ? buildReplayStageScheduleMap({
+          stages,
+          times,
+          replayStartDate: eventReplayStartDate,
+          replayStartTime: eventReplayStartTime,
+          replayStageIntervalSeconds: eventReplayStageIntervalSeconds
+        })
+      : null
+  ), [eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, stages, times]);
   const replayPlaybackSnapshotRef = useRef({ key: '', map: null });
   if (!eventIsOver) {
     replayPlaybackSnapshotRef.current = { key: '', map: null };
@@ -251,6 +263,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             startTimes,
             times,
             retiredStages,
+            replayStageScheduleById,
             now: sceneNow,
             timeDecimals,
             startLabel: t('status.start'),
@@ -259,14 +272,8 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           const startTime = stageTimingInfo.startTime || '';
           const finishTime = stageTimingInfo.finishTime || '';
           const retired = !!stageTimingInfo.retired;
-          const stageStartDateTime = getStageDateTime(selectedStage.date, startTime);
-          const status = finishTime
-            ? 'finished'
-            : retired
-              ? 'retired'
-              : stageTimingInfo.status === 'racing'
-                ? 'racing'
-                : 'not_started';
+          const stageStartDateTime = stageTimingInfo.stageStartDateTime || getStageDateTime(selectedStage.date, startTime);
+          const status = stageTimingInfo.status;
           const displayTime = stageTimingInfo.displayText || '-';
           const timeColor = status === 'retired'
             ? 'text-red-400'
@@ -275,7 +282,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
               : status === 'racing'
                 ? 'text-[#FACC15]'
                 : 'text-zinc-400';
-          const sortTime = finishTime
+          const sortTime = status === 'finished' && finishTime
             ? parseTime(finishTime)
             : (status === 'racing' && stageStartDateTime
               ? Math.max(0, sceneNow.getTime() - stageStartDateTime.getTime())
@@ -596,6 +603,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                               streamUrl={pilotPlaybackById.get(pilot.id)?.baseUrl || pilotPlaybackById.get(pilot.id)?.streamUrl || ''}
                               name={pilot.name}
                               className="w-full h-full"
+                              forceMute={true}
                               showControls={pilotPlaybackById.get(pilot.id)?.mode === 'replay'}
                               interactive={pilotPlaybackById.get(pilot.id)?.mode === 'replay'}
                               replayMountIdentity={pilotPlaybackById.get(pilot.id)?.mode === 'replay' ? `${pilot.id}:${pilotPlaybackById.get(pilot.id)?.baseUrl || ''}:${pilotPlaybackById.get(pilot.id)?.effectiveStageId || ''}` : ''}
@@ -678,6 +686,8 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                         finishTime={times[pilot.id]?.[selectedStageId] || ''}
                         retired={!!retiredStages?.[pilot.id]?.[selectedStageId]}
                         stageDate={selectedStage?.date}
+                        stageId={selectedStage?.id}
+                        replayStageScheduleById={replayStageScheduleById}
                         startLabel={t('status.start')}
                         retiredLabel={t('status.retired')}
                         fallback={pilot.displayTime}

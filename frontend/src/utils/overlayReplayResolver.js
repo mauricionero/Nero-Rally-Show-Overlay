@@ -2,7 +2,8 @@ import { getStageDateTime } from './rallyHelpers.js';
 import { isReplayDebugEnabled } from './debugFlags.js';
 import { getPilotTimeOffsetMinutes } from './pilotSchedule.js';
 import { buildReplayStageScheduleMap, getFirstCompetitiveStage } from './replaySchedule.js';
-import { getStageTitle } from './stageTypes.js';
+import { getStageNumberLabel, getStageTitle } from './stageTypes.js';
+import { formatDurationSeconds } from './timeFormat.js';
 
 const parseYouTubeStartSeconds = (value) => {
   const rawValue = String(value || '').trim();
@@ -126,7 +127,9 @@ const clampReplaySeekSeconds = (value) => (
 );
 
 const formatReplayDebugSeconds = (value) => (
-  Number.isFinite(value) ? `${Math.round(value * 1000) / 1000}s` : 'n/a'
+  Number.isFinite(value)
+    ? formatDurationSeconds(value, 3, { fallback: 'n/a', showHoursIfNeeded: true, padMinutes: true })
+    : 'n/a'
 );
 
 const formatReplayDebugDateTime = (value) => {
@@ -134,10 +137,13 @@ const formatReplayDebugDateTime = (value) => {
     return 'n/a';
   }
 
+  const pad2 = (item) => String(item).padStart(2, '0');
+  const localDateTime = `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())} ${pad2(value.getHours())}:${pad2(value.getMinutes())}:${pad2(value.getSeconds())}`;
+
   try {
-    return value.toISOString();
+    return `${localDateTime} local [${value.toISOString()}]`;
   } catch {
-    return 'n/a';
+    return localDateTime;
   }
 };
 
@@ -154,6 +160,7 @@ const logReplayCalculation = ({
   replayBaselineEventDateTime = null,
   firstCompetitiveStageOriginalScheduledDateTime = null,
   currentStageOriginalScheduledDateTime = null,
+  currentStageReplayBaseDateTime = null,
   currentStageReplayDateTime = null,
   currentStageReplayScheduleMode = '',
   currentStageReplayGapSeconds = null,
@@ -175,19 +182,37 @@ const logReplayCalculation = ({
     String(pilot?.name || '').trim()
   ].filter(Boolean).join(' ') || String(pilot?.id || 'unknown');
   const stageLabel = currentStage ? getStageTitle(currentStage) : 'No stage';
+  const calculatingForLabel = currentStage
+    ? (getStageNumberLabel(currentStage) || getStageTitle(currentStage))
+    : 'No stage';
   const firstCompetitiveStageLabel = firstCompetitiveStage ? getStageTitle(firstCompetitiveStage) : 'No first competitive stage';
   const pilotOffsetSeconds = getPilotTimeOffsetMinutes(pilot) * 60;
+  const chapterTime = formatReplayDebugSeconds(currentStageReplaySeconds);
+  const stageReplayStartTime = formatReplayDebugDateTime(currentStageReplayDateTime);
+  const stageReplayBaseTime = formatReplayDebugDateTime(currentStageReplayBaseDateTime);
+  const originalStageTime = formatReplayDebugDateTime(currentStageOriginalScheduledDateTime);
+  const firstCompetitiveOriginalTime = formatReplayDebugDateTime(firstCompetitiveStageOriginalScheduledDateTime);
+  const replayBaseTime = formatReplayDebugDateTime(replayBaselineEventDateTime);
+  const stageGapTime = formatReplayDebugSeconds(currentStageReplayGapSeconds);
+  const avgTime = formatReplayDebugSeconds(Number.isFinite(currentStageReplayAvgMs) ? currentStageReplayAvgMs / 1000 : null);
+  const deviationTime = formatReplayDebugSeconds(Number.isFinite(currentStageReplayDeviationMs) ? currentStageReplayDeviationMs / 1000 : null);
+  const pilotOffsetTime = formatReplayDebugSeconds(pilotOffsetSeconds);
+  const deltaTime = formatReplayDebugSeconds(currentStageDeltaSeconds);
+  const eventElapsedTime = formatReplayDebugSeconds(eventElapsedSeconds);
+  const eventElapsedWithOffsetTime = formatReplayDebugSeconds(eventElapsedWithOffsetSeconds);
+  const loadingBufferTime = formatReplayDebugSeconds(loadingBufferSeconds);
+  const seekTime = formatReplayDebugSeconds(seekSeconds);
 
   console.log(
-    `[ReplayCalc] pilot=${pilotLabel} mode=${mode} stage=${stageLabel} stageId=${effectiveStageId || 'n/a'} ` +
-    `firstCompetitive=${firstCompetitiveStageLabel} replayBase=${String(replayStartDate || 'n/a')} ${String(replayStartTime || 'n/a')} interval=${replayStageIntervalSeconds}s ` +
-    `pilotOffset=${pilotOffsetSeconds}s chapter=${formatReplayDebugSeconds(currentStageReplaySeconds)} firstChapter=0s ` +
-    `stageScheduled=${formatReplayDebugDateTime(currentStageReplayDateTime)} stageOriginalScheduled=${formatReplayDebugDateTime(currentStageOriginalScheduledDateTime)} ` +
-    `eventReplayStart=${formatReplayDebugDateTime(replayBaselineEventDateTime)} firstStageOriginalScheduled=${formatReplayDebugDateTime(firstCompetitiveStageOriginalScheduledDateTime)} ` +
-    `scheduleMode=${String(currentStageReplayScheduleMode || 'n/a')} stageGap=${formatReplayDebugSeconds(currentStageReplayGapSeconds)} avg=${formatReplayDebugSeconds(Number.isFinite(currentStageReplayAvgMs) ? currentStageReplayAvgMs / 1000 : null)} deviation=${formatReplayDebugSeconds(Number.isFinite(currentStageReplayDeviationMs) ? currentStageReplayDeviationMs / 1000 : null)} ` +
-    `delta=${formatReplayDebugSeconds(currentStageDeltaSeconds)} deltaWithOffset=${formatReplayDebugSeconds(currentStageDeltaWithOffsetSeconds)} ` +
-    `elapsed=${formatReplayDebugSeconds(eventElapsedSeconds)} elapsedWithOffset=${formatReplayDebugSeconds(eventElapsedWithOffsetSeconds)} ` +
-    `buffer=${formatReplayDebugSeconds(loadingBufferSeconds)} seek=${formatReplayDebugSeconds(seekSeconds)}`
+    `[ReplayCalc] pilot=${pilotLabel} mode=${mode} stage=${stageLabel} stageId=${effectiveStageId || 'n/a'}\n` +
+    `  firstCompetitive=${firstCompetitiveStageLabel}\n` +
+    `  calculatingFor=${calculatingForLabel}\n` +
+    `  replayBase=${String(replayStartDate || 'n/a')} ${String(replayStartTime || 'n/a')} | eventReplayStart=${replayBaseTime} | firstCompetitiveOriginal=${firstCompetitiveOriginalTime}\n` +
+    `  stageSchedule=original=${originalStageTime} baseReplayStart=${stageReplayBaseTime} pilotAdjustedStart=${stageReplayStartTime} mode=${String(currentStageReplayScheduleMode || 'n/a')} ` +
+    `calc=(avg=${avgTime}, deviation=${deviationTime}, stageOffset=${stageGapTime}, interval=${formatReplayDebugSeconds(replayStageIntervalSeconds)})\n` +
+    `  chapter=${chapterTime} | pilotOffset=${pilotOffsetTime} | firstChapter=${formatReplayDebugSeconds(0)}\n` +
+    `  delta=${deltaTime} | deltaWithOffset=${formatReplayDebugSeconds(currentStageDeltaWithOffsetSeconds)} (pilot offset already applied to base replay start) | elapsed=${eventElapsedTime} | elapsedWithOffset=${eventElapsedWithOffsetTime}\n` +
+    `  buffer=${loadingBufferTime} | seek=${seekTime}`
   );
 };
 
@@ -286,6 +311,7 @@ export const getPilotReplaySeekSeconds = ({
       replayBaselineEventDateTime,
       firstCompetitiveStageOriginalScheduledDateTime,
       currentStageOriginalScheduledDateTime,
+      currentStageReplayBaseDateTime,
       currentStageReplayDateTime,
       currentStageReplayScheduleMode: currentStageSchedule?.scheduleMode || '',
       currentStageReplayGapSeconds: currentStageSchedule?.stageGapSeconds,
@@ -317,6 +343,7 @@ export const getPilotReplaySeekSeconds = ({
       replayBaselineEventDateTime,
       firstCompetitiveStageOriginalScheduledDateTime,
       currentStageOriginalScheduledDateTime,
+      currentStageReplayBaseDateTime,
       currentStageReplayDateTime,
       currentStageReplayScheduleMode: currentStageSchedule?.scheduleMode || '',
       currentStageReplayGapSeconds: currentStageSchedule?.stageGapSeconds,
@@ -348,6 +375,7 @@ export const getPilotReplaySeekSeconds = ({
       replayBaselineEventDateTime,
       firstCompetitiveStageOriginalScheduledDateTime,
       currentStageOriginalScheduledDateTime,
+      currentStageReplayBaseDateTime,
       currentStageReplayDateTime,
       currentStageReplayScheduleMode: currentStageSchedule?.scheduleMode || '',
       currentStageReplayGapSeconds: currentStageSchedule?.stageGapSeconds,
@@ -376,6 +404,7 @@ export const getPilotReplaySeekSeconds = ({
     replayBaselineEventDateTime,
     firstCompetitiveStageOriginalScheduledDateTime,
     currentStageOriginalScheduledDateTime,
+    currentStageReplayBaseDateTime,
     currentStageReplayDateTime,
     currentStageReplayScheduleMode: currentStageSchedule?.scheduleMode || '',
     currentStageReplayGapSeconds: currentStageSchedule?.stageGapSeconds,

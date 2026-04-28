@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useRally } from '../contexts/RallyContext.jsx';
 import { StartInformationValue } from './StartInformationValue.jsx';
-import { getReferenceNow, getStageDateTime, getStartInformationFromValues } from '../utils/rallyHelpers.js';
-import { useFastClock } from '../hooks/useFastClock.js';
+import { getReferenceNow, getResolvedStageFinishDateTime, getResolvedStageStartDateTime, getStartInformationFromValues } from '../utils/rallyHelpers.js';
 import { useSecondAlignedClock } from '../hooks/useSecondAlignedClock.js';
 
 const shallowEqual = (left = {}, right = {}) => {
@@ -21,6 +20,7 @@ const areLiveStartInformationPropsEqual = (prevProps, nextProps) => (
   prevProps.finishTime === nextProps.finishTime &&
   prevProps.retired === nextProps.retired &&
   prevProps.stageDate === nextProps.stageDate &&
+  prevProps.stageId === nextProps.stageId &&
   prevProps.startLabel === nextProps.startLabel &&
   prevProps.retiredLabel === nextProps.retiredLabel &&
   prevProps.className === nextProps.className &&
@@ -28,6 +28,7 @@ const areLiveStartInformationPropsEqual = (prevProps, nextProps) => (
   prevProps.liveStatus === nextProps.liveStatus &&
   prevProps.debugDate === nextProps.debugDate &&
   prevProps.as === nextProps.as &&
+  prevProps.replayStageScheduleById === nextProps.replayStageScheduleById &&
   shallowEqual(prevProps.style, nextProps.style)
 );
 
@@ -36,6 +37,8 @@ function LiveStartInformationValueBase({
   finishTime = '',
   retired = false,
   stageDate,
+  stageId = '',
+  replayStageScheduleById = null,
   startLabel = 'Start',
   retiredLabel = 'Retired',
   className = '',
@@ -46,112 +49,40 @@ function LiveStartInformationValueBase({
   debugDate = ''
 }) {
   const { timeDecimals, eventIsOver } = useRally();
-  const initialNowRef = useRef(new Date());
-  const initialNow = useMemo(() => (
-    getReferenceNow(debugDate, initialNowRef.current)
-  ), [debugDate]);
-  const startAtMs = useMemo(() => {
-    const stageDateTime = getStageDateTime(stageDate, startTime);
-    return stageDateTime ? stageDateTime.getTime() : null;
-  }, [stageDate, startTime]);
-  const resolvedLiveStatus = useMemo(() => {
-    if (liveStatus) {
-      return liveStatus;
-    }
+  const resolvedStageStartDateTime = useMemo(() => (
+    getResolvedStageStartDateTime({
+      stageId,
+      stageDate,
+      startTime,
+      replayStageScheduleById
+    })
+  ), [replayStageScheduleById, stageDate, stageId, startTime]);
+  const resolvedStageFinishDateTime = useMemo(() => (
+    getResolvedStageFinishDateTime({
+      stageId,
+      stageDate,
+      startTime,
+      finishTime,
+      replayStageScheduleById
+    })
+  ), [finishTime, replayStageScheduleById, stageDate, stageId, startTime]);
+  const tickingNow = useSecondAlignedClock(true);
+  const currentNow = useMemo(() => getReferenceNow(debugDate, tickingNow), [debugDate, tickingNow]);
 
-    if (finishTime) {
-      return 'finished';
-    }
-
-    if (retired) {
-      return 'retired';
-    }
-
-    if (startAtMs) {
-      return 'pre_start';
-    }
-
-    return 'not_started';
-  }, [finishTime, liveStatus, retired, startAtMs]);
-
-  const [countdownArmed, setCountdownArmed] = useState(false);
-
-  useEffect(() => {
-    if (finishTime || retired || !startAtMs) {
-      setCountdownArmed(false);
-      return undefined;
-    }
-
-    const remainingMs = startAtMs - Date.now();
-    if (remainingMs <= 60000) {
-      setCountdownArmed(true);
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setCountdownArmed(true);
-    }, Math.max(0, remainingMs - 60000));
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [finishTime, retired, startAtMs]);
-
-  const shouldAnimate = useMemo(() => {
-    if (finishTime || retired || !startAtMs) {
-      return false;
-    }
-
-    if (resolvedLiveStatus === 'racing' || resolvedLiveStatus === 'pre_start') {
-      return true;
-    }
-
-    return countdownArmed;
-  }, [countdownArmed, finishTime, resolvedLiveStatus, retired, startAtMs]);
-
-  const shouldUseFastClock = shouldAnimate && timeDecimals > 0 && resolvedLiveStatus === 'racing';
-  const secondAlignedNow = useSecondAlignedClock(shouldAnimate && !shouldUseFastClock);
-
-  const staticInfo = useMemo(() => (
+  const info = useMemo(() => (
     getStartInformationFromValues({
       startTime,
       finishTime,
       retired,
       stageDate,
-      now: initialNow,
+      stageStartDateTime: resolvedStageStartDateTime,
+      stageFinishDateTime: resolvedStageFinishDateTime,
+      now: currentNow,
       decimals: timeDecimals,
       startLabel,
       retiredLabel
     })
-  ), [finishTime, initialNow, retired, retiredLabel, stageDate, startLabel, startTime, timeDecimals]);
-
-  const fastClockNowMs = useFastClock(shouldUseFastClock);
-  const animatedSecondNow = useMemo(() => (
-    getReferenceNow(debugDate, secondAlignedNow)
-  ), [debugDate, secondAlignedNow]);
-  const animatedFastNow = useMemo(() => (
-    getReferenceNow(debugDate, new Date(fastClockNowMs))
-  ), [debugDate, fastClockNowMs]);
-  const animatedNow = shouldAnimate
-    ? (shouldUseFastClock ? animatedFastNow : animatedSecondNow)
-    : initialNow;
-
-  const info = useMemo(() => {
-    if (!shouldAnimate) {
-      return staticInfo;
-    }
-
-    return getStartInformationFromValues({
-      startTime,
-      finishTime,
-      retired,
-      stageDate,
-      now: animatedNow,
-      decimals: timeDecimals,
-      startLabel,
-      retiredLabel
-    });
-  }, [animatedNow, finishTime, retired, retiredLabel, shouldAnimate, stageDate, startLabel, startTime, staticInfo, timeDecimals]);
+  ), [currentNow, finishTime, retired, retiredLabel, resolvedStageFinishDateTime, resolvedStageStartDateTime, stageDate, startLabel, startTime, timeDecimals]);
 
   if (eventIsOver && !finishTime && !retired) {
     return null;

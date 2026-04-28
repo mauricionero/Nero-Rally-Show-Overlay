@@ -116,7 +116,21 @@ export default function Overlay() {
 
   // Auto-connect if WebSocket key is in URL
   useEffect(() => {
-    const wsKey = searchParams.get('ws');
+    const readStoredChannelKey = () => {
+      try {
+        const storedValue = window.localStorage.getItem('rally_ws_channel_key');
+        if (!storedValue) {
+          return '';
+        }
+
+        const parsedValue = JSON.parse(storedValue);
+        return String(parsedValue || '').trim();
+      } catch (error) {
+        return '';
+      }
+    };
+
+    const wsKey = searchParams.get('ws') || readStoredChannelKey();
     if (!wsKey || wsConnectionStatus === 'connected' || wsConnectionStatus === 'connecting') {
       return undefined;
     }

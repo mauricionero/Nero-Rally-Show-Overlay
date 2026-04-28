@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -54,6 +54,13 @@ export default function CurrentStageCard({ showDebugIds = false }) {
     eventReplayStageIntervalSeconds,
     setEventReplayStageIntervalSeconds
   } = useRally();
+  const [eventReplayStageIntervalDraft, setEventReplayStageIntervalDraft] = useState(
+    String(eventReplayStageIntervalSeconds ?? 0)
+  );
+
+  useEffect(() => {
+    setEventReplayStageIntervalDraft(String(eventReplayStageIntervalSeconds ?? 0));
+  }, [eventReplayStageIntervalSeconds]);
 
   const sortedStages = useMemo(() => [...stages].sort(compareStagesBySchedule), [stages]);
   const currentStage = stages.find((stage) => stage.id === currentStageId);
@@ -143,9 +150,10 @@ export default function CurrentStageCard({ showDebugIds = false }) {
                 type="number"
                 min="0"
                 step="1"
-                value={eventReplayStageIntervalSeconds ?? 0}
-                onChange={(event) => {
-                  const nextValue = Number(event.target.value);
+                value={eventReplayStageIntervalDraft}
+                onChange={(event) => setEventReplayStageIntervalDraft(event.target.value)}
+                onBlur={() => {
+                  const nextValue = Number(eventReplayStageIntervalDraft);
                   setEventReplayStageIntervalSeconds(Number.isFinite(nextValue) && nextValue >= 0 ? Math.trunc(nextValue) : 0);
                 }}
                 className="bg-[#09090B] border-zinc-700 text-white"

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRallyConfig } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -39,8 +39,23 @@ export default function ConfigTab() {
 
   const fileInputRef = useRef(null);
   const [customChroma, setCustomChroma] = useState('#000000');
+  const [logoUrlDraft, setLogoUrlDraft] = useState(logoUrl || '');
+  const [transitionImageUrlDraft, setTransitionImageUrlDraft] = useState(transitionImageUrl || '');
+  const [timeDecimalsDraft, setTimeDecimalsDraft] = useState(String(timeDecimals ?? 0));
 
   const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
+  useEffect(() => {
+    setLogoUrlDraft(logoUrl || '');
+  }, [logoUrl]);
+
+  useEffect(() => {
+    setTransitionImageUrlDraft(transitionImageUrl || '');
+  }, [transitionImageUrl]);
+
+  useEffect(() => {
+    setTimeDecimalsDraft(String(timeDecimals ?? 0));
+  }, [timeDecimals]);
+
   const CHROMA_PRESETS = useMemo(() => ([
     { name: t('config.black'), value: '#000000', label: 'K' },
     { name: t('config.greenScreen'), value: '#00B140', label: 'G' },
@@ -111,6 +126,25 @@ export default function ConfigTab() {
     reader.readAsText(file);
   };
 
+  const commitLogoUrl = () => {
+    const nextValue = String(logoUrlDraft || '');
+    if (nextValue !== String(logoUrl || '')) {
+      setLogoUrl(nextValue);
+    }
+  };
+
+  const commitTransitionImageUrl = () => {
+    const nextValue = String(transitionImageUrlDraft || '');
+    if (nextValue !== String(transitionImageUrl || '')) {
+      setTransitionImageUrl(nextValue);
+    }
+  };
+
+  const commitTimeDecimals = () => {
+    const nextValue = Number(timeDecimalsDraft);
+    setTimeDecimals(Number.isFinite(nextValue) ? Math.min(3, Math.max(0, Math.trunc(nextValue))) : 0);
+  };
+
   return (
     <div className="space-y-4">
       {/* Branding */}
@@ -137,8 +171,9 @@ export default function ConfigTab() {
                 </div>
                 <div className="flex-1 space-y-2">
                   <Input
-                    value={logoUrl || ''}
-                    onChange={(e) => setLogoUrl(e.target.value)}
+                    value={logoUrlDraft}
+                    onChange={(e) => setLogoUrlDraft(e.target.value)}
+                    onBlur={commitLogoUrl}
                     placeholder={t('config.logoUrlPlaceholder')}
                     className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
                     data-testid="input-logo-url"
@@ -162,8 +197,9 @@ export default function ConfigTab() {
                 </div>
                 <div className="flex-1 space-y-2">
                   <Input
-                    value={transitionImageUrl || ''}
-                    onChange={(e) => setTransitionImageUrl(e.target.value)}
+                    value={transitionImageUrlDraft}
+                    onChange={(e) => setTransitionImageUrlDraft(e.target.value)}
+                    onBlur={commitTransitionImageUrl}
                     placeholder={t('config.transitionImagePlaceholder')}
                     className="bg-[#09090B] border-zinc-700 text-white font-mono text-sm"
                     data-testid="input-transition-image-url"
@@ -196,11 +232,9 @@ export default function ConfigTab() {
                 min="0"
                 max="3"
                 step="1"
-                value={timeDecimals}
-                onChange={(e) => {
-                  const numericValue = Number(e.target.value);
-                  setTimeDecimals(Math.min(3, Math.max(0, Number.isFinite(numericValue) ? Math.trunc(numericValue) : 0)));
-                }}
+                value={timeDecimalsDraft}
+                onChange={(e) => setTimeDecimalsDraft(e.target.value)}
+                onBlur={commitTimeDecimals}
                 className="bg-[#09090B] border-zinc-700 text-white"
                 data-testid="input-time-decimals"
               />

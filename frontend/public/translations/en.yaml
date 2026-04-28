@@ -571,6 +571,8 @@ bulkLoad:
   timesHint: "Blank cells are ignored, so you can paste partial timing updates without clearing existing values. Use the number column whenever possible. If totalTime is provided and a start time is known, arrivalTime is calculated automatically."
   inferPilotOffsetsFromStartTime: "Infer Pilot Offsets From Start Time"
   inferPilotOffsetsFromStartTimeDesc: "When a row contains startTime, update the pilot time offset from the difference between the imported start time and the selected stage start."
+  replaceExistingTimeData: "Replace Existing Data"
+  replaceExistingTimeDataDesc: "When a row matches existing timing data, overwrite the stored values for that pilot and stage."
   updateExistingPilots: "Update Existing Pilots"
   updateExistingPilotsDesc: "If an imported pilot name matches exactly, overwrite that pilot instead of rejecting the row."
   preserveEmptyPilotFields: "Keep Existing Values For Empty Fields"

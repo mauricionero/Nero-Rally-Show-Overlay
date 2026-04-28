@@ -428,7 +428,7 @@ export class SyncConnectionService {
         })
       : null;
 
-    const waitingForLiveSnapshotBootstrap = (this.options.requireSnapshotBootstrap === true || initialHistoryBootstrap?.mode === 'await-snapshot')
+    const waitingForLiveSnapshotBootstrap = initialHistoryBootstrap?.mode === 'await-snapshot'
       && !this.provider.historyBootstrapLoadedSnapshot;
 
     if (waitingForLiveSnapshotBootstrap) {

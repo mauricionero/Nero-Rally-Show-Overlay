@@ -8,7 +8,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Upload, AlertTriangle, Users, Flag, Timer, Map, Copy, ExternalLink, X } from 'lucide-react';
+import { Upload, AlertTriangle, Users, Flag, Timer, Map as MapIcon, Copy, ExternalLink, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   LAP_RACE_STAGE_TYPE,
@@ -112,6 +112,43 @@ const parseCsvLine = (line, delimiter) => {
   return values;
 };
 
+const countDelimiterOccurrences = (line, delimiter) => {
+  let count = 0;
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === delimiter && !inQuotes) {
+      count += 1;
+    }
+  }
+
+  return count;
+};
+
+const detectCsvDelimiter = (line) => {
+  const candidates = ['\t', ';', ','];
+
+  return candidates.reduce((best, delimiter) => {
+    const count = countDelimiterOccurrences(line, delimiter);
+    if (count > best.count) {
+      return { delimiter, count };
+    }
+    return best;
+  }, { delimiter: ',', count: -1 }).delimiter;
+};
+
 const parseCsvText = (text) => {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -128,7 +165,7 @@ const parseCsvText = (text) => {
   }
 
   const firstLine = lines[0];
-  const delimiter = firstLine.split(';').length > firstLine.split(',').length ? ';' : ',';
+  const delimiter = detectCsvDelimiter(firstLine);
   const headers = parseCsvLine(firstLine, delimiter);
 
   const rows = lines.slice(1).map((line, index) => {
@@ -204,7 +241,6 @@ export default function BulkLoadTab() {
     pilots,
     stages,
     categories,
-    currentStageId,
     startTimes,
     timeDecimals,
     mapPlacemarks,
@@ -222,6 +258,7 @@ export default function BulkLoadTab() {
   const [updateExistingPilots, setUpdateExistingPilots] = useState(false);
   const [preserveEmptyPilotFields, setPreserveEmptyPilotFields] = useState(false);
   const [inferPilotOffsetsFromStartTime, setInferPilotOffsetsFromStartTime] = useState(false);
+  const [replaceExistingTimeData, setReplaceExistingTimeData] = useState(false);
   const [selectedTimesStageId, setSelectedTimesStageId] = useState('');
   const [pilotResult, setPilotResult] = useState(createEmptyResult());
   const [stageResult, setStageResult] = useState(createEmptyResult());
@@ -241,12 +278,9 @@ export default function BulkLoadTab() {
       if (prev && stages.some((stage) => stage.id === prev)) {
         return prev;
       }
-      if (currentStageId && stages.some((stage) => stage.id === currentStageId)) {
-        return currentStageId;
-      }
-      return stages[0]?.id || '';
+      return '';
     });
-  }, [currentStageId, stages]);
+  }, [stages]);
 
   const handleImportPilots = () => {
     const parsed = parseCsvText(pilotCsv);
@@ -549,7 +583,7 @@ export default function BulkLoadTab() {
     });
 
     if (entries.length > 0) {
-      bulkImportTimingEntries(entries);
+      bulkImportTimingEntries(entries, { replaceExisting: replaceExistingTimeData });
     }
 
     const summary = t('bulkLoad.importSummaryTimes', { updated: entries.length, failed: errors.length });
@@ -830,16 +864,29 @@ export default function BulkLoadTab() {
             </code>
           </div>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <Checkbox
-              checked={inferPilotOffsetsFromStartTime}
-              onCheckedChange={(checked) => setInferPilotOffsetsFromStartTime(checked === true)}
-            />
-            <div>
-              <p className="text-sm text-white">{t('bulkLoad.inferPilotOffsetsFromStartTime')}</p>
-              <p className="text-xs text-zinc-500">{t('bulkLoad.inferPilotOffsetsFromStartTimeDesc')}</p>
-            </div>
-          </label>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                checked={inferPilotOffsetsFromStartTime}
+                onCheckedChange={(checked) => setInferPilotOffsetsFromStartTime(checked === true)}
+              />
+              <div>
+                <p className="text-sm text-white">{t('bulkLoad.inferPilotOffsetsFromStartTime')}</p>
+                <p className="text-xs text-zinc-500">{t('bulkLoad.inferPilotOffsetsFromStartTimeDesc')}</p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 cursor-pointer lg:justify-end">
+              <Checkbox
+                checked={replaceExistingTimeData}
+                onCheckedChange={(checked) => setReplaceExistingTimeData(checked === true)}
+              />
+              <div>
+                <p className="text-sm text-white">{t('bulkLoad.replaceExistingTimeData')}</p>
+                <p className="text-xs text-zinc-500">{t('bulkLoad.replaceExistingTimeDataDesc')}</p>
+              </div>
+            </label>
+          </div>
 
           <Textarea
             value={timeCsv}
@@ -868,7 +915,7 @@ export default function BulkLoadTab() {
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
           <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            <Map className="w-5 h-5" />
+            <MapIcon className="w-5 h-5" />
             {t('bulkLoad.mapsTitle')}
           </CardTitle>
           <CardDescription className="text-zinc-400">
@@ -984,7 +1031,7 @@ export default function BulkLoadTab() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <Map className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                        <MapIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
                         <button
                           type="button"
                           className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:border-red-500 hover:text-red-400"
