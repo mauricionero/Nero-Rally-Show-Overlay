@@ -431,6 +431,7 @@ scenes:
   timingTower: "Torre de Tempos"
   leaderboard: "Classificação"
   pilotFocus: "Foco no Piloto"
+  monitor: "Monitor"
 
 # ===========================================
 # CENA 1 - ETAPA AO VIVO
@@ -519,6 +520,26 @@ scene4:
   mainCamera: "Câmera Principal"
   noneUsesPilotStream: "Nenhuma (Usar Stream do Piloto)"
   cameraAsMain: "Câmera como feed principal"
+
+# ===========================================
+# CENA 5 - MONITOR
+# ===========================================
+scene5:
+  monitor: "Monitor"
+  layout: "Layout"
+  monitorHint: "Pensado para direcao e narracao acompanharem etapa atual, telemetria, feeds e conexao rapidamente."
+  raceMonitor: "Monitor da Corrida"
+  currentClock: "Relogio Atual"
+  nextToStart: "Proximo a Largar"
+  massStart: "Largada Conjunta"
+  lapRaceNoSingleStarter: "Todos os pilotos largam juntos"
+  noUpcomingStart: "Sem proximo largando"
+  weather: "Clima"
+  noWeatherSource: "Sem fonte de clima mapeada"
+  liveMode: "Evento ao vivo"
+  replayMode: "Evento em replay"
+  noLiveFeed: "Sem Feed Ao Vivo"
+  streamHidden: "Stream Oculto"
 
 # ===========================================
 # STATUS / ESTADOS

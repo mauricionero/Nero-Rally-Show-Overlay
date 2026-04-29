@@ -6,6 +6,7 @@ import Scene1LiveStage from '../components/scenes/Scene1LiveStage.jsx';
 import Scene2TimingTower from '../components/scenes/Scene2TimingTower.jsx';
 import Scene3Leaderboard from '../components/scenes/Scene3Leaderboard.jsx';
 import Scene4PilotFocus from '../components/scenes/Scene4PilotFocus.jsx';
+import Scene5Monitor from '../components/scenes/Scene5Monitor.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
@@ -235,7 +236,7 @@ export default function Overlay() {
   useEffect(() => {
     const handleKeyPress = (e) => {
       const key = parseInt(e.key);
-      if (key >= 1 && key <= 4) {
+      if (key >= 1 && key <= 5) {
         requestSceneChange(key);
       }
     };
@@ -270,6 +271,8 @@ export default function Overlay() {
         return <Scene3Leaderboard hideStreams={hideStreams} />;
       case 4:
         return <Scene4PilotFocus hideStreams={hideStreams} />;
+      case 5:
+        return <Scene5Monitor hideStreams={hideStreams} />;
       default:
         return <Scene1LiveStage hideStreams={hideStreams} />;
     }
@@ -279,7 +282,8 @@ export default function Overlay() {
     { num: 1, name: t('scenes.liveStage') },
     { num: 2, name: t('scenes.timingTower') },
     { num: 3, name: t('scenes.leaderboard') },
-    { num: 4, name: t('scenes.pilotFocus') }
+    { num: 4, name: t('scenes.pilotFocus') },
+    { num: 5, name: t('scenes.monitor') }
   ];
   const resolvedTransitionImageUrl = transitionImageUrl?.trim()
     ? transitionImageUrl.trim()

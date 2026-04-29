@@ -424,6 +424,7 @@ scenes:
   timingTower: "Timing Tower"
   leaderboard: "Leaderboard"
   pilotFocus: "Pilot Focus"
+  monitor: "Monitor"
 
 # ===========================================
 # SCENE 1 - LIVE STAGE
@@ -512,6 +513,26 @@ scene4:
   mainCamera: "Main Camera"
   noneUsesPilotStream: "None (Use Pilot Stream)"
   cameraAsMain: "Camera as main feed"
+
+# ===========================================
+# SCENE 5 - MONITOR
+# ===========================================
+scene5:
+  monitor: "Monitor"
+  layout: "Layout"
+  monitorHint: "Built for directors and commentators to follow current stage, telemetry, feeds, and connection status at a glance."
+  raceMonitor: "Race Monitor"
+  currentClock: "Current Clock"
+  nextToStart: "Next To Start"
+  massStart: "Mass Start"
+  lapRaceNoSingleStarter: "All pilots share the start"
+  noUpcomingStart: "No upcoming starter"
+  weather: "Weather"
+  noWeatherSource: "No mapped weather source"
+  liveMode: "Live event"
+  replayMode: "Replay event"
+  noLiveFeed: "No Live Feed"
+  streamHidden: "Stream Hidden"
 
 # ===========================================
 # STATUS / STATES
