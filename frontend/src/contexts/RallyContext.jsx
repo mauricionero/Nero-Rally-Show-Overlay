@@ -502,6 +502,55 @@ const mergeEntityArrayItemById = (currentItems = [], id, changes = {}) => {
   return nextItems;
 };
 
+const normalizePilotStreamUrlFields = (pilot = null) => {
+  if (!isPlainObject(pilot)) {
+    return pilot;
+  }
+
+  const nextPilot = { ...pilot };
+  const streamUrlValue = nextPilot.streamUrl
+    ?? nextPilot.streamURL
+    ?? nextPilot['stream url']
+    ?? nextPilot.url_stream
+    ?? nextPilot.stream_url;
+
+  if (streamUrlValue !== undefined) {
+    nextPilot.streamUrl = String(streamUrlValue || '').trim();
+  }
+
+  delete nextPilot.streamURL;
+  delete nextPilot['stream url'];
+  delete nextPilot.url_stream;
+  delete nextPilot.stream_url;
+
+  return nextPilot;
+};
+
+const normalizePilotArrayPayload = (value = null) => {
+  if (Array.isArray(value)) {
+    return value.map((pilot) => normalizePilotStreamUrlFields(pilot));
+  }
+
+  if (isPlainObject(value)) {
+    return Object.entries(value).map(([id, pilot]) => ({
+      id,
+      ...normalizePilotStreamUrlFields(pilot)
+    }));
+  }
+
+  return [];
+};
+
+const normalizePilotPatchMap = (value = null) => {
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([id, pilot]) => [id, normalizePilotStreamUrlFields(pilot)])
+  );
+};
+
 const stripEntityIdPrefix = (value, prefix = '') => {
   const trimmedValue = String(value ?? '').trim();
   if (!trimmedValue) {
@@ -1903,7 +1952,7 @@ export const RallyProvider = ({ children }) => {
     setPositions(loadFromStorage('rally_positions', {}));
     setLapTimes(loadFromStorage('rally_lap_times', {}));
     setStagePilots(loadFromStorage('rally_stage_pilots', {}));
-    setPilots(loadFromStorage('rally_pilots', []));
+    setPilots(normalizePilotArrayPayload(loadFromStorage('rally_pilots', [])));
     applyPilotTelemetryState({});
     setCategories(loadFromStorage('rally_categories', []));
     setStages(loadFromStorage('rally_stages', []));
@@ -1977,7 +2026,7 @@ export const RallyProvider = ({ children }) => {
 
     if (nextDomains.includes('pilots')) {
       hydratingDomainsRef.current.add('pilots');
-      setPilots(loadFromStorage('rally_pilots', []));
+      setPilots(normalizePilotArrayPayload(loadFromStorage('rally_pilots', [])));
     }
 
     if (nextDomains.includes('pilotTelemetry')) {
@@ -3084,7 +3133,12 @@ export const RallyProvider = ({ children }) => {
     }
 
     if (normalizedChanges.pilots !== undefined) {
-      setPilots((prev) => (isSnapshotPackage ? (Array.isArray(normalizedChanges.pilots) ? normalizedChanges.pilots : []) : mergeArrayEntityPatch(prev, normalizedChanges.pilots, 'entity')));
+      if (isSnapshotPackage) {
+        setPilots(normalizePilotArrayPayload(normalizedChanges.pilots));
+      } else {
+        const nextPilots = normalizePilotPatchMap(normalizedChanges.pilots);
+        setPilots((prev) => mergeArrayEntityPatch(prev, nextPilots, 'entity'));
+      }
     }
 
     if (normalizedChanges.categories !== undefined) {
@@ -3618,7 +3672,7 @@ export const RallyProvider = ({ children }) => {
         if (normalizedData.positions !== undefined && !shouldPreserveLocalTimingSection('positions')) setPositions(normalizedData.positions);
         if (normalizedData.lapTimes !== undefined && !shouldPreserveLocalTimingSection('lapTimes')) setLapTimes(normalizedData.lapTimes);
         if (normalizedData.stagePilots !== undefined && !shouldPreserveLocalTimingSection('stagePilots')) setStagePilots(normalizedData.stagePilots);
-        if (normalizedData.pilots !== undefined) setPilots(normalizedData.pilots);
+        if (normalizedData.pilots !== undefined) setPilots(normalizePilotArrayPayload(normalizedData.pilots));
         if (normalizedData.categories !== undefined) setCategories(normalizedData.categories);
         if (normalizedData.stages !== undefined) setStages(normalizedData.stages);
         if (normalizedData.times !== undefined && !shouldPreserveLocalTimingSection('times')) setTimes(normalizedData.times);
@@ -6384,7 +6438,7 @@ export const RallyProvider = ({ children }) => {
   const importData = useCallback((jsonString) => {
     try {
       const data = JSON.parse(jsonString);
-      if (data.pilots) setPilots(data.pilots);
+      if (data.pilots) setPilots(normalizePilotArrayPayload(data.pilots));
       const importedPilotTelemetry = data.pilotsTelemetry || data.pilotTelemetry;
       if (importedPilotTelemetry) {
         applyPilotTelemetryState(importedPilotTelemetry);

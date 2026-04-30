@@ -15,6 +15,7 @@ import { StreamPlayer } from '../components/StreamPlayer.jsx';
 import PilotTelemetryHud from '../components/PilotTelemetryHud.jsx';
 import { getPilotTelemetryForId } from '../utils/pilotIdentity.js';
 import { getWebSocketPilotTelemetryUrl } from '../utils/overlayUrls.js';
+import { APK_FILE_NAME, getApkDownloadUrl } from '../config/version.js';
 import {
   buildPilotTelemetryBatScript,
   buildPilotTelemetryLaunchArtifacts,
@@ -251,6 +252,12 @@ export default function PilotTelemetry() {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button asChild variant="outline" size="sm" className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800 hover:text-white">
+                <a href={getApkDownloadUrl()} download={APK_FILE_NAME} title={APK_FILE_NAME}>
+                  <Download className="h-4 w-4" />
+                  <span>Download APK</span>
+                </a>
+              </Button>
               <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#18181B] px-3 py-2 text-sm text-white">
                 <Checkbox
                   checked={hideStream}

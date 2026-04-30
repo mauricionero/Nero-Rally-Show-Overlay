@@ -26,6 +26,7 @@ import { getStageTitle } from '../../utils/stageTypes.js';
 import { isReplayCompetitiveStage } from '../../utils/replaySchedule.js';
 import { normalizeTimingInput } from '../../utils/timeConversion.js';
 import { formatDurationSeconds } from '../../utils/timeFormat.js';
+import { APK_FILE_NAME, getApkDownloadUrl } from '../../config/version.js';
 import DebugIdText from './DebugIdText.jsx';
 
 const escapeCsvValue = (value) => {
@@ -726,7 +727,15 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     <div className="space-y-4">
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
-          <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('pilots.addNewPilot')}</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>{t('pilots.addNewPilot')}</CardTitle>
+            <Button asChild variant="outline" size="sm" className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800 hover:text-white">
+              <a href={getApkDownloadUrl()} download={APK_FILE_NAME} title={APK_FILE_NAME}>
+                <Download className="h-4 w-4" />
+                Download APK
+              </a>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
