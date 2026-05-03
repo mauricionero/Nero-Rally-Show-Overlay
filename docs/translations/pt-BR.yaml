@@ -126,6 +126,8 @@ pilots:
   replayImportNoChapters: "Nenhum capitulo valido foi encontrado no texto informado."
   replayImportNoMatches: "Os capitulos foram encontrados, mas nenhum correspondeu as etapas atuais do evento."
   replayImportSuccess: "Capitulos do replay importados"
+pilotTelemetry:
+  telemetry: "Telemetria"
   addPilot: "Adicionar Piloto"
   exportTitle: "Exportar Pilotos"
   exportDescription: "Escolha as colunas para exportar. Se voce selecionar apenas uma coluna, o arquivo sera exportado com um valor por linha."

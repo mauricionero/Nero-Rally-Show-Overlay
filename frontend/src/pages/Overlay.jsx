@@ -45,6 +45,7 @@ export default function Overlay() {
   const [wsKeyInput, setWsKeyInput] = useState('');
   const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
   const [hideStreams, setHideStreams] = useState(false);
+  const [hideTelemetry, setHideTelemetry] = useState(false);
   const [overlayDebugFlags, setOverlayDebugFlags] = useState(() => loadDebugFlags());
   const defaultTransitionImageUrl = '/transition-default.png';
   const [transitionType, setTransitionType] = useState(() => {
@@ -264,17 +265,17 @@ export default function Overlay() {
   const renderScene = () => {
     switch (currentScene) {
       case 1:
-        return <Scene1LiveStage hideStreams={hideStreams} />;
+        return <Scene1LiveStage hideStreams={hideStreams} hideTelemetry={hideTelemetry} />;
       case 2:
-        return <Scene2TimingTower hideStreams={hideStreams} />;
+        return <Scene2TimingTower hideStreams={hideStreams} hideTelemetry={hideTelemetry} />;
       case 3:
-        return <Scene3Leaderboard hideStreams={hideStreams} />;
+        return <Scene3Leaderboard hideStreams={hideStreams} hideTelemetry={hideTelemetry} />;
       case 4:
-        return <Scene4PilotFocus hideStreams={hideStreams} />;
+        return <Scene4PilotFocus hideStreams={hideStreams} hideTelemetry={hideTelemetry} />;
       case 5:
-        return <Scene5Monitor hideStreams={hideStreams} />;
+        return <Scene5Monitor hideStreams={hideStreams} hideTelemetry={hideTelemetry} />;
       default:
-        return <Scene1LiveStage hideStreams={hideStreams} />;
+        return <Scene1LiveStage hideStreams={hideStreams} hideTelemetry={hideTelemetry} />;
     }
   };
 
@@ -341,6 +342,19 @@ export default function Overlay() {
                     <span className="inline-block">{t('header.hide')}</span>
                   </span>
                   <span className="block">{t('header.stream')}</span>
+                </span>
+              </label>
+
+              <label className="flex flex-row items-start gap-1 cursor-pointer select-none w-[56px]">
+                <Checkbox
+                  checked={hideTelemetry}
+                  onCheckedChange={setHideTelemetry}
+                  className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                  data-testid="hide-telemetry-checkbox"
+                />
+                <span className="text-[10px] leading-tight text-zinc-300 font-medium text-left whitespace-normal break-words max-w-[48px]">
+                  <span className="inline-block">{t('header.hide')}</span>
+                  <span className="block">{t('pilotTelemetry.telemetry')}</span>
                 </span>
               </label>
 

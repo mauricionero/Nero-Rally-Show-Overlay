@@ -145,7 +145,7 @@ function Scene4StageTimeValue({
   );
 }
 
-export default function Scene4PilotFocus({ hideStreams = false }) {
+export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
     lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds
@@ -449,7 +449,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
         replayMountIdentity={focusPilotPlayback?.mode === 'replay' ? `${focusPilot.id}:${focusPilotPlayback?.baseUrl || ''}:${focusPilotPlayback?.effectiveStageId || ''}` : ''}
         resolveStreamUrlOnMount={focusPilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(focusPilot) : null}
       />
-      <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} trackLengthTotal={selectedStage?.distance} compact raised />
+      {!hideTelemetry && (
+        <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} trackLengthTotal={selectedStage?.distance} compact raised />
+      )}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
         <p className="text-white text-xs font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
           {focusPilot.name}
@@ -721,10 +723,10 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                     resolveStreamUrlOnMount={selectedMainPilotPlayback?.mode === 'replay' && selectedMainPilot ? () => resolveReplayStreamUrlOnMount(selectedMainPilot) : null}
                   />
                 )}
-                {selectedMainPilot && !hideStreams && (
+                {selectedMainPilot && !hideStreams && !hideTelemetry && (
                   <PilotTelemetryHud pilot={selectedMainPilot} telemetry={selectedMainPilotTelemetry} trackLengthTotal={selectedStage?.distance} />
                 )}
-                {selectedMainPilotCurrentStage && !hideStreams && (
+                {selectedMainPilotCurrentStage && !hideStreams && !hideTelemetry && (
                   <CurrentStageBadge
                     stage={selectedMainPilotCurrentStage}
                     className="absolute top-4 left-1/2 -translate-x-1/2"
@@ -778,7 +780,9 @@ export default function Scene4PilotFocus({ hideStreams = false }) {
                   replayMountIdentity={focusPilotPlayback?.mode === 'replay' ? `${focusPilot.id}:${focusPilotPlayback?.baseUrl || ''}:${focusPilotPlayback?.effectiveStageId || ''}` : ''}
                   resolveStreamUrlOnMount={focusPilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(focusPilot) : null}
                 />
-                <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} trackLengthTotal={selectedStage?.distance} />
+                {!hideTelemetry && (
+                  <PilotTelemetryHud pilot={focusPilot} telemetry={focusPilotTelemetry} trackLengthTotal={selectedStage?.distance} />
+                )}
                 <CurrentStageBadge
                   stage={focusPilotCurrentStage}
                   className="absolute top-4 left-1/2 -translate-x-1/2"

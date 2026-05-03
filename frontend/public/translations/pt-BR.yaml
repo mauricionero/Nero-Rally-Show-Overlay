@@ -274,6 +274,7 @@ times:
 # PÁGINA DE TELEMETRIA DO PILOTO
 # ===========================================
 pilotTelemetry:
+  telemetry: "Telemetria"
   title: "Telemetria do piloto"
   description: "Esta página mostra apenas a telemetria. O launcher exportado lê os dados UDP do Dirt Rally 2.0 e envia a telemetria."
   hideStream: "Ocultar stream"
@@ -526,10 +527,18 @@ scene4:
 # ===========================================
 scene5:
   monitor: "Monitor"
+  viewMode: "Modo de Exibição"
+  table: "Tabela"
+  grid: "Grade"
+  pilotTable: "Tabela de Pilotos"
   layout: "Layout"
   monitorHint: "Pensado para direcao e narracao acompanharem etapa atual, telemetria, feeds e conexao rapidamente."
   raceMonitor: "Monitor da Corrida"
   currentClock: "Relogio Atual"
+  onboard: "Onboard"
+  timing: "Tempo"
+  unmute: "Desmutar"
+  mutedByDefault: "Mutado por padrão"
   nextToStart: "Proximo a Largar"
   massStart: "Largada Conjunta"
   lapRaceNoSingleStarter: "Todos os pilotos largam juntos"

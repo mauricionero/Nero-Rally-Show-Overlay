@@ -118,6 +118,8 @@ pilots:
   replayImportNoChapters: "No valid chapters were found in the source text."
   replayImportNoMatches: "Chapters were found, but none matched the current event stages."
   replayImportSuccess: "Replay chapters imported"
+pilotTelemetry:
+  telemetry: "Telemetry"
   addPilot: "Add Pilot"
   exportTitle: "Export Pilots"
   exportDescription: "Choose the columns to export. If you select only one column, the file is exported one value per line."

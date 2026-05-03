@@ -266,6 +266,7 @@ times:
 # PILOT TELEMETRY PAGE
 # ===========================================
 pilotTelemetry:
+  telemetry: "Telemetry"
   title: "Pilot telemetry"
   description: "This page only displays telemetry. The exported launcher reads Dirt Rally 2.0 UDP data and publishes it directly to Ably on the current rally channel."
   hideStream: "Hide stream"
@@ -519,10 +520,18 @@ scene4:
 # ===========================================
 scene5:
   monitor: "Monitor"
+  viewMode: "View Mode"
+  table: "Table"
+  grid: "Grid"
+  pilotTable: "Pilot Table"
   layout: "Layout"
   monitorHint: "Built for directors and commentators to follow current stage, telemetry, feeds, and connection status at a glance."
   raceMonitor: "Race Monitor"
   currentClock: "Current Clock"
+  onboard: "Onboard"
+  timing: "Timing"
+  unmute: "Unmute"
+  mutedByDefault: "Muted by default"
   nextToStart: "Next To Start"
   massStart: "Mass Start"
   lapRaceNoSingleStarter: "All pilots share the start"

@@ -60,7 +60,7 @@ const abbreviateTickerName = (name) => {
 };
 
 
-export default function Scene1LiveStage({ hideStreams = false }) {
+export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = false }) {
   const { 
     pilots, stages, currentStageId, startTimes, realStartTimes, times, categories, 
     chromaKey, logoUrl, lapTimes, stagePilots,
@@ -948,7 +948,7 @@ export default function Scene1LiveStage({ hideStreams = false }) {
                     resolveStreamUrlOnMount={pilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(pilot) : null}
                   />
                 )}
-                {!hideStreams && (
+                {!hideStreams && !hideTelemetry && (
                   <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} trackLengthTotal={currentStage?.distance} compact raised />
                 )}
                 <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">

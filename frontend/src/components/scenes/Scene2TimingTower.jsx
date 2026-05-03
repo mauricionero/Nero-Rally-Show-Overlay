@@ -54,7 +54,7 @@ const abbreviateCompactName = (name) => {
     .join(' / ');
 };
 
-export default function Scene2TimingTower({ hideStreams = false }) {
+export default function Scene2TimingTower({ hideStreams = false, hideTelemetry = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
     chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate, pilotTelemetryByPilotId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds
@@ -716,7 +716,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               replayMountIdentity={pilotPlayback?.mode === 'replay' ? `${pilot.id}:${pilotPlayback?.baseUrl || ''}:${pilotPlayback?.effectiveStageId || ''}` : ''}
               resolveStreamUrlOnMount={pilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(pilot) : null}
             />
-            <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} trackLengthTotal={currentStage?.distance} compact raised />
+            {!hideTelemetry && (
+              <PilotTelemetryHud pilot={pilot} telemetry={pilotTelemetry} trackLengthTotal={currentStage?.distance} compact raised />
+            )}
           </div>
         )}
       </div>
@@ -936,7 +938,9 @@ export default function Scene2TimingTower({ hideStreams = false }) {
               replayMountIdentity={selectedPilotPlayback?.mode === 'replay' ? `${selectedPilot.id}:${selectedPilotPlayback?.baseUrl || ''}:${selectedPilotPlayback?.effectiveStageId || ''}` : ''}
               resolveStreamUrlOnMount={selectedPilotPlayback?.mode === 'replay' ? () => resolveReplayStreamUrlOnMount(selectedPilot) : null}
             />
-            <PilotTelemetryHud pilot={selectedPilot} telemetry={selectedPilotTelemetry} trackLengthTotal={currentStage?.distance} raised />
+            {!hideTelemetry && (
+              <PilotTelemetryHud pilot={selectedPilot} telemetry={selectedPilotTelemetry} trackLengthTotal={currentStage?.distance} raised />
+            )}
             {selectedPilotCurrentStage && (
               <CurrentStageBadge
                 stage={selectedPilotCurrentStage}

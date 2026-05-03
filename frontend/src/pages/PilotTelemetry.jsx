@@ -61,6 +61,7 @@ export default function PilotTelemetry() {
   } = useRallyWs();
   const [searchParams, setSearchParams] = useSearchParams();
   const [hideStream, setHideStream] = useState(false);
+  const [hideTelemetry, setHideTelemetry] = useState(false);
   const [isDownloadingLauncher, setIsDownloadingLauncher] = useState(false);
   const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
   const [stageRegistry, setStageRegistry] = useState({});
@@ -269,6 +270,17 @@ export default function PilotTelemetry() {
                   {t('pilotTelemetry.hideStream')}
                 </span>
               </label>
+              <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#18181B] px-3 py-2 text-sm text-white">
+                <Checkbox
+                  checked={hideTelemetry}
+                  onCheckedChange={setHideTelemetry}
+                  className="border-zinc-500 data-[state=checked]:bg-[#FF4500] data-[state=checked]:border-[#FF4500]"
+                />
+                <span className="flex flex-col items-start text-[10px] font-medium uppercase leading-none tracking-wide text-zinc-300">
+                  <span>{t('common.hide')}</span>
+                  <span>{t('pilotTelemetry.telemetry')}</span>
+                </span>
+              </label>
               <LanguageSelectorCompact className="h-9 border-zinc-700 bg-[#18181B] px-3" />
               <Button
                 type="button"
@@ -303,7 +315,7 @@ export default function PilotTelemetry() {
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,69,0,0.22),transparent_45%),linear-gradient(180deg,#111113_0%,#09090B_100%)]" />
                 )}
 
-                {selectedPilot && (
+                {selectedPilot && !hideTelemetry && (
                   <PilotTelemetryHud
                     pilot={selectedPilot}
                     telemetry={selectedTelemetry}
