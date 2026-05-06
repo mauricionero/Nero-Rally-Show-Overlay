@@ -1539,6 +1539,29 @@ export const RallyProvider = ({ children }) => {
     return current.lastProjectMessage;
   }, [wsChannelKey]);
 
+  const resetWsBootstrapState = useCallback(() => {
+    wsLastReceivedMarkerRef.current = null;
+    lastSnapshotEnsureAttemptRef.current = {
+      channelKey: '',
+      timestamp: 0
+    };
+    metaCurrentSessionRef.current = null;
+    setMetaCurrentSession(null);
+    setLatestSnapshotVersion(0);
+    setWsDataIsCurrent(false);
+    setWsHasSnapshotBootstrap(false);
+    setWsSyncState('idle');
+    setWsLatestSnapshotAt(null);
+    setWsLastSnapshotGeneratedAt(null);
+    setWsLastSnapshotReceivedAt(null);
+    setWsLastMessageAt(null);
+    setWsLastReceivedAt(null);
+    setWsLastSentAt(null);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(CURRENT_SESSION_META_STORAGE_KEY);
+    }
+  }, []);
+
   const removePendingSosAlert = useCallback((notificationId, fallback = {}) => {
     const normalizedNotificationId = String(notificationId || '').trim();
     const normalizedPilotId = normalizePilotId(fallback?.pilotId);
@@ -3674,7 +3697,21 @@ export const RallyProvider = ({ children }) => {
         if (normalizedData.stagePilots !== undefined && !shouldPreserveLocalTimingSection('stagePilots')) setStagePilots(normalizedData.stagePilots);
         if (normalizedData.pilots !== undefined) setPilots(normalizePilotArrayPayload(normalizedData.pilots));
         if (normalizedData.categories !== undefined) setCategories(normalizedData.categories);
-        if (normalizedData.stages !== undefined) setStages(normalizedData.stages);
+        if (normalizedData.stages !== undefined) {
+          setStages((prev) => {
+            if (!Array.isArray(normalizedData.stages)) {
+              return normalizedData.stages;
+            }
+
+            // Legacy payloads can still arrive with a single-stage array.
+            // Treat those as point updates so they do not replace a fresh snapshot list.
+            if (normalizedData.stages.length === 1 && normalizedData.stages[0]?.id) {
+              return mergeStagesById(prev, normalizedData.stages[0]);
+            }
+
+            return normalizedData.stages;
+          });
+        }
         if (normalizedData.times !== undefined && !shouldPreserveLocalTimingSection('times')) setTimes(normalizedData.times);
         if (normalizedData.arrivalTimes !== undefined && !shouldPreserveLocalTimingSection('arrivalTimes')) setArrivalTimes(normalizedData.arrivalTimes);
         if (normalizedData.startTimes !== undefined && !shouldPreserveLocalTimingSection('startTimes')) setStartTimes(normalizedData.startTimes);
@@ -4341,7 +4378,17 @@ export const RallyProvider = ({ children }) => {
         setPendingSosAlerts([]);
 
         wsProvider.current = getWebSocketProvider();
-        const existingSessionMeta = normalizeCurrentSessionMeta(metaCurrentSessionRef.current);
+        const resetBootstrapState = options.resetBootstrapState === true;
+        const existingSessionMeta = resetBootstrapState
+          ? null
+          : normalizeCurrentSessionMeta(metaCurrentSessionRef.current);
+        if (resetBootstrapState) {
+          resetWsBootstrapState();
+          if (wsProvider.current) {
+            wsProvider.current.lastProjectMarker = null;
+          }
+        }
+
         if (!existingSessionMeta || existingSessionMeta.channelKey !== channelKey) {
           const nextSessionMeta = normalizeCurrentSessionMeta({
             sessionId: existingSessionMeta?.sessionId || createSyncInstanceId(),
@@ -4356,7 +4403,9 @@ export const RallyProvider = ({ children }) => {
           }
         }
 
-        const sessionHistoryMarker = getCurrentSessionHistoryMarker(channelKey);
+        const sessionHistoryMarker = resetBootstrapState
+          ? null
+          : getCurrentSessionHistoryMarker(channelKey);
         const sessionHistoryAt = Number(sessionHistoryMarker?.timestamp || 0);
         if (isSyncDebugEnabled()) {
           console.log('[SessionMeta][connect]', {
@@ -4583,6 +4632,23 @@ export const RallyProvider = ({ children }) => {
             : (hasSnapshotBootstrap || hasReplayBootstrap)
         );
 
+        if (role === 'times' && isSyncDebugEnabled()) {
+          console.log('[Times][bootstrap][connect][summary]', {
+            channelKey,
+            resetBootstrapState,
+            shouldReadHistory,
+            requireSnapshotBootstrap,
+            bootstrapMode: bootstrapState.mode || 'none',
+            hasSnapshotBootstrap,
+            hasReplayBootstrap,
+            latestSnapshotAt,
+            latestSnapshotVersion: Number(bootstrapState.snapshotVersion || 0),
+            wsDataIsCurrent: !roleRequiresSnapshotBootstrap(role)
+              ? (!shouldReadHistory || !!bootstrapState.historyComplete)
+              : (hasSnapshotBootstrap || hasReplayBootstrap)
+          });
+        }
+
         if (role === 'times') {
           const sanitizedDirtySections = (Array.isArray(dirtyTimingSections) ? dirtyTimingSections : [])
             .filter((section) => TIMES_ROLE_TIMING_SECTION_SET.has(section));
@@ -4645,6 +4711,7 @@ export const RallyProvider = ({ children }) => {
     timingSectionTouchedAt,
     dirtySetupSections,
     getCurrentSessionHistoryMarker,
+    resetWsBootstrapState,
     lastTimesEditAt,
     lastTimesSyncAt,
     lastSetupSyncAt,
@@ -6897,6 +6964,7 @@ export const RallyProvider = ({ children }) => {
     lastTimesAckedEditAt,
     lineSyncResults,
     getSosDeliveryStatus,
+    resetWsBootstrapState,
     connectSyncChannel,
     disconnectSyncChannel,
     generateNewChannelKey,
@@ -6922,6 +6990,7 @@ export const RallyProvider = ({ children }) => {
     lineSyncResults,
     pendingSosAlerts,
     sosDeliveryByLine,
+    resetWsBootstrapState,
     requestTimingLineSync,
     setClientRole,
     wsChannelKey,

@@ -157,7 +157,7 @@ export default function Setup() {
       </div>
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
-        <div className="flex justify-between items-start mb-8">
+        <div className="flex justify-between items-start mb-2">
           <div className="flex items-center gap-3">
             <img
               src="/images/nrs-control-zone-logo.png"
@@ -278,7 +278,7 @@ export default function Setup() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-2">
           <TabsList className="bg-[#18181B] border border-zinc-800">
             <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">{t('tabs.pilots')}</TabsTrigger>
             <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">{t('tabs.categories')}</TabsTrigger>
@@ -292,55 +292,55 @@ export default function Setup() {
           </TabsList>
 
           {activeTab === 'pilots' && (
-            <TabsContent value="pilots">
+            <TabsContent value="pilots" className="mt-0">
               <PilotsTab hideStreams={hideStreams} wsChannelKey={wsChannelKey} />
             </TabsContent>
           )}
 
           {activeTab === 'categories' && (
-            <TabsContent value="categories">
+            <TabsContent value="categories" className="mt-0">
               <CategoriesTab />
             </TabsContent>
           )}
 
           {activeTab === 'therace' && (
-            <TabsContent value="therace">
+            <TabsContent value="therace" className="mt-0">
               <TheRaceTab />
             </TabsContent>
           )}
 
           {activeTab === 'times' && (
-            <TabsContent value="times">
+            <TabsContent value="times" className="mt-0">
               <TimesTab tableFirstColumnWidth={90} showDebugIds={displayIdsInSetup} />
             </TabsContent>
           )}
 
           {activeTab === 'streams' && (
-            <TabsContent value="streams">
+            <TabsContent value="streams" className="mt-0">
               <StreamsTab hideStreams={hideStreams} />
             </TabsContent>
           )}
 
           {activeTab === 'bulkload' && (
-            <TabsContent value="bulkload">
+            <TabsContent value="bulkload" className="mt-0">
               <BulkLoadTab />
             </TabsContent>
           )}
 
           {activeTab === 'config' && (
-            <TabsContent value="config">
+            <TabsContent value="config" className="mt-0">
               <ConfigTab />
             </TabsContent>
           )}
 
           {activeTab === 'liveSync' && (
-            <TabsContent value="liveSync">
+            <TabsContent value="liveSync" className="mt-0">
               <LiveSyncTab />
             </TabsContent>
           )}
 
           {activeTab === 'debug' && (
-            <TabsContent value="debug">
+            <TabsContent value="debug" className="mt-0">
               <DebugTab />
             </TabsContent>
           )}

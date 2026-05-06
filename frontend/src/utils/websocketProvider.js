@@ -14,7 +14,7 @@
  */
 
 import Ably from 'ably';
-import { isHeartbeatDebugEnabled, isTransportDebugEnabled } from './debugFlags.js';
+import { isHeartbeatDebugEnabled, isSyncDebugEnabled, isTransportDebugEnabled } from './debugFlags.js';
 import SyncConnectionService from './sync/SyncConnectionService.js';
 
 // Provider identifier (keeping for future extensibility)
@@ -163,10 +163,33 @@ const buildWebSocketLogPrefix = (direction, eventName, channelType, data, namesp
   return `[${namespace}][${emoji}][${eventName}][${getLogChannelLabel(channelType)}][${getLogMessageLabel(data)}]`;
 };
 
-const hasUsableSnapshotBootstrapData = (snapshotData = {}) => (
-  Array.isArray(snapshotData?.pilots) && snapshotData.pilots.length > 0
-  && Array.isArray(snapshotData?.stages) && snapshotData.stages.length > 0
+const getSnapshotBootstrapPayload = (snapshotData = {}) => (
+  snapshotData?.payload && typeof snapshotData.payload === 'object' && !Array.isArray(snapshotData.payload)
+    ? snapshotData.payload
+    : snapshotData
 );
+
+const hasUsableSnapshotBootstrapData = (snapshotData = {}) => {
+  const payload = getSnapshotBootstrapPayload(snapshotData);
+  return (
+    Array.isArray(payload?.pilots) && payload.pilots.length > 0
+    && Array.isArray(payload?.stages) && payload.stages.length > 0
+  );
+};
+
+const formatBootstrapLogDateTime = (value) => {
+  const timestamp = Number(value || 0);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return 'n/a';
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return 'n/a';
+  }
+
+  return date.toLocaleString();
+};
 
 /**
  * WebSocket Provider Class - Ably Implementation
@@ -433,18 +456,6 @@ class WebSocketProvider {
     const latestSnapshotData = latestSnapshotMessage ? getHistoryMessageData(latestSnapshotMessage) : {};
     const latestAvailableSnapshotTimestamp = latestSnapshotMessage ? this.getMessageTimestamp(latestSnapshotMessage) : 0;
     const latestAvailableSnapshotVersion = Number(latestSnapshotData?.snapshotVersion || 0);
-    const latestSnapshotHasCoreData = hasUsableSnapshotBootstrapData(latestSnapshotData);
-
-    if (shouldUseSnapshot && latestSnapshotMessage && !latestSnapshotHasCoreData) {
-      if (isTransportDebugEnabled()) {
-        console.log('[WebSocket][RX][bootstrap] Skipping empty snapshot bootstrap', {
-          snapshotTimestamp: latestAvailableSnapshotTimestamp,
-          snapshotVersion: latestAvailableSnapshotVersion
-        });
-      }
-    }
-
-    const shouldBootstrapFromSnapshot = shouldUseSnapshot && latestSnapshotHasCoreData;
 
     const loadPagedHistory = async (channel, stopWhen) => {
       const collected = [];
@@ -470,7 +481,7 @@ class WebSocketProvider {
       return collected;
     };
 
-    const snapshotCollected = shouldBootstrapFromSnapshot && snapshotChannel
+    const snapshotCollected = shouldUseSnapshot && snapshotChannel
       ? await loadPagedHistory(snapshotChannel, (collected) => {
           const snapshotItems = collected.filter((message) => this.isSnapshotBatchMessage(message));
           if (snapshotItems.length === 0) {
@@ -486,7 +497,7 @@ class WebSocketProvider {
         })
       : [];
 
-    const snapshotMessages = shouldBootstrapFromSnapshot
+    const allSnapshotMessages = shouldUseSnapshot
       ? snapshotCollected
         .filter((message) => this.isSnapshotBatchMessage(message))
         .sort((a, b) => {
@@ -500,9 +511,86 @@ class WebSocketProvider {
         })
       : [];
 
+    const latestSnapshotHistoryMessage = allSnapshotMessages.length > 0
+      ? allSnapshotMessages[allSnapshotMessages.length - 1]
+      : latestSnapshotMessage;
+    const freshestUsableSnapshotHistoryMessage = [...allSnapshotMessages]
+      .reverse()
+      .find((message) => hasUsableSnapshotBootstrapData(getHistoryMessageData(message))) || null;
+    const selectedSnapshotHistoryMessage = freshestUsableSnapshotHistoryMessage || null;
+    const selectedSnapshotDataForBootstrap = selectedSnapshotHistoryMessage
+      ? getHistoryMessageData(selectedSnapshotHistoryMessage)
+      : latestSnapshotData;
+    const selectedSnapshotHasCoreData = hasUsableSnapshotBootstrapData(selectedSnapshotDataForBootstrap);
+    const shouldBootstrapFromSnapshot = shouldUseSnapshot && selectedSnapshotHasCoreData;
+    const selectedSnapshotBootstrapId = String(selectedSnapshotDataForBootstrap?.snapshotId || '').trim() || null;
+    const latestSnapshotIdentity = Number(selectedSnapshotDataForBootstrap?.snapshotVersion || 0) > 0
+      ? { type: 'version', value: Number(selectedSnapshotDataForBootstrap.snapshotVersion) }
+      : String(selectedSnapshotDataForBootstrap?.snapshotId || '').trim()
+        ? { type: 'id', value: String(selectedSnapshotDataForBootstrap.snapshotId || '').trim() }
+        : selectedSnapshotHistoryMessage
+          ? { type: 'timestamp', value: this.getMessageTimestamp(selectedSnapshotHistoryMessage) }
+          : { type: 'none', value: null };
+    if (shouldUseSnapshot && latestSnapshotMessage && !selectedSnapshotHasCoreData) {
+      if (isTransportDebugEnabled()) {
+        console.log('[WebSocket][RX][bootstrap] Skipping empty snapshot bootstrap', {
+          snapshotTimestamp: latestAvailableSnapshotTimestamp,
+          snapshotVersion: latestAvailableSnapshotVersion
+        });
+      }
+    }
+    const snapshotMessages = allSnapshotMessages.filter((message) => {
+      const messageData = getHistoryMessageData(message);
+      if (latestSnapshotIdentity.type === 'version') {
+        return Number(messageData?.snapshotVersion || 0) === latestSnapshotIdentity.value;
+      }
+
+      if (latestSnapshotIdentity.type === 'id') {
+        return String(messageData?.snapshotId || '').trim() === latestSnapshotIdentity.value;
+      }
+
+      if (latestSnapshotIdentity.type === 'timestamp') {
+        return this.getMessageTimestamp(message) === latestSnapshotIdentity.value;
+      }
+
+      return false;
+    });
+
     const snapshotTimestamp = snapshotMessages.length > 0
       ? Math.max(...snapshotMessages.map((message) => this.getMessageTimestamp(message)))
       : latestAvailableSnapshotTimestamp;
+    const selectedSnapshotTypeLabel = String(selectedSnapshotDataForBootstrap?.snapshotKind || latestSnapshotIdentity.type || 'snapshot').trim();
+
+    if (isSyncDebugEnabled() && shouldUseSnapshot && latestSnapshotHistoryMessage) {
+      console.log(
+        `[Times][bootstrap][snapshot][candidate] Selected ${selectedSnapshotTypeLabel} snapshot at ${formatBootstrapLogDateTime(snapshotTimestamp)}`,
+        {
+          channelId: this.channelId,
+          snapshotType: selectedSnapshotTypeLabel,
+          willApply: snapshotMessages.length > 0,
+          reason: snapshotMessages.length > 0
+            ? 'usable_snapshot'
+            : (selectedSnapshotHasCoreData ? 'history_filtered_out' : 'missing_core_data'),
+          latestAvailableSnapshotTimestamp,
+          latestAvailableSnapshotVersion,
+          snapshotTimestamp,
+          snapshotVersion: Number(selectedSnapshotDataForBootstrap?.snapshotVersion || latestAvailableSnapshotVersion || 0),
+          selectedSnapshotIdentity: latestSnapshotIdentity,
+          selectedSnapshotId: selectedSnapshotBootstrapId,
+          latestSnapshotHasCoreData: hasUsableSnapshotBootstrapData(selectedSnapshotDataForBootstrap),
+          snapshotMessages: snapshotMessages.length,
+          content: selectedSnapshotDataForBootstrap
+        }
+      );
+    } else if (isSyncDebugEnabled() && shouldUseSnapshot && !latestSnapshotHistoryMessage) {
+      console.log('[Times][bootstrap][snapshot][candidate] No snapshot history found for this bootstrap attempt', {
+        channelId: this.channelId,
+        shouldUseSnapshot,
+        requireSnapshotBootstrap,
+        latestAvailableSnapshotTimestamp,
+        latestAvailableSnapshotVersion
+      });
+    }
 
     if (requireSnapshotBootstrap && snapshotMessages.length === 0 && shouldBootstrapFromSnapshot) {
       this.bootstrapState = {
@@ -573,8 +661,8 @@ class WebSocketProvider {
 
     const updateMessages = dataCollected.filter((message) => this.isUpdateHistoryMessage(message));
     const selectedSnapshotData = snapshotMessages.length > 0
-      ? getHistoryMessageData(snapshotMessages[0])
-      : latestSnapshotData;
+      ? getHistoryMessageData(snapshotMessages[snapshotMessages.length - 1])
+      : selectedSnapshotDataForBootstrap;
     const snapshotVersion = Number(selectedSnapshotData?.snapshotVersion || latestAvailableSnapshotVersion || 0);
     const selectedSnapshotId = String(selectedSnapshotData?.snapshotId || '').trim();
     const selectedSnapshotIdentity = snapshotVersion > 0
@@ -664,6 +752,42 @@ class WebSocketProvider {
         snapshotTimestamp,
         snapshotVersion
       });
+    }
+
+    if (isSyncDebugEnabled()) {
+      console.log('[WebSocket][RX][bootstrap][summary]', {
+        channelId: this.channelId,
+        shouldUseSnapshot,
+        shouldBootstrapFromSnapshot,
+        latestAvailableSnapshotTimestamp,
+        latestAvailableSnapshotVersion,
+        snapshotTimestamp,
+        snapshotVersion,
+        snapshotMessages: snapshotMessages.length,
+        replayMessages: messages.length,
+        priorityMessages: priorityMessages.length,
+        selectedSnapshotId: selectedSnapshotIdentity.type === 'id' ? selectedSnapshotIdentity.value : null,
+        selectedSnapshotVersion: selectedSnapshotIdentity.type === 'version' ? selectedSnapshotIdentity.value : null,
+        selectedSnapshotMode: selectedSnapshotIdentity.type
+      });
+    }
+
+    if (isSyncDebugEnabled() && snapshotMessages.length > 0) {
+      console.log(
+        `[Times][bootstrap][snapshot][applied] Applying ${selectedSnapshotTypeLabel} snapshot at ${formatBootstrapLogDateTime(snapshotTimestamp)}`,
+        {
+          channelId: this.channelId,
+          snapshotType: selectedSnapshotTypeLabel,
+          snapshotTimestamp,
+          snapshotVersion,
+          selectedSnapshotIdentity,
+          selectedSnapshotId,
+          snapshotMessages: snapshotMessages.length,
+          replayMessages: messages.length,
+          priorityMessages: priorityMessages.length,
+          content: selectedSnapshotData
+        }
+      );
     }
 
     return {
