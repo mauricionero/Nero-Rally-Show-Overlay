@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import { toast } from 'sonner';
 import { Download, Play, VideoOff, Wifi } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
+import { getResolvedBrandingLogoUrl } from '../utils/branding.js';
 import WsLedStrip from '../components/WsLedStrip.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import SosAlertStack from '../components/SosAlertStack.jsx';
@@ -31,6 +32,7 @@ import { shouldSuppressManualWsReconnect } from '../utils/wsAutoConnect.js';
 
 export default function Setup() {
   const { t } = useTranslation();
+  const resolvedLogoUrl = getResolvedBrandingLogoUrl();
   const [searchParams, setSearchParams] = useSearchParams();
   const { displayIdsInSetup } = useRally();
   const {
@@ -160,7 +162,7 @@ export default function Setup() {
         <div className="flex justify-between items-start mb-2">
           <div className="flex items-center gap-3">
             <img
-              src="/images/nrs-control-zone-logo.png"
+              src={resolvedLogoUrl}
               alt="NRS Control Zone"
               className="h-[72px] w-auto object-contain shrink-0"
             />
