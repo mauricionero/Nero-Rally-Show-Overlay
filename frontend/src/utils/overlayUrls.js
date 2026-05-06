@@ -1,5 +1,23 @@
 const getBasePath = () => process.env.PUBLIC_URL || '';
 
+export const resolvePublicAssetUrl = (assetUrl = '') => {
+  const trimmed = String(assetUrl || '').trim();
+
+  if (!trimmed) {
+    return '';
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('/')) {
+    return `${getBasePath()}${trimmed}`;
+  }
+
+  return trimmed;
+};
+
 export const getLocalOverlayUrl = () => {
   return `${window.location.origin}${getBasePath()}/overlay`;
 };

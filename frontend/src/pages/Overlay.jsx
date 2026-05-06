@@ -17,6 +17,7 @@ import WsLedStrip from '../components/WsLedStrip.jsx';
 import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
 import { DEFAULT_DEBUG_FLAGS, DEBUG_FLAGS_STORAGE_KEY, loadDebugFlags, saveDebugFlags } from '../utils/debugFlags.js';
 import { shouldSuppressManualWsReconnect } from '../utils/wsAutoConnect.js';
+import { resolvePublicAssetUrl } from '../utils/overlayUrls.js';
 
 // version constant
 import { VERSION } from '../config/version.js';
@@ -47,7 +48,7 @@ export default function Overlay() {
   const [hideStreams, setHideStreams] = useState(false);
   const [hideTelemetry, setHideTelemetry] = useState(false);
   const [overlayDebugFlags, setOverlayDebugFlags] = useState(() => loadDebugFlags());
-  const defaultTransitionImageUrl = '/transition-default.png';
+  const defaultTransitionImageUrl = resolvePublicAssetUrl('/transition-default.png');
   const [transitionType, setTransitionType] = useState(() => {
     try {
       return localStorage.getItem('rally_transition_type') || 'fade';
@@ -286,9 +287,11 @@ export default function Overlay() {
     { num: 4, name: t('scenes.pilotFocus') },
     { num: 5, name: t('scenes.monitor') }
   ];
-  const resolvedTransitionImageUrl = transitionImageUrl?.trim()
-    ? transitionImageUrl.trim()
-    : defaultTransitionImageUrl;
+  const resolvedTransitionImageUrl = resolvePublicAssetUrl(
+    transitionImageUrl?.trim()
+      ? transitionImageUrl.trim()
+      : defaultTransitionImageUrl
+  );
   const transitionOptions = [
     { value: 'none', label: t('header.transitionNone') },
     { value: 'fade', label: t('header.transitionFade') },

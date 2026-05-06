@@ -11,6 +11,7 @@ import { Upload, Download, Image, Globe, Trash2, Palette, Timer } from 'lucide-r
 import { LanguageSelector } from '../LanguageSelector.jsx';
 import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
+import { resolvePublicAssetUrl } from '../../utils/overlayUrls.js';
 import { isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
 
 export default function ConfigTab() {
@@ -73,7 +74,9 @@ export default function ConfigTab() {
   ), []);
   const resolvedLogoUrl = useMemo(() => getResolvedBrandingLogoUrl(logoUrl), [logoUrl]);
   const resolvedTransitionImageUrl = useMemo(() => (
-    (typeof transitionImageUrl === 'string' && transitionImageUrl.trim()) || '/transition-default.png'
+    resolvePublicAssetUrl(
+      (typeof transitionImageUrl === 'string' && transitionImageUrl.trim()) || '/transition-default.png'
+    )
   ), [transitionImageUrl]);
 
   const renderMediaIconValue = (iconValue) => {
