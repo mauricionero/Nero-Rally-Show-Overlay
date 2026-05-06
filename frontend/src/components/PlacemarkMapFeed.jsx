@@ -98,6 +98,12 @@ const getWeatherIconComponent = (weatherCode = 0) => {
 
 const getWeatherCacheKey = (lat, lng) => `${lat.toFixed(4)},${lng.toFixed(4)}`;
 
+const normalizeWeatherPoint = ({ temperature, weatherCode, windSpeed }) => ({
+  temperature: Number.isFinite(temperature) ? temperature : null,
+  weatherCode: Number.isFinite(weatherCode) ? weatherCode : 0,
+  windSpeed: Number.isFinite(windSpeed) ? windSpeed : null
+});
+
 const fetchWeatherSnapshot = async (lat, lng) => {
   const cacheKey = getWeatherCacheKey(lat, lng);
   const cached = weatherCache.get(cacheKey);
@@ -110,6 +116,7 @@ const fetchWeatherSnapshot = async (lat, lng) => {
   url.searchParams.set('latitude', String(lat));
   url.searchParams.set('longitude', String(lng));
   url.searchParams.set('current', 'temperature_2m,weather_code,wind_speed_10m');
+  url.searchParams.set('hourly', 'temperature_2m,weather_code,wind_speed_10m');
   url.searchParams.set('temperature_unit', 'celsius');
   url.searchParams.set('wind_speed_unit', 'kmh');
   url.searchParams.set('forecast_days', '1');
@@ -121,10 +128,22 @@ const fetchWeatherSnapshot = async (lat, lng) => {
 
   const data = await response.json();
   const current = data?.current;
+  const hourly = data?.hourly;
+  const hourlyTimes = Array.isArray(hourly?.time) ? hourly.time : [];
+  const currentTimeMs = current?.time ? Date.parse(current.time) : Date.now();
+  const nextHourIndex = hourlyTimes.findIndex((timeValue) => Date.parse(timeValue) > currentTimeMs);
+  const nextHour = nextHourIndex >= 0 ? normalizeWeatherPoint({
+    temperature: hourly?.temperature_2m?.[nextHourIndex],
+    weatherCode: hourly?.weather_code?.[nextHourIndex],
+    windSpeed: hourly?.wind_speed_10m?.[nextHourIndex]
+  }) : null;
   const normalized = current ? {
-    temperature: Number.isFinite(current.temperature_2m) ? current.temperature_2m : null,
-    weatherCode: Number.isFinite(current.weather_code) ? current.weather_code : 0,
-    windSpeed: Number.isFinite(current.wind_speed_10m) ? current.wind_speed_10m : null
+    ...normalizeWeatherPoint({
+      temperature: current.temperature_2m,
+      weatherCode: current.weather_code,
+      windSpeed: current.wind_speed_10m
+    }),
+    nextHour
   } : null;
 
   if (normalized) {
@@ -598,6 +617,140 @@ export function MapWeatherBadges({ placemark, className = '' }) {
           <span>{Math.round(weather.windSpeed)} km/h</span>
         </div>
       )}
+    </div>
+  );
+}
+
+const WeatherReadingRow = ({
+  label,
+  reading,
+  className = '',
+  compact = false
+}) => {
+  if (!reading) {
+    return null;
+  }
+
+  const WeatherIcon = getWeatherIconComponent(reading.weatherCode);
+
+  return (
+    <div className={`grid grid-cols-[3.2rem_minmax(0,1fr)] items-center gap-x-2 ${className}`.trim()}>
+      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+        {label}
+      </span>
+      <div className="flex items-center justify-end gap-1.5 rounded bg-black/75 px-2.5 py-1.5 text-white">
+        <WeatherIcon className={`${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} text-[#FACC15]`} />
+        {Number.isFinite(reading.temperature) && (
+          <span className={`${compact ? 'text-xs' : 'text-sm'} font-bold`}>
+            {Math.round(reading.temperature)}°C
+          </span>
+        )}
+        {Number.isFinite(reading.windSpeed) && (
+          <span className={`${compact ? 'text-[11px]' : 'text-xs'} font-bold text-zinc-300`}>
+            <Wind className="mr-1 inline h-3.5 w-3.5 text-zinc-400" />
+            {Math.round(reading.windSpeed)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export function PlacemarkWeatherNowNext({
+  placemark,
+  nowLabel = 'Now',
+  nextHourLabel = 'In 1h',
+  title = 'Weather',
+  className = '',
+  layout = 'stacked',
+  compact = false,
+  frame = 'card'
+}) {
+  const weather = usePlacemarkWeather(placemark);
+  const WeatherIcon = getWeatherIconComponent(weather?.weatherCode);
+
+  if (!weather) {
+    return null;
+  }
+
+  const sharedRows = (
+    <>
+      <WeatherReadingRow
+        label={nowLabel}
+        reading={weather}
+        compact={compact}
+      />
+      {weather.nextHour && (
+        <WeatherReadingRow
+          label={nextHourLabel}
+          reading={weather.nextHour}
+          compact={compact}
+        />
+      )}
+    </>
+  );
+
+  if (layout === 'split') {
+    if (frame === 'bare') {
+      return (
+        <div className={`flex items-start gap-3 ${className}`.trim()}>
+          <div className="flex flex-none items-center gap-2 text-zinc-300">
+            <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+              {title}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            {sharedRows}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`flex items-start gap-3 rounded border border-white/10 bg-black/35 px-2.5 py-2 ${className}`.trim()}>
+        <div className="flex flex-none items-center gap-2 text-zinc-300">
+          <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+            {title}
+          </span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          {sharedRows}
+        </div>
+      </div>
+    );
+  }
+
+  if (layout === 'inline') {
+    if (frame === 'bare') {
+      return (
+        <div className={`flex items-center gap-3 ${className}`.trim()}>
+          {sharedRows}
+        </div>
+      );
+    }
+
+    return (
+      <div className={`flex items-center gap-3 rounded border border-white/12 bg-black/85 px-3 py-2 backdrop-blur-sm ${className}`.trim()}>
+        {sharedRows}
+      </div>
+    );
+  }
+
+  if (frame === 'bare') {
+    return (
+      <div className={className}>
+        {sharedRows}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded border border-white/10 bg-black/35 px-2.5 py-2 ${className}`.trim()}>
+      <div className="space-y-2">
+        {sharedRows}
+      </div>
     </div>
   );
 }

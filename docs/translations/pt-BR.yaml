@@ -28,6 +28,8 @@ common:
   send: "Enviar"
   yes: "Sim"
   no: "Não"
+  now: "Agora"
+  in1h: "Em 1h"
 
 # ===========================================
 # CABEÇALHO / NAVEGAÇÃO
@@ -539,6 +541,8 @@ scene5:
   monitorHint: "Pensado para direcao e narracao acompanharem etapa atual, telemetria, feeds e conexao rapidamente."
   raceMonitor: "Monitor da Corrida"
   currentClock: "Relogio Atual"
+  replayClock: "Relogio do Replay"
+  stageClock: "Relógio da Etapa"
   onboard: "Onboard"
   timing: "Tempo"
   unmute: "Desmutar"
@@ -553,6 +557,12 @@ scene5:
   replayMode: "Evento em replay"
   noLiveFeed: "Sem Feed Ao Vivo"
   streamHidden: "Stream Oculto"
+  videoOsd: "OSD do Video"
+  osdNothing: "Nada"
+  osdReduced: "Reduzido"
+  osdMore: "Mais"
+  osdComplete: "Completo"
+  showTelemetry: "Mostrar Telemetria"
 
 # ===========================================
 # STATUS / ESTADOS

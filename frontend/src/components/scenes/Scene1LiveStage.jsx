@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
-import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
+import { PlacemarkMapFeed, MapWeatherBadges, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import CurrentStageBadge from '../CurrentStageBadge.jsx';
@@ -94,6 +94,9 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   const activeMedia = externalMedia.filter(m => m.url);
   const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [stages, mapPlacemarks]);
   const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
+  const currentStagePlacemark = useMemo(() => (
+    mapPlacemarks.find((placemark) => placemark.id === currentStage?.mapPlacemarkId) || null
+  ), [currentStage?.mapPlacemarkId, mapPlacemarks]);
   const isLapRace = isLapTimingStageType(currentStage?.type);
   const isSuperPrimeStage = currentStage?.type === SUPER_PRIME_STAGE_TYPE;
   const isSSStage = isSpecialStageType(currentStage?.type) && !isLapRace;
@@ -187,6 +190,9 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   const categoryById = useMemo(() => (
     new Map(categories.map((category) => [category.id, category]))
   ), [categories]);
+  const placemarkById = useMemo(() => (
+    new Map(mapPlacemarks.map((placemark) => [placemark.id, placemark]))
+  ), [mapPlacemarks]);
   const tickerPilotMetaById = useMemo(() => (
     new Map(pilots.map((pilot) => [
       pilot.id,
@@ -862,6 +868,9 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
             const pilotPlayback = pilotPlaybackById.get(pilot.id);
             const pilotTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, pilot.id);
             const pilotCurrentStage = stages.find((stage) => stage.id === String(pilot.currentStageId || '').trim()) || null;
+            const pilotCurrentStagePlacemark = pilotCurrentStage
+              ? placemarkById.get(pilotCurrentStage.mapPlacemarkId) || null
+              : null;
             const category = categoryById.get(pilot.categoryId);
             const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
             const alert = currentStageId ? alertByPilotId.has(pilot.id) : false;
@@ -929,10 +938,12 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                   <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ backgroundColor: category.color }} />
                 )}
                 {pilotCurrentStage && (
-                  <CurrentStageBadge
-                    stage={pilotCurrentStage}
-                    className="absolute top-3 left-1/2 -translate-x-1/2"
-                  />
+                  <div className="absolute top-3 left-3 z-20">
+                    <CurrentStageBadge
+                      stage={pilotCurrentStage}
+                      className="relative"
+                    />
+                  </div>
                 )}
                 {!hideStreams && positionBadge}
                 {!hideStreams && (
@@ -973,11 +984,33 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                           tooltipTitle={t('times.jumpStart')}
                           tooltipText={t('times.jumpStartTooltip')}
                         />
-                      )}
+                    )}
+                  </div>
+                  {pilotCurrentStage && pilotCurrentStagePlacemark && (
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CurrentStageBadge
+                          stage={pilotCurrentStage}
+                          className="relative"
+                        />
+                      </div>
+                      <div className="min-w-0 max-w-[58%]">
+                        <PlacemarkWeatherNowNext
+                          placemark={pilotCurrentStagePlacemark}
+                          title={t('common.weather')}
+                          nowLabel={t('common.now')}
+                          nextHourLabel={t('common.in1h')}
+                          layout="split"
+                          compact
+                          frame="bare"
+                          className="justify-end"
+                        />
+                      </div>
                     </div>
-                    {showLiveTime && (
-                      <LiveStartInformationValue
-                        as="p"
+                  )}
+                  {showLiveTime && (
+                    <LiveStartInformationValue
+                      as="p"
                         startTime={startTime}
                         finishTime={finishTime}
                         retired={retired}
@@ -1012,37 +1045,49 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
       {currentStage && currentStageId && (
         <div className="absolute" style={{ bottom: sceneInset, left: sceneInset, right: sceneInset }}>
           <div className="bg-black/95 backdrop-blur-sm border-l-4 border-[#FF4500] overflow-hidden mb-4">
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {isLapRace ? (
-                  isSuperPrimeStage
-                    ? <Flag className="w-6 h-6 text-orange-400" />
-                    : <RotateCcw className="w-6 h-6 text-[#FACC15]" />
-                ) : (
-                  <Flag className="w-6 h-6 text-[#FF4500]" />
-                )}
-                <div>
-                  <p className="text-zinc-400 text-sm uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>
+            <div className="p-4 flex items-start justify-between gap-6">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  {isLapRace ? (
+                    isSuperPrimeStage
+                      ? <Flag className="w-6 h-6 text-orange-400" />
+                      : <RotateCcw className="w-6 h-6 text-[#FACC15]" />
+                  ) : (
+                    <Flag className="w-6 h-6 text-[#FF4500]" />
+                  )}
+                  <p className="text-zinc-400 text-sm uppercase whitespace-nowrap" style={{ fontFamily: 'Inter, sans-serif' }}>
                     {isLapRace && !isSuperPrimeStage ? 'Race' : 'Current Stage'}
                   </p>
-                  <div className="mt-1 flex items-end gap-6">
-                    <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      {getStageDisplayName()}
+                  {currentStagePlacemark && (
+                    <PlacemarkWeatherNowNext
+                      placemark={currentStagePlacemark}
+                      title={t('scene5.weather')}
+                      nowLabel={t('common.now')}
+                      nextHourLabel={t('common.in1h')}
+                      layout="split"
+                      compact
+                      frame="bare"
+                      className="min-w-0"
+                    />
+                  )}
+                </div>
+                <div className="mt-1 flex items-end gap-6">
+                  <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {getStageDisplayName()}
+                  </p>
+                  {stageScheduleTime && (
+                    <p className="text-zinc-300 text-2xl font-bold font-mono leading-none">
+                      {stageScheduleTime}
                     </p>
-                    {stageScheduleTime && (
-                      <p className="text-zinc-300 text-2xl font-bold font-mono leading-none">
-                        {stageScheduleTime}
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
               {resolvedLogoUrl && (
                 <img 
                   src={resolvedLogoUrl} 
                   alt="Channel Logo" 
-                  className="h-16 max-w-[200px] object-contain"
-                />
+                className="h-16 max-w-[200px] object-contain"
+              />
               )}
             </div>
           </div>

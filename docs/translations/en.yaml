@@ -28,6 +28,8 @@ common:
   send: "Send"
   yes: "Yes"
   no: "No"
+  now: "Now"
+  in1h: "In 1h"
 
 # ===========================================
 # HEADER / NAVIGATION
@@ -532,6 +534,8 @@ scene5:
   monitorHint: "Built for directors and commentators to follow current stage, telemetry, feeds, and connection status at a glance."
   raceMonitor: "Race Monitor"
   currentClock: "Current Clock"
+  replayClock: "Replay Clock"
+  stageClock: "Stage Clock"
   onboard: "Onboard"
   timing: "Timing"
   unmute: "Unmute"
@@ -546,6 +550,12 @@ scene5:
   replayMode: "Replay event"
   noLiveFeed: "No Live Feed"
   streamHidden: "Stream Hidden"
+  videoOsd: "Video OSD"
+  osdNothing: "Nothing"
+  osdReduced: "Reduced"
+  osdMore: "More"
+  osdComplete: "Complete"
+  showTelemetry: "Show Telemetry"
 
 # ===========================================
 # STATUS / STATES

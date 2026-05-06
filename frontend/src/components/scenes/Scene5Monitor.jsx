@@ -6,21 +6,24 @@ import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import CurrentStageBadge from '../CurrentStageBadge.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
-import { MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
+import { PlacemarkMapFeed, MapWeatherBadges, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
 import StatusPill from '../StatusPill.jsx';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Clock3, Radio, UserRound, VideoOff } from 'lucide-react';
+import { Clock3, Map as MapIcon, Radio, UserRound, Video, VideoOff } from 'lucide-react';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
-import { formatClockFromDate } from '../../utils/timeFormat.js';
+import { buildStageMapFeeds } from '../../utils/feedOptions.js';
+import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { formatClockFromDate, formatDurationSeconds } from '../../utils/timeFormat.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import {
   getReferenceNow,
   getResolvedStageStartDateTime,
   getPilotStageTimingInfo,
+  getStartInformationFromValues,
   isJumpStartForStage,
   isPilotRetiredForStage
 } from '../../utils/rallyHelpers.js';
@@ -94,6 +97,18 @@ function ConnectionIndicator({ telemetry = {}, className = '' }) {
   );
 }
 
+function FeedStatusIcon({ pilotPlayback = null, className = '' }) {
+  if (!pilotPlayback?.hasVideo) {
+    return null;
+  }
+
+  const isReplay = pilotPlayback?.mode === 'replay';
+  const Icon = Video;
+  const iconColor = isReplay ? 'text-[#FACC15]' : 'text-[#38BDF8]';
+
+  return <Icon className={`h-4 w-4 flex-shrink-0 ${iconColor} ${className}`.trim()} />;
+}
+
 function MonitorInfoWidget({
   t,
   currentStage = null,
@@ -101,8 +116,35 @@ function MonitorInfoWidget({
   nextPilotToStart = null,
   isLapRace = false,
   sceneNow = new Date(),
-  eventIsOver = false
+  eventIsOver = false,
+  replayStartDate = '',
+  replayStartTime = '',
+  stageClockText = ''
 }) {
+  const replayClock = useMemo(() => {
+    if (!eventIsOver) {
+      return null;
+    }
+
+    const datePart = String(replayStartDate || '').trim();
+    const timePart = String(replayStartTime || '').trim();
+    if (!datePart || !timePart) {
+      return null;
+    }
+
+    const replayStart = new Date(`${datePart}T${timePart}:00`);
+    if (Number.isNaN(replayStart.getTime())) {
+      return null;
+    }
+
+    const elapsedMs = Math.max(0, sceneNow.getTime() - replayStart.getTime());
+    const totalSeconds = Math.floor(elapsedMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }, [eventIsOver, replayStartDate, replayStartTime, sceneNow]);
+
   return (
     <div className="relative min-h-0 h-full overflow-hidden rounded-2xl border border-[#FF4500]/35 bg-[radial-gradient(circle_at_top_left,rgba(255,69,0,0.14),transparent_34%),linear-gradient(180deg,rgba(10,10,12,0.96),rgba(6,6,8,0.92))] px-3 py-2 shadow-[0_14px_38px_rgba(0,0,0,0.4)]">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#FF4500]/70 to-transparent" />
@@ -127,24 +169,55 @@ function MonitorInfoWidget({
           </div>
 
           <div className="min-w-0 rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-            <div className="flex items-center gap-2 text-zinc-400">
-              <Radio className="h-4 w-4 text-[#38BDF8]" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em]">
-                {t('scene5.weather')}
-              </span>
-            </div>
-            <div className="mt-1 truncate text-sm font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              {currentStagePlacemark ? currentStagePlacemark.name : t('scene5.noWeatherSource')}
-            </div>
+            {currentStagePlacemark ? (
+              <PlacemarkWeatherNowNext
+                placemark={currentStagePlacemark}
+                title={t('scene5.weather')}
+                nowLabel={t('common.now')}
+                nextHourLabel={t('common.in1h')}
+                layout="split"
+                compact
+                frame="bare"
+                className="w-full"
+              />
+            ) : (
+              <div className="flex items-center gap-2 text-zinc-400">
+                <Radio className="h-4 w-4 text-[#38BDF8]" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em]">
+                  {t('scene5.weather')}
+                </span>
+                <div className="truncate text-sm font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {t('scene5.noWeatherSource')}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="flex-none rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-right shadow-inner shadow-black/30">
-            <div className="flex items-center justify-end gap-2 text-zinc-400">
-              <Clock3 className="h-4 w-4 text-[#FACC15]" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em]">{t('scene5.currentClock')}</span>
-            </div>
-            <div className="mt-1 text-xl font-bold text-white" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {formatMonitorClock(sceneNow)}
+          <div className="flex-none rounded-xl border border-white/10 bg-black/40 px-3 py-2 shadow-inner shadow-black/30">
+            <div className={`grid gap-3 ${stageClockText ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <div className="min-w-0 text-right">
+                <div className="flex items-center justify-end gap-2 text-zinc-400">
+                  <Clock3 className="h-4 w-4 text-[#FACC15]" />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em]">
+                    {eventIsOver ? t('scene5.replayClock') : t('scene5.currentClock')}
+                  </span>
+                </div>
+                <div className="mt-1 text-xl font-bold text-white" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  {eventIsOver ? (replayClock || '--:--:--') : formatMonitorClock(sceneNow)}
+                </div>
+              </div>
+
+              {stageClockText && (
+                <div className="min-w-0 border-l border-white/10 pl-3 text-right">
+                  <div className="flex items-center justify-end gap-2 text-zinc-400">
+                    <Clock3 className="h-3.5 w-3.5 text-[#38BDF8]" />
+                    <span className="text-[9px] font-bold uppercase tracking-[0.18em]">{t('scene5.stageClock')}</span>
+                  </div>
+                  <div className="mt-1 text-lg font-bold text-white" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {stageClockText}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -244,12 +317,13 @@ function PilotMonitorRow({
       <div className="min-w-0 border-r border-white/10 px-2 py-1.5">
         <div className="flex min-h-[4.5rem] flex-col justify-center">
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              <span className="mr-2 text-sm text-zinc-400">#{pilot.carNumber || '?'}</span>
-              {pilot.name}
-              {alert && (
-                <span className="ml-2 inline-flex">
-                  <StatusPill
+              <p className="truncate text-[14px] font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <span className="mr-2 text-sm text-zinc-400">#{pilot.carNumber || '?'}</span>
+                {pilot.name}
+                <FeedStatusIcon pilotPlayback={pilotPlayback} className="ml-2 inline-block align-middle" />
+                {alert && (
+                  <span className="ml-2 inline-flex">
+                    <StatusPill
                     variant="alert"
                     text={t('status.alert')}
                     className="text-[9px] px-1.5 py-0.5"
@@ -339,6 +413,7 @@ function PilotMonitorCard({
   stage = null,
   hideStreams = false,
   hideTelemetry = false,
+  videoOsdLevel = 'complete',
   resolveReplayStreamUrlOnMount = null,
   replayStageScheduleById = null,
   debugDate = '',
@@ -351,20 +426,25 @@ function PilotMonitorCard({
   const placeholderLabel = hideStreams
     ? t('scene5.streamHidden')
     : t('scene5.noLiveFeed');
+  const showOsd = videoOsdLevel !== 'nothing';
+  const showMoreOsd = videoOsdLevel === 'more' || videoOsdLevel === 'complete';
+  const showCompleteOsd = videoOsdLevel === 'complete';
 
   return (
     <div className="relative min-h-0 h-full overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,14,18,0.96),rgba(8,8,10,0.96))] shadow-[0_10px_24px_rgba(0,0,0,0.30)]">
-      {stage && (
+      {showCompleteOsd && stage && (
         <CurrentStageBadge
           stage={stage}
-          className="absolute left-1/2 top-1 z-20 -translate-x-1/2 border-white/10 bg-black/10 px-2 py-0.5 shadow-none"
+          className="absolute left-1/2 top-1 z-20 -translate-x-1/2 border-transparent bg-transparent px-2 py-0.5 shadow-none backdrop-blur-0 pointer-events-none"
           titleClassName="truncate text-[10px] font-bold uppercase text-white"
         />
       )}
 
-      <div className="absolute right-2 top-1 z-20">
-        <ConnectionIndicator telemetry={telemetry} />
-      </div>
+      {showCompleteOsd && (
+        <div className="absolute right-2 top-1 z-20">
+          <ConnectionIndicator telemetry={telemetry} />
+        </div>
+      )}
 
       <div className="relative min-h-0 h-full">
         {!hideStreams && hasVideo ? (
@@ -394,34 +474,74 @@ function PilotMonitorCard({
           <PilotTelemetryHud pilot={pilot} telemetry={telemetry} trackLengthTotal={stage?.distance} compact raised />
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/80 to-transparent px-3 pb-1.5 pt-6">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-lg font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 10px rgba(0,0,0,0.95)' }}>
-                <span className="mr-2 text-xs text-zinc-400">#{pilot.carNumber || '?'}</span>
-                {pilot.name}
-              </p>
-              {pilot.team && (
-                <p className="mt-1 truncate text-xs uppercase tracking-wide text-zinc-300">
-                  {pilot.team}
-                </p>
+        {showOsd && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/80 to-transparent px-3 pb-1.5 pt-6">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-white">
+                    #{pilot.startOrder || '?'}
+                  </span>
+                  <span className="rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-white">
+                    #{pilot.carNumber || '?'}
+                  </span>
+                  {showMoreOsd && (
+                    <p className="truncate text-lg font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 10px rgba(0,0,0,0.95)' }}>
+                      {pilot.name}
+                      <FeedStatusIcon pilotPlayback={pilotPlayback} className="ml-2 inline-block align-middle" />
+                    </p>
+                  )}
+                </div>
+                {showMoreOsd && pilot.team && (
+                  <p className="mt-1 truncate text-xs uppercase tracking-wide text-zinc-300">
+                    {pilot.team}
+                  </p>
+                )}
+              </div>
+
+              {showCompleteOsd && stage && (
+                <LiveStartInformationValue
+                  startTime={pilot.startTimeForStage || ''}
+                  finishTime={pilot.finishTimeForStage || ''}
+                  retired={pilot.retiredForStage === true}
+                  stageDate={stage.date}
+                  stageId={stage.id}
+                  replayStageScheduleById={replayStageScheduleById}
+                  debugDate={debugDate}
+                  className="text-right text-sm font-bold text-zinc-100"
+                  style={{ fontFamily: 'JetBrains Mono, monospace' }}
+                />
               )}
             </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-            {stage && (
-              <LiveStartInformationValue
-                startTime={pilot.startTimeForStage || ''}
-                finishTime={pilot.finishTimeForStage || ''}
-                retired={pilot.retiredForStage === true}
-                stageDate={stage.date}
-                stageId={stage.id}
-                replayStageScheduleById={replayStageScheduleById}
-                debugDate={debugDate}
-                className="text-right text-sm font-bold text-zinc-100"
-                style={{ fontFamily: 'JetBrains Mono, monospace' }}
-              />
+function MonitorMapCard({ mapFeed, pilotMarkers = [], t }) {
+  return (
+    <div className="relative min-h-0 h-full overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,14,18,0.96),rgba(8,8,10,0.96))] shadow-[0_10px_24px_rgba(0,0,0,0.30)]">
+      <PlacemarkMapFeed placemark={mapFeed} pilotMarkers={pilotMarkers} className="h-full w-full" />
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/80 to-transparent px-3 pb-1.5 pt-6">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <MapIcon className="h-4 w-4 flex-shrink-0 text-[#FF4500]" />
+              <p className="truncate text-lg font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 10px rgba(0,0,0,0.95)' }}>
+                {mapFeed.name}
+              </p>
+            </div>
+            {mapFeed.placemarkName && (
+              <p className="mt-1 truncate text-xs uppercase tracking-wide text-zinc-300">
+                {mapFeed.placemarkName}
+              </p>
             )}
           </div>
+
+          <MapWeatherBadges placemark={mapFeed} className="shrink-0" />
         </div>
       </div>
     </div>
@@ -454,12 +574,20 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
   const { t } = useTranslation();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const initialSceneConfig = useMemo(
-    () => loadSceneConfig(SCENE_5_CONFIG_KEY, { selectedDisplayMode: 'table', selectedLayout: '3x3', selectedPilotIds: null }),
+    () => loadSceneConfig(SCENE_5_CONFIG_KEY, {
+      selectedDisplayMode: 'table',
+      selectedLayout: '3x3',
+      selectedItemIds: null,
+      selectedVideoOsdLevel: 'complete',
+      showTelemetry: true
+    }),
     []
   );
   const [selectedDisplayMode, setSelectedDisplayMode] = useState(initialSceneConfig.selectedDisplayMode || 'table');
   const [selectedLayout, setSelectedLayout] = useState(initialSceneConfig.selectedLayout || '3x3');
-  const [selectedPilotIds, setSelectedPilotIds] = useState(initialSceneConfig.selectedPilotIds ?? null);
+  const [selectedItemIds, setSelectedItemIds] = useState(initialSceneConfig.selectedItemIds ?? initialSceneConfig.selectedPilotIds ?? null);
+  const [selectedVideoOsdLevel, setSelectedVideoOsdLevel] = useState(initialSceneConfig.selectedVideoOsdLevel || 'complete');
+  const [showTelemetry, setShowTelemetry] = useState(initialSceneConfig.showTelemetry ?? true);
 
   const layout = LAYOUTS.find((entry) => entry.id === selectedLayout) || LAYOUTS[LAYOUTS.length - 1];
   const tableDensityClass = layout.cols >= 3 ? 'text-[11px]' : 'text-[12px]';
@@ -468,16 +596,11 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
   const sceneNow = useMemo(() => getReferenceNow(debugDate, currentSecondAlignedTime), [currentSecondAlignedTime, debugDate]);
   const currentStage = stages.find((stage) => stage.id === currentStageId) || null;
   const isLapRace = isLapTimingStageType(currentStage?.type);
+  const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [mapPlacemarks, stages]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [categories, pilotTelemetryByPilotId, pilots]);
   const currentStagePlacemark = useMemo(() => (
     mapPlacemarks.find((placemark) => placemark.id === currentStage?.mapPlacemarkId) || null
   ), [currentStage?.mapPlacemarkId, mapPlacemarks]);
-
-  const replayPilotStageSignature = useMemo(() => (
-    pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
-  ), [pilots]);
-  const replaySnapshotKey = eventIsOver
-    ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
-    : '';
   const replayStageScheduleById = useMemo(() => (
     eventIsOver
       ? buildReplayStageScheduleMap({
@@ -489,6 +612,55 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
         })
       : null
   ), [eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, stages, times]);
+  const currentStageClockInfo = useMemo(() => {
+    if (!currentStage?.id) {
+      return null;
+    }
+
+    const stageStartDateTime = getResolvedStageStartDateTime({
+      stageId: currentStage.id,
+      stageDate: currentStage.date,
+      startTime: currentStage.startTime || '',
+      replayStageScheduleById
+    });
+
+    if (!(stageStartDateTime instanceof Date) || Number.isNaN(stageStartDateTime.getTime())) {
+      return null;
+    }
+
+    const stageStartInfo = getStartInformationFromValues({
+      startTime: currentStage.startTime || '',
+      stageDate: currentStage.date,
+      stageStartDateTime,
+      now: sceneNow,
+      decimals: timeDecimals,
+      includeLabel: false,
+      startLabel: t('status.start'),
+      retiredLabel: t('status.retired')
+    });
+
+    if (stageStartInfo?.status === 'not_started' && stageStartDateTime.getTime() > sceneNow.getTime()) {
+      return formatDurationSeconds(
+        (stageStartDateTime.getTime() - sceneNow.getTime()) / 1000,
+        timeDecimals,
+        {
+          fallback: '--:--:--',
+          showHoursIfNeeded: true,
+          padMinutes: true
+        }
+      );
+    }
+
+    return stageStartInfo?.timer || stageStartInfo?.text || '';
+  }, [currentStage?.date, currentStage?.id, currentStage?.startTime, replayStageScheduleById, sceneNow, t, timeDecimals]);
+  const effectiveHideTelemetry = hideTelemetry || !showTelemetry;
+
+  const replayPilotStageSignature = useMemo(() => (
+    pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
+  ), [pilots]);
+  const replaySnapshotKey = eventIsOver
+    ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
+    : '';
   const replayPlaybackSnapshotRef = useRef({ key: '', map: null });
   if (!eventIsOver) {
     replayPlaybackSnapshotRef.current = { key: '', map: null };
@@ -535,36 +707,46 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
   const displaySortedPilots = useMemo(() => (
     sortPilotsByDisplayOrder(pilots, categories)
   ), [categories, pilots]);
-  const maxDisplayedPilotCount = displaySortedPilots.length;
+  const displayItems = useMemo(() => ([
+    ...activeStageMaps,
+    ...displaySortedPilots.map((pilot) => ({
+      type: 'pilot',
+      value: `pilot:${pilot.id}`,
+      id: pilot.id,
+      pilot
+    }))
+  ]), [activeStageMaps, displaySortedPilots]);
+  const selectablePilotItems = useMemo(() => (
+    displayItems.filter((item) => item.type === 'pilot')
+  ), [displayItems]);
+  const totalSelectableItemCount = displayItems.length;
 
   React.useEffect(() => {
-    if (selectedPilotIds !== null) {
+    if (selectedItemIds !== null) {
       return;
     }
 
-    const defaultPilotIds = displaySortedPilots
-      .slice(0, maxDisplayedPilotCount)
-      .map((pilot) => pilot.id);
-    setSelectedPilotIds(defaultPilotIds);
-  }, [displaySortedPilots, maxDisplayedPilotCount, selectedPilotIds]);
+    const defaultItemIds = selectablePilotItems.map((item) => item.value);
+    setSelectedItemIds(defaultItemIds);
+  }, [selectablePilotItems, selectedItemIds]);
 
   React.useEffect(() => {
-    if (!Array.isArray(selectedPilotIds)) {
+    if (!Array.isArray(selectedItemIds)) {
       return;
     }
 
-    const orderedSelectedIds = displaySortedPilots
-      .map((pilot) => pilot.id)
-      .filter((pilotId) => selectedPilotIds.includes(pilotId))
-      .slice(0, maxDisplayedPilotCount);
+    const availableItemIds = new Set(displayItems.map((item) => item.value));
+    const orderedSelectedIds = displayItems
+      .map((item) => item.value)
+      .filter((itemId) => selectedItemIds.includes(itemId) && availableItemIds.has(itemId));
 
-    const currentSelectionKey = selectedPilotIds.join('|');
+    const currentSelectionKey = selectedItemIds.join('|');
     const nextSelectionKey = orderedSelectedIds.join('|');
 
     if (currentSelectionKey !== nextSelectionKey) {
-      setSelectedPilotIds(orderedSelectedIds);
+      setSelectedItemIds(orderedSelectedIds);
     }
-  }, [displaySortedPilots, maxDisplayedPilotCount, selectedPilotIds]);
+  }, [displayItems, selectedItemIds]);
 
   const monitorPilots = useMemo(() => {
     return displaySortedPilots.map((pilot) => {
@@ -605,13 +787,15 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
     });
   }, [currentStage, currentStageId, displaySortedPilots, getStreamConfig, isStageAlert, pilotPlaybackById, pilotTelemetryByPilotId, realStartTimes, replayStageScheduleById, retiredStages, sceneNow, stages, startTimes, t, timeDecimals, times]);
 
-  const selectedPilotIdSet = useMemo(() => new Set(Array.isArray(selectedPilotIds) ? selectedPilotIds : []), [selectedPilotIds]);
-  const selectedPilotCount = Array.isArray(selectedPilotIds) ? selectedPilotIds.length : displaySortedPilots.length;
-
+  const selectedItemIdSet = useMemo(() => new Set(Array.isArray(selectedItemIds) ? selectedItemIds : []), [selectedItemIds]);
+  const selectedItemCount = Array.isArray(selectedItemIds) ? selectedItemIds.length : selectablePilotItems.length;
+  const monitorPilotById = useMemo(() => new Map(monitorPilots.map((pilot) => [pilot.id, pilot])), [monitorPilots]);
   const visiblePilots = useMemo(() => (
-    monitorPilots
-      .filter((pilot) => !Array.isArray(selectedPilotIds) || selectedPilotIdSet.has(pilot.id))
-  ), [monitorPilots, selectedPilotIdSet, selectedPilotIds]);
+    monitorPilots.filter((pilot) => !Array.isArray(selectedItemIds) || selectedItemIdSet.has(`pilot:${pilot.id}`))
+  ), [monitorPilots, selectedItemIdSet, selectedItemIds]);
+  const visibleGridItems = useMemo(() => (
+    displayItems.filter((item) => !Array.isArray(selectedItemIds) || selectedItemIdSet.has(item.value))
+  ), [displayItems, selectedItemIdSet, selectedItemIds]);
 
   const nextPilotToStart = useMemo(() => {
     if (!currentStage || isLapRace) {
@@ -653,23 +837,23 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
     saveSceneConfig(SCENE_5_CONFIG_KEY, {
       selectedDisplayMode,
       selectedLayout,
-      selectedPilotIds
+      selectedItemIds,
+      selectedVideoOsdLevel,
+      showTelemetry
     });
-  }, [selectedDisplayMode, selectedLayout, selectedPilotIds]);
+  }, [selectedDisplayMode, selectedItemIds, selectedLayout, selectedVideoOsdLevel, showTelemetry]);
 
-  const togglePilotSelection = useCallback((pilotId) => {
-    setSelectedPilotIds((current) => {
+  const toggleItemSelection = useCallback((itemId) => {
+    setSelectedItemIds((current) => {
       const baseSelection = Array.isArray(current)
         ? current
-        : displaySortedPilots
-          .slice(0, maxDisplayedPilotCount)
-          .map((pilot) => pilot.id);
+        : selectablePilotItems.map((item) => item.value);
 
-      return baseSelection.includes(pilotId)
-        ? baseSelection.filter((value) => value !== pilotId)
-        : [...baseSelection, pilotId];
+      return baseSelection.includes(itemId)
+        ? baseSelection.filter((value) => value !== itemId)
+        : [...baseSelection, itemId];
     });
-  }, [displaySortedPilots, maxDisplayedPilotCount]);
+  }, [selectablePilotItems]);
 
   return (
     <div className="relative h-full w-full" data-testid="scene-5-monitor">
@@ -706,35 +890,85 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
             </div>
           )}
 
-          <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-zinc-400">
-            <p className="font-bold uppercase tracking-[0.18em] text-zinc-300">{t('scene5.monitor')}</p>
-            <p className="mt-2">{t('scene5.monitorHint')}</p>
+          <div>
+            <Label className="mb-2 block text-xs uppercase text-white">{t('scene5.videoOsd')}</Label>
+            <Select value={selectedVideoOsdLevel} onValueChange={setSelectedVideoOsdLevel}>
+              <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nothing">{t('scene5.osdNothing')}</SelectItem>
+                <SelectItem value="reduced">{t('scene5.osdReduced')}</SelectItem>
+                <SelectItem value="more">{t('scene5.osdMore')}</SelectItem>
+                <SelectItem value="complete">{t('scene5.osdComplete')}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white">
+            <Checkbox
+              checked={showTelemetry}
+              onCheckedChange={(checked) => setShowTelemetry(checked === true)}
+            />
+            <span>{t('scene5.showTelemetry')}</span>
+          </label>
 
           <div>
             <Label className="mb-2 block text-xs uppercase text-white">
-              {t('scene1.selectItems')} ({selectedPilotCount}/{displaySortedPilots.length})
+              {t('scene1.selectItems')} ({selectedItemCount}/{totalSelectableItemCount})
             </Label>
-            <div className="max-h-[28rem] space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-3">
-              {displaySortedPilots.map((pilot) => {
-                const checked = selectedPilotIdSet.has(pilot.id);
+            <div className="space-y-2 rounded-xl border border-white/10 bg-black/25 p-3">
+              {activeStageMaps.length > 0 && (
+                <div className="pb-2">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">{t('config.stageMaps')}</p>
+                  <div className="space-y-2">
+                    {activeStageMaps.map((feed) => {
+                      const checked = selectedItemIdSet.has(feed.value);
+                      return (
+                        <label key={feed.value} className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggleItemSelection(feed.value)}
+                          />
+                          <MapIcon className="h-3.5 w-3.5 shrink-0 text-[#FF4500]" />
+                          <span className="truncate uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                            {feed.name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">{t('tabs.pilots')}</p>
+                <div className="space-y-2">
+                  {displaySortedPilots.map((pilot) => {
+                    const itemId = `pilot:${pilot.id}`;
+                    const checked = selectedItemIdSet.has(itemId);
+                    const playback = pilotPlaybackById.get(pilot.id);
 
-                return (
-                  <label key={pilot.id} className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => togglePilotSelection(pilot.id)}
-                    />
-                    <span className="truncate uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      #{pilot.carNumber || '?'} {pilot.name}
-                    </span>
-                  </label>
-                );
-              })}
+                    return (
+                      <label key={pilot.id} className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleItemSelection(itemId)}
+                        />
+                        <span className="flex min-w-0 flex-1 items-center justify-between gap-2 uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          <span className="truncate">
+                            #{pilot.carNumber || '?'} {pilot.name}
+                          </span>
+                          <FeedStatusIcon pilotPlayback={playback} />
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </LeftControls>
+          </div>
+        </LeftControls>
 
       <div className="flex h-full w-full min-h-0 flex-col p-2 pt-3">
         <div className="mb-1 flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/35 px-4 py-1.5">
@@ -757,12 +991,15 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
           <MonitorInfoWidget
             t={t}
             currentStage={currentStage}
-            currentStagePlacemark={currentStagePlacemark}
-            nextPilotToStart={nextPilotToStart}
-            isLapRace={isLapRace}
-            sceneNow={sceneNow}
-            eventIsOver={eventIsOver}
-          />
+          currentStagePlacemark={currentStagePlacemark}
+          nextPilotToStart={nextPilotToStart}
+          isLapRace={isLapRace}
+          sceneNow={sceneNow}
+          eventIsOver={eventIsOver}
+          replayStartDate={eventReplayStartDate}
+          replayStartTime={eventReplayStartTime}
+          stageClockText={currentStageClockInfo}
+        />
         </div>
 
         <div className={`flex-1 min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-black/65 ${isTableMode ? tableDensityClass : ''}`}>
@@ -774,7 +1011,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
                     {t('scene5.table')}
                   </p>
                   <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-                    {selectedPilotCount}/{displaySortedPilots.length}
+                    {visiblePilots.length}/{displaySortedPilots.length}
                   </p>
                 </div>
                 <div className="sticky top-0 z-20 grid grid-cols-[12rem_minmax(0,1.45fr)_minmax(0,1.45fr)_minmax(0,14rem)] gap-2 border-b border-white/10 bg-[#111113]/95 px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-400 backdrop-blur-sm">
@@ -797,7 +1034,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
                       jumpStart={pilot.jumpStart}
                       retired={pilot.retired}
                       hideStreams={hideStreams}
-                      hideTelemetry={hideTelemetry}
+                      hideTelemetry={effectiveHideTelemetry}
                       resolveReplayStreamUrlOnMount={resolveReplayStreamUrlOnMount}
                       replayStageScheduleById={replayStageScheduleById}
                       debugDate={debugDate}
@@ -813,7 +1050,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
                     {t('scene5.grid')}
                   </p>
                   <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-                    {selectedPilotCount}/{displaySortedPilots.length}
+                    {Math.min(visibleGridItems.length, layout.slots)}/{totalSelectableItemCount}
                   </p>
                 </div>
                 <div
@@ -823,22 +1060,41 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
                     gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`
                   }}
                 >
-                  {visiblePilots.slice(0, layout.slots).map((pilot) => (
-                    <PilotMonitorCard
-                      key={pilot.id}
-                      pilot={pilot}
-                      pilotPlayback={pilot.pilotPlayback}
-                      telemetry={pilot.telemetry}
-                      stage={pilot.effectiveStage}
-                      hideStreams={hideStreams}
-                      hideTelemetry={hideTelemetry}
-                      resolveReplayStreamUrlOnMount={resolveReplayStreamUrlOnMount}
-                      replayStageScheduleById={replayStageScheduleById}
-                      debugDate={debugDate}
-                      t={t}
-                    />
-                  ))}
-                  {Array.from({ length: Math.max(0, layout.slots - visiblePilots.slice(0, layout.slots).length) }).map((_, index) => (
+                  {visibleGridItems.slice(0, layout.slots).map((item) => {
+                    if (item.type === 'stage-map') {
+                      return (
+                        <MonitorMapCard
+                          key={item.value}
+                          mapFeed={item}
+                          pilotMarkers={pilotMapMarkers}
+                          t={t}
+                        />
+                      );
+                    }
+
+                    const pilot = monitorPilotById.get(item.id);
+                    if (!pilot) {
+                      return null;
+                    }
+
+                    return (
+                      <PilotMonitorCard
+                        key={pilot.id}
+                        pilot={pilot}
+                        pilotPlayback={pilot.pilotPlayback}
+                        telemetry={pilot.telemetry}
+                        stage={pilot.effectiveStage}
+                        hideStreams={hideStreams}
+                        hideTelemetry={effectiveHideTelemetry}
+                        videoOsdLevel={selectedVideoOsdLevel}
+                        resolveReplayStreamUrlOnMount={resolveReplayStreamUrlOnMount}
+                        replayStageScheduleById={replayStageScheduleById}
+                        debugDate={debugDate}
+                        t={t}
+                      />
+                    );
+                  })}
+                  {Array.from({ length: Math.max(0, layout.slots - visibleGridItems.slice(0, layout.slots).length) }).map((_, index) => (
                     <div
                       key={`empty-${index}`}
                       className="rounded-xl border border-dashed border-white/10 bg-black/20"
