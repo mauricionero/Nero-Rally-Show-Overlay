@@ -26,6 +26,7 @@ common:
   send: "Send"
   yes: "Yes"
   no: "No"
+  hide: "Hide"
 
 # ===========================================
 # HEADER / NAVIGATION

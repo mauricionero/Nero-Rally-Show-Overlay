@@ -26,6 +26,7 @@ common:
   send: "Enviar"
   yes: "Sim"
   no: "Não"
+  hide: "Ocultar"
 
 # ===========================================
 # CABEÇALHO / NAVEGAÇÃO

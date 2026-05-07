@@ -5397,6 +5397,30 @@ export const RallyProvider = ({ children }) => {
     }));
   }
 
+  const publishPilotUpdate = useCallback(async (pilotId, updates = {}, options = {}) => {
+    const normalizedPilotId = normalizePilotId(pilotId);
+    const safeUpdates = isPlainObject(updates) ? { ...updates } : {};
+
+    if (!normalizedPilotId || Object.keys(safeUpdates).length === 0) {
+      return false;
+    }
+
+    updatePilot(normalizedPilotId, safeUpdates);
+
+    if (!wsProvider.current?.isConnected) {
+      return false;
+    }
+
+    return !!(await enqueueChangePackages({
+      pilots: {
+        [normalizedPilotId]: safeUpdates
+      }
+    }, {
+      packageType: 'delta',
+      ...options
+    }));
+  }, [enqueueChangePackages, updatePilot]);
+
   const setPilotCurrentStage = useCallback((pilotId, stageId) => {
     const normalizedPilotId = normalizePilotId(pilotId);
     if (!normalizedPilotId) {
@@ -6688,6 +6712,7 @@ export const RallyProvider = ({ children }) => {
     syncPilotCurrentStageFromTelemetry,
     getPilotCurrentStage,
     setPilotTelemetry,
+    publishPilotUpdate,
     getPilotTelemetry,
     getPersistedPilotTelemetry,
     deletePilot,
@@ -6721,6 +6746,8 @@ export const RallyProvider = ({ children }) => {
     isRetiredStage,
     setStageAlert,
     isStageAlert,
+    setStageSos,
+    isStageSos,
     // Lap time functions
     setLapTime,
     removeLapTimeColumn,
@@ -6785,6 +6812,7 @@ export const RallyProvider = ({ children }) => {
     syncPilotCurrentStageFromTelemetry,
     getPilotCurrentStage,
     setPilotTelemetry,
+    publishPilotUpdate,
     getPilotTelemetry,
     getPersistedPilotTelemetry,
     deletePilot,
@@ -6824,6 +6852,7 @@ export const RallyProvider = ({ children }) => {
     syncPilotCurrentStageFromTelemetry,
     getPilotCurrentStage,
     setPilotTelemetry,
+    publishPilotUpdate,
     getPilotTelemetry,
     getPersistedPilotTelemetry,
     deletePilot,

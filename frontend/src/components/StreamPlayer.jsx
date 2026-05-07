@@ -307,7 +307,7 @@ export const StreamPlayer = ({
         src={iframeSrc}
         className="w-full h-full"
         frameBorder="0"
-        allow="autoplay; fullscreen; picture-in-picture"
+        allow="autoplay; fullscreen; picture-in-picture; camera; microphone"
         title={name}
         style={{ pointerEvents: shouldAllowPointerEvents ? 'auto' : 'none' }}
         onLoad={() => {
