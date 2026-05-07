@@ -162,7 +162,6 @@ export const StreamPlayer = ({
       const url = new URL(effectiveStreamUrl);
 
       if (supportsVdoIframeApi) {
-        url.searchParams.set('cleanoutput', '1');
         url.searchParams.set('cleanviewer', '1');
 
         if (forceFullscreen) {
@@ -170,8 +169,7 @@ export const StreamPlayer = ({
         }
 
         if (!showControls) {
-          url.searchParams.set('nomouseevents', '1');
-          url.searchParams.set('nocursor', '1');
+          // Keep the iframe interactive for VDO push/view pages when requested by the caller.
         }
       }
 
@@ -307,7 +305,7 @@ export const StreamPlayer = ({
         src={iframeSrc}
         className="w-full h-full"
         frameBorder="0"
-        allow="autoplay; fullscreen; picture-in-picture"
+        allow="autoplay; fullscreen; picture-in-picture; camera; microphone"
         title={name}
         style={{ pointerEvents: shouldAllowPointerEvents ? 'auto' : 'none' }}
         onLoad={() => {

@@ -51,3 +51,42 @@ export const getWebSocketPilotTelemetryUrl = (channelKey, pilotId = '') => {
 
   return url.toString();
 };
+
+export const normalizeVdoStreamKey = (pilotId = '') => (
+  String(pilotId || '')
+    .trim()
+    .replace(/[^a-z0-9]/gi, '')
+    .toLowerCase()
+);
+
+export const getPilotVdoPushUrl = (pilotId = '') => {
+  const streamKey = normalizeVdoStreamKey(pilotId);
+  if (!streamKey) {
+    return '';
+  }
+
+  const url = new URL('https://vdo.ninja/');
+  url.searchParams.set('push', streamKey);
+  url.searchParams.set('webcam', '1');
+  url.searchParams.set('autostart', '1');
+  url.searchParams.set('transparent', '1');
+  return url.toString();
+};
+
+export const getPilotVdoViewUrl = (pilotId = '') => {
+  const streamKey = normalizeVdoStreamKey(pilotId);
+  if (!streamKey) {
+    return '';
+  }
+
+  const url = new URL('https://vdo.ninja/');
+  url.searchParams.set('view', streamKey);
+  url.searchParams.set('autoplay', '1');
+  url.searchParams.set('playsinline', '1');
+  url.searchParams.set('cleanoutput', '1');
+  url.searchParams.set('cleanviewer', '1');
+  url.searchParams.set('cover', '2');
+  url.searchParams.set('nomouseevents', '1');
+  url.searchParams.set('nocursor', '1');
+  return url.toString();
+};

@@ -26,6 +26,7 @@ common:
   send: "Send"
   yes: "Yes"
   no: "No"
+  hide: "Hide"
 
 # ===========================================
 # HEADER / NAVIGATION
@@ -164,6 +165,12 @@ theRace:
     lapRace: "Lap Race"
     liaison: "Liaison"
     servicePark: "Service Park"
+  raceTypeConfig: "Race Type"
+  raceTypeConfigHint: "Select the race modes that apply to this event."
+  realLifeRace: "Real Life Race"
+  realLifeRaceHint: "Use this when the event happens on real roads or tracks."
+  virtualDirtRally2: "Virtual (Dirt Rally 2)"
+  virtualDirtRally2Hint: "Use this when the event is driven by Dirt Rally 2 telemetry."
   lapRaceTotalTimeModes:
     cumulative: "Cumulative Time"
     bestLap: "Best Lap"

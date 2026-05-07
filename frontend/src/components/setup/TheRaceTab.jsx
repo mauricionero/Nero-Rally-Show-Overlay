@@ -4,8 +4,9 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Switch } from '../ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
@@ -95,6 +96,8 @@ export default function TheRaceTab() {
     stages,
     mapPlacemarks,
     currentStageId,
+    raceTypes,
+    setRaceTypes,
     displayIdsInSetup,
     addStage,
     updateStage,
@@ -297,6 +300,13 @@ export default function TheRaceTab() {
     }
   };
 
+  const handleRaceTypeChange = (field, checked) => {
+    setRaceTypes((prev) => ({
+      ...(prev || {}),
+      [field]: checked === true
+    }));
+  };
+
   const handleStageGameChange = (setter, game) => {
     setter((prev) => ({
       ...prev,
@@ -371,6 +381,41 @@ export default function TheRaceTab() {
       </Card>
 
       <CurrentStageCard showDebugIds={displayIdsInSetup} />
+
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            {t('theRace.raceTypeConfig')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">
+            {t('theRace.raceTypeConfigHint')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2">
+          <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-[#09090B] px-4 py-3">
+            <Switch
+              checked={raceTypes?.realLifeRace === true}
+              onCheckedChange={(checked) => handleRaceTypeChange('realLifeRace', checked)}
+              className="data-[state=checked]:bg-[#FF4500] data-[state=unchecked]:bg-zinc-700"
+            />
+            <div className="space-y-0.5">
+              <p className="text-sm text-white">{t('theRace.realLifeRace')}</p>
+              <p className="text-xs leading-tight text-zinc-500">{t('theRace.realLifeRaceHint')}</p>
+            </div>
+          </label>
+          <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-[#09090B] px-4 py-3">
+            <Switch
+              checked={raceTypes?.virtualDirtRally2 === true}
+              onCheckedChange={(checked) => handleRaceTypeChange('virtualDirtRally2', checked)}
+              className="data-[state=checked]:bg-[#FF4500] data-[state=unchecked]:bg-zinc-700"
+            />
+            <div className="space-y-0.5">
+              <p className="text-sm text-white">{t('theRace.virtualDirtRally2')}</p>
+              <p className="text-xs leading-tight text-zinc-500">{t('theRace.virtualDirtRally2Hint')}</p>
+            </div>
+          </label>
+        </CardContent>
+      </Card>
 
       {/* Add New Stage */}
       <Card className="bg-[#18181B] border-zinc-800">
