@@ -69,9 +69,7 @@ export const getPilotVdoPushUrl = (pilotId = '') => {
   url.searchParams.set('push', streamKey);
   url.searchParams.set('webcam', '1');
   url.searchParams.set('autostart', '1');
-  url.searchParams.set('cleanoutput', '1');
   url.searchParams.set('transparent', '1');
-  url.searchParams.set('muted', '1');
   return url.toString();
 };
 

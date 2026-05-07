@@ -166,6 +166,12 @@ theRace:
     lapRace: "Corrida de Voltas"
     liaison: "Deslocamento"
     servicePark: "Parque de Serviço"
+  raceTypeConfig: "Tipo de Corrida"
+  raceTypeConfigHint: "Selecione os modos de corrida que se aplicam a este evento."
+  realLifeRace: "Corrida Real"
+  realLifeRaceHint: "Use quando o evento acontece em vias ou pistas reais."
+  virtualDirtRally2: "Virtual (Dirt Rally 2)"
+  virtualDirtRally2Hint: "Use quando o evento é dirigido por telemetria do Dirt Rally 2."
   lapRaceTotalTimeModes:
     cumulative: "Tempo Acumulado"
     bestLap: "Melhor Volta"

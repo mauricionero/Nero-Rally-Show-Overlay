@@ -56,8 +56,9 @@ const SOS_HOLD_DURATION_MS = 1000;
 function HoldToActivateButton({
   disabled = false,
   onActivate,
-  title,
+  mainLabel = 'SOS',
   hint,
+  mainLabelClassName = '',
   className = ''
 }) {
   const [holdProgress, setHoldProgress] = useState(0);
@@ -134,28 +135,35 @@ function HoldToActivateButton({
   const progressAngle = Math.round(holdProgress * 360);
 
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onPointerDown={startHold}
-      onPointerUp={cancelHold}
-      onPointerLeave={cancelHold}
-      onPointerCancel={cancelHold}
-      className={`relative flex min-h-[8rem] w-full touch-none select-none items-center justify-center overflow-hidden rounded-full border border-red-500/60 px-4 py-5 text-center transition-transform duration-150 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 ${className}`.trim()}
-      style={{
-        background: `conic-gradient(rgb(255,20,20) ${progressAngle}deg, rgba(187, 20, 20, 0.61) ${progressAngle}deg 360deg)`
-      }}
-    >
-      <span className="absolute inset-[12px] rounded-full bg-[#170606] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" />
-      <span className="relative z-10 flex flex-col items-center gap-0">
-        <span className="text-5xl font-black uppercase tracking-[0.2em] text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-          SOS
+    <>
+      <button
+        type="button"
+        disabled={disabled}
+        onPointerDown={startHold}
+        onPointerUp={cancelHold}
+        onPointerLeave={cancelHold}
+        onPointerCancel={cancelHold}
+        className={`relative flex min-h-[8rem] w-full touch-none select-none items-center justify-center overflow-hidden rounded-full border border-red-500/60 px-4 py-5 text-center transition-transform duration-150 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 ${className}`.trim()}
+        style={{
+          background: `conic-gradient(rgb(255,20,20) ${progressAngle}deg, rgba(187, 20, 20, 0.61) ${progressAngle}deg 360deg)`
+        }}
+      >
+        <span className="absolute inset-[12px] rounded-full bg-[#170606] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" />
+        <span className="relative z-10 flex flex-col items-center gap-0">
+          <span
+            className={`whitespace-pre-line text-5xl font-black uppercase tracking-[0.2em] text-white leading-[0.9] ${mainLabelClassName}`.trim()}
+            style={{ fontFamily: 'Barlow Condensed, sans-serif' }}
+          >
+            {mainLabel}
+          </span>
         </span>
-        <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-red-100/90">
-          {title}
+      </button>
+      {hint ? (
+        <span className="mt-2 text-center text-[10px] font-bold uppercase tracking-[0.24em] text-red-100/90">
+          {hint}
         </span>
-      </span>
-    </button>
+      ) : null}
+    </>
   );
 }
 
@@ -165,8 +173,11 @@ export default function PilotTelemetry() {
     pilots,
     stages,
     currentStageId,
+    raceTypes,
     pilotTelemetryByPilotId,
+    isStageSos,
     setStageSos,
+    getSosDeliveryStatus,
     publishPilotUpdate
   } = useRally();
   const {
@@ -186,6 +197,12 @@ export default function PilotTelemetry() {
   const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
   const [stageRegistry, setStageRegistry] = useState({});
   const previousPilotStreamUrlRef = useRef('');
+  const [cameraStreamIsActive, setCameraStreamIsActive] = useState(false);
+  const cameraAutoplayTriggeredRef = useRef(false);
+  const shouldAutoplayCameraRef = useRef(
+    typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('autoplay') === '1'
+  );
   const pageNow = useSecondAlignedClock();
   const wsActivity = useWsActivityCounters({
     enabled: true,
@@ -205,6 +222,11 @@ export default function PilotTelemetry() {
   ), [selectedPilotStageId, stages]);
 
   const selectedTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, selectedPilot?.id);
+  const selectedPilotSosDelivery = useMemo(() => (
+    selectedPilot?.id && selectedPilotStage?.id
+      ? getSosDeliveryStatus(selectedPilot.id, selectedPilotStage.id)
+      : null
+  ), [getSosDeliveryStatus, selectedPilot?.id, selectedPilotStage?.id]);
   const pageUrl = useMemo(() => (
     queryPilotId
       ? getWebSocketPilotTelemetryUrl(resolvedChannelKey, queryPilotId)
@@ -225,9 +247,18 @@ export default function PilotTelemetry() {
   const vdoStreamKey = useMemo(() => normalizeVdoStreamKey(selectedPilot?.id), [selectedPilot?.id]);
   const vdoPushUrl = useMemo(() => getPilotVdoPushUrl(selectedPilot?.id), [selectedPilot?.id]);
   const vdoViewUrl = useMemo(() => getPilotVdoViewUrl(selectedPilot?.id), [selectedPilot?.id]);
-  const cameraStreamIsActive = Boolean(selectedPilot?.streamUrl && selectedPilot.streamUrl === vdoViewUrl);
   const activeCameraUrl = cameraStreamIsActive ? vdoPushUrl : (selectedPilot?.streamUrl || '');
   const currentStageTitle = selectedPilotStage?.name || '';
+  const sosIsActive = Boolean(
+    selectedPilot?.id
+    && selectedPilotStage?.id
+    && (
+      selectedPilotSosDelivery
+      || isStageSos(selectedPilot.id, selectedPilotStage.id)
+    )
+  );
+  const showApkDownloadCard = raceTypes?.realLifeRace === true;
+  const showStandaloneLauncherCard = raceTypes?.virtualDirtRally2 === true;
 
   const launchArtifacts = useMemo(() => buildPilotTelemetryLaunchArtifacts({
     channelKey: resolvedChannelKey,
@@ -333,14 +364,34 @@ export default function PilotTelemetry() {
       const nextStreamUrl = previousPilotStreamUrlRef.current || '';
       void publishPilotUpdate(selectedPilot.id, { streamUrl: nextStreamUrl });
       previousPilotStreamUrlRef.current = '';
+      setCameraStreamIsActive(false);
       toast.success(t('pilotTelemetry.cameraDisabled'));
       return;
     }
 
     previousPilotStreamUrlRef.current = selectedPilot.streamUrl || '';
     void publishPilotUpdate(selectedPilot.id, { streamUrl: vdoViewUrl });
+    setCameraStreamIsActive(true);
     toast.success(t('pilotTelemetry.cameraEnabled'));
-  }, [cameraStreamIsActive, publishPilotUpdate, selectedPilot?.id, selectedPilot?.streamUrl, t, vdoPushUrl, vdoViewUrl, wsConnectionStatus]);
+  }, [cameraStreamIsActive, publishPilotUpdate, selectedPilot?.id, selectedPilot?.streamUrl, setCameraStreamIsActive, t, vdoPushUrl, vdoViewUrl, wsConnectionStatus]);
+
+  useEffect(() => {
+    cameraAutoplayTriggeredRef.current = false;
+    setCameraStreamIsActive(false);
+  }, [selectedPilot?.id, resolvedChannelKey]);
+
+  useEffect(() => {
+    if (!shouldAutoplayCameraRef.current || cameraStreamIsActive || !selectedPilot?.id || wsConnectionStatus !== 'connected') {
+      return;
+    }
+
+    if (cameraAutoplayTriggeredRef.current) {
+      return;
+    }
+
+    cameraAutoplayTriggeredRef.current = true;
+    void handleToggleCamera();
+  }, [cameraStreamIsActive, handleToggleCamera, selectedPilot?.id, wsConnectionStatus]);
 
   const handleActivateSos = useCallback(() => {
     if (!selectedPilot?.id) {
@@ -363,6 +414,29 @@ export default function PilotTelemetry() {
       level: 1
     });
     toast.success(t('pilotTelemetry.sosSent'));
+  }, [selectedPilot?.id, selectedPilotStage?.id, setStageSos, t, wsConnectionStatus]);
+
+  const handleCancelSos = useCallback(() => {
+    if (!selectedPilot?.id) {
+      toast.error(t('pilotTelemetry.sosPilotMissing'));
+      return;
+    }
+
+    if (!selectedPilotStage?.id) {
+      toast.error(t('pilotTelemetry.sosStageMissing'));
+      return;
+    }
+
+    if (wsConnectionStatus !== 'connected') {
+      toast.error(t('pilotTelemetry.connectWebSocketFirst'));
+      return;
+    }
+
+    setStageSos(selectedPilot.id, selectedPilotStage.id, false, {
+      highPriority: true,
+      publishClear: true
+    });
+    toast.success(t('pilotTelemetry.sosCanceled'));
   }, [selectedPilot?.id, selectedPilotStage?.id, setStageSos, t, wsConnectionStatus]);
 
   const handleDownloadLauncher = async () => {
@@ -446,12 +520,6 @@ export default function PilotTelemetry() {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button asChild variant="outline" size="sm" className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800 hover:text-white">
-                <a href={getApkDownloadUrl()} download={APK_FILE_NAME} title={APK_FILE_NAME}>
-                  <Download className="h-4 w-4" />
-                  <span>Download APK</span>
-                </a>
-              </Button>
               <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-[#18181B] px-3 py-2 text-sm text-white">
                 <Checkbox
                   checked={hideStream}
@@ -513,6 +581,7 @@ export default function PilotTelemetry() {
                     streamUrl={activeCameraUrl}
                     name={selectedPilot.name}
                     className="absolute inset-0"
+                    interactive={cameraStreamIsActive}
                     forceMute
                     forceFullscreen
                   />
@@ -543,6 +612,64 @@ export default function PilotTelemetry() {
               </div>
             </div>
 
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Card className="bg-[#18181B] border-zinc-800">
+                <CardHeader>
+                  <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {t('pilotTelemetry.sosTitle')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <HoldToActivateButton
+                    disabled={!selectedPilot || !selectedPilotStage || wsConnectionStatus !== 'connected'}
+                    onActivate={sosIsActive ? handleCancelSos : handleActivateSos}
+                    mainLabel={sosIsActive ? t('pilotTelemetry.cancelSos') : 'SOS'}
+                    hint={sosIsActive ? '' : t('pilotTelemetry.sosHoldHint')}
+                    mainLabelClassName={sosIsActive ? 'text-xl' : ''}
+                    className="mx-auto max-w-[12rem] text-xl"
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="bg-[#18181B] border-zinc-800">
+                <CardHeader>
+                  <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {t('pilotTelemetry.cameraControl')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {cameraStreamIsActive ? (
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-100">
+                      <div className="mb-1 flex items-center gap-2 font-bold uppercase tracking-[0.18em]">
+                        <Camera className="h-4 w-4" />
+                        {t('pilotTelemetry.cameraActive')}
+                      </div>
+                      <div className="text-xs text-emerald-100/80">
+                        {t('pilotTelemetry.cameraStreamPreviewActive')}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-3 text-sm text-zinc-400">
+                      {t('pilotTelemetry.cameraPreviewDisabled')}
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    className={`w-full ${cameraStreamIsActive ? 'bg-zinc-700 hover:bg-zinc-600 text-white' : 'bg-[#FF4500] hover:bg-[#FF4500]/90 text-white'}`}
+                    onClick={handleToggleCamera}
+                    disabled={!selectedPilot || wsConnectionStatus !== 'connected'}
+                  >
+                    {cameraStreamIsActive ? <CameraOff className="mr-2 h-4 w-4" /> : <Camera className="mr-2 h-4 w-4" />}
+                    {cameraStreamIsActive ? t('pilotTelemetry.disableCamera') : t('pilotTelemetry.startCamera')}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+          </div>
+
+          <div className="space-y-4">
             <Card className="bg-[#18181B] border-zinc-800">
               <CardHeader>
                 <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -600,98 +727,78 @@ export default function PilotTelemetry() {
               </CardContent>
             </Card>
 
-          </div>
-
-          <div className="space-y-4">
-            <Card className="bg-[#18181B] border-zinc-800">
-              <CardHeader>
-                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {t('pilotTelemetry.sosTitle')}
-                </CardTitle>
-                <CardDescription className="text-zinc-400">
-                  {t('pilotTelemetry.sosHoldHint')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <HoldToActivateButton
-                  disabled={!selectedPilot || !selectedPilotStage || wsConnectionStatus !== 'connected'}
-                  onActivate={handleActivateSos}
-                  title={t('pilotTelemetry.sosHoldTitle')}
-                  className="mx-auto max-w-[12rem] text-2xl"
-                />
-              </CardContent>
-            </Card>
-
-            <Card className="bg-[#18181B] border-zinc-800">
-              <CardHeader>
-                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {t('pilotTelemetry.cameraControl')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {cameraStreamIsActive ? (
-                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-100">
-                    <div className="mb-1 flex items-center gap-2 font-bold uppercase tracking-[0.18em]">
-                      <Camera className="h-4 w-4" />
-                      {t('pilotTelemetry.cameraStreamActive')}
+            {showApkDownloadCard && (
+              <Card className="bg-[#18181B] border-zinc-800">
+                <CardHeader>
+                  <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {t('pilotTelemetry.apkDownload')}
+                  </CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    {t('pilotTelemetry.apkDownloadDescription')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400 space-y-2">
+                    <div>
+                      <span className="text-zinc-600">{t('pilotTelemetry.file')}</span> <span className="font-mono text-zinc-200">{APK_FILE_NAME}</span>
                     </div>
-                    <div className="text-xs text-emerald-100/80">
-                      {t('pilotTelemetry.cameraStreamPreviewActive')}
+                    <div>
+                      <span className="text-zinc-600">{t('pilotTelemetry.pilotId')}</span> <span className="font-mono text-zinc-200">{selectedPilot?.id || '--'}</span>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-3 text-sm text-zinc-400">
-                    {t('pilotTelemetry.cameraPreviewDisabled')}
+                  <Button
+                    asChild
+                    className="w-full bg-[#FF4500] hover:bg-[#FF4500]/90 text-white"
+                  >
+                    <a href={getApkDownloadUrl()} download={APK_FILE_NAME} title={APK_FILE_NAME}>
+                      <Download className="mr-2 h-4 w-4" />
+                      {t('pilotTelemetry.downloadApk')}
+                    </a>
+                  </Button>
+                  <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">
+                    {t('pilotTelemetry.apkDownloadDetails')}
                   </div>
-                )}
+                </CardContent>
+              </Card>
+            )}
 
-                <Button
-                  type="button"
-                  className={`w-full ${cameraStreamIsActive ? 'bg-zinc-700 hover:bg-zinc-600 text-white' : 'bg-[#FF4500] hover:bg-[#FF4500]/90 text-white'}`}
-                  onClick={handleToggleCamera}
-                  disabled={!selectedPilot || wsConnectionStatus !== 'connected'}
-                >
-                  {cameraStreamIsActive ? <CameraOff className="mr-2 h-4 w-4" /> : <Camera className="mr-2 h-4 w-4" />}
-                  {cameraStreamIsActive ? t('pilotTelemetry.disableCamera') : t('pilotTelemetry.startCamera')}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-[#18181B] border-zinc-800">
-              <CardHeader>
-                <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  {t('pilotTelemetry.standaloneLauncher')}
-                </CardTitle>
-                <CardDescription className="text-zinc-400">
-                  {t('pilotTelemetry.standaloneLauncherDescription')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400 space-y-2">
-                  <div>
-                    <span className="text-zinc-600">{t('pilotTelemetry.pilotId')}</span> <span className="font-mono text-zinc-200">{selectedPilot?.id || '--'}</span>
+            {showStandaloneLauncherCard && (
+              <Card className="bg-[#18181B] border-zinc-800">
+                <CardHeader>
+                  <CardTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {t('pilotTelemetry.standaloneLauncher')}
+                  </CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    {t('pilotTelemetry.standaloneLauncherDescription')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400 space-y-2">
+                    <div>
+                      <span className="text-zinc-600">{t('pilotTelemetry.pilotId')}</span> <span className="font-mono text-zinc-200">{selectedPilot?.id || '--'}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-600">{t('pilotTelemetry.channelId')}</span> <span className="font-mono text-zinc-200">{launchArtifacts?.channelId || '--'}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-600">{t('pilotTelemetry.file')}</span> <span className="font-mono text-zinc-200">{launchArtifacts?.batFileName || '--'}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-zinc-600">{t('pilotTelemetry.channelId')}</span> <span className="font-mono text-zinc-200">{launchArtifacts?.channelId || '--'}</span>
+                  <Button
+                    type="button"
+                    className="bg-[#FF4500] hover:bg-[#FF4500]/90 text-white"
+                    onClick={handleDownloadLauncher}
+                    disabled={!launchArtifacts || isDownloadingLauncher}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {isDownloadingLauncher ? t('common.loading') : t('pilotTelemetry.downloadLauncher')}
+                  </Button>
+                  <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">
+                    {t('pilotTelemetry.launcherDescription')}
                   </div>
-                  <div>
-                    <span className="text-zinc-600">{t('pilotTelemetry.file')}</span> <span className="font-mono text-zinc-200">{launchArtifacts?.batFileName || '--'}</span>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  className="bg-[#FF4500] hover:bg-[#FF4500]/90 text-white"
-                  onClick={handleDownloadLauncher}
-                  disabled={!launchArtifacts || isDownloadingLauncher}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  {isDownloadingLauncher ? t('common.loading') : t('pilotTelemetry.downloadLauncher')}
-                </Button>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">
-                  {t('pilotTelemetry.launcherDescription')}
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
 

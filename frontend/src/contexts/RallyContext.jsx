@@ -643,6 +643,25 @@ const mergePilotStageFlagMap = (currentValue = {}, incomingValue = {}, options =
 
 const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
 
+const DEFAULT_RACE_TYPES = {
+  realLifeRace: true,
+  virtualDirtRally2: true
+};
+
+const normalizeRaceTypes = (value) => {
+  const nextValue = { ...DEFAULT_RACE_TYPES };
+
+  if (!isPlainObject(value)) {
+    return nextValue;
+  }
+
+  Object.entries(value).forEach(([key, rawValue]) => {
+    nextValue[key] = rawValue === true;
+  });
+
+  return nextValue;
+};
+
 const areValuesEqual = (left, right) => {
   if (Object.is(left, right)) {
     return true;
@@ -1151,6 +1170,7 @@ export const RallyProvider = ({ children }) => {
   const [mapPlacemarks, setMapPlacemarks] = useState(() => loadFromStorage('rally_map_placemarks', []));
   const [currentStageId, setCurrentStageId] = useState(() => loadFromStorage('rally_current_stage', null));
   const [eventIsOver, setEventIsOver] = useState(() => loadFromStorage('rally_event_is_over', false) === true);
+  const [raceTypes, setRaceTypes] = useState(() => normalizeRaceTypes(loadFromStorage('rally_race_types', DEFAULT_RACE_TYPES)));
   const [eventReplayStartDate, setEventReplayStartDate] = useState(() => loadFromStorage('rally_event_replay_start_date', ''));
   const [eventReplayStartTime, setEventReplayStartTime] = useState(() => loadFromStorage('rally_event_replay_start_time', ''));
   const [eventReplayStageIntervalSeconds, setEventReplayStageIntervalSeconds] = useState(() => {
@@ -1305,6 +1325,7 @@ export const RallyProvider = ({ children }) => {
       eventName,
       currentStageId,
       eventIsOver,
+      raceTypes,
       eventReplayStartDate,
       eventReplayStartTime,
       eventReplayStageIntervalSeconds,
@@ -3138,6 +3159,7 @@ export const RallyProvider = ({ children }) => {
       if (normalizedChanges.meta.eventName !== undefined) setEventName(normalizedChanges.meta.eventName);
       if (normalizedChanges.meta.currentStageId !== undefined) setCurrentStageId(normalizedChanges.meta.currentStageId);
       if (normalizedChanges.meta.eventIsOver !== undefined) setEventIsOver(normalizedChanges.meta.eventIsOver === true);
+      if (normalizedChanges.meta.raceTypes !== undefined) setRaceTypes(normalizeRaceTypes(normalizedChanges.meta.raceTypes));
       if (normalizedChanges.meta.eventReplayStartDate !== undefined) setEventReplayStartDate(normalizedChanges.meta.eventReplayStartDate || '');
       if (normalizedChanges.meta.eventReplayStartTime !== undefined) setEventReplayStartTime(normalizedChanges.meta.eventReplayStartTime || '');
       if (normalizedChanges.meta.eventReplayStageIntervalSeconds !== undefined) {
@@ -3738,6 +3760,7 @@ export const RallyProvider = ({ children }) => {
         if (normalizedData.mapPlacemarks !== undefined) setMapPlacemarks(normalizedData.mapPlacemarks);
         if (normalizedData.currentStageId !== undefined) setCurrentStageId(normalizedData.currentStageId);
         if (normalizedData.eventIsOver !== undefined) setEventIsOver(normalizedData.eventIsOver === true);
+        if (normalizedData.raceTypes !== undefined) setRaceTypes(normalizeRaceTypes(normalizedData.raceTypes));
         if (normalizedData.eventReplayStartDate !== undefined) setEventReplayStartDate(normalizedData.eventReplayStartDate || '');
         if (normalizedData.eventReplayStartTime !== undefined) setEventReplayStartTime(normalizedData.eventReplayStartTime || '');
         if (normalizedData.eventReplayStageIntervalSeconds !== undefined) {
@@ -3861,6 +3884,7 @@ export const RallyProvider = ({ children }) => {
     mapPlacemarks,
     currentStageId,
     eventIsOver,
+    raceTypes,
     eventReplayStartDate,
     eventReplayStartTime,
     eventReplayStageIntervalSeconds,
@@ -3895,6 +3919,7 @@ export const RallyProvider = ({ children }) => {
     mapPlacemarks,
     currentStageId,
     eventIsOver,
+    raceTypes,
     eventReplayStartDate,
     eventReplayStartTime,
     eventReplayStageIntervalSeconds,
@@ -3923,6 +3948,7 @@ export const RallyProvider = ({ children }) => {
             eventName: snapshot.eventName,
             currentStageId: snapshot.currentStageId,
             eventIsOver: snapshot.eventIsOver,
+            raceTypes: snapshot.raceTypes,
             eventReplayStartDate: snapshot.eventReplayStartDate,
             eventReplayStartTime: snapshot.eventReplayStartTime,
             eventReplayStageIntervalSeconds: snapshot.eventReplayStageIntervalSeconds,
@@ -5159,6 +5185,23 @@ export const RallyProvider = ({ children }) => {
   }, [captureSetupPatchEntries, eventIsOver, updateDataVersion]);
 
   useEffect(() => {
+    const previousRaceTypes = previousSetupSyncStateRef.current.meta.raceTypes;
+    previousSetupSyncStateRef.current.meta = {
+      ...(previousSetupSyncStateRef.current.meta || {}),
+      raceTypes
+    };
+    if (hydratingDomainsRef.current.has('meta')) return;
+    localStorage.setItem('rally_race_types', JSON.stringify(raceTypes));
+    updateDataVersion('meta');
+    captureSetupPatchEntries('meta', areValuesEqual(previousRaceTypes, raceTypes) ? [] : [{
+      kind: 'meta',
+      section: 'meta',
+      field: 'raceTypes',
+      value: raceTypes
+    }]);
+  }, [captureSetupPatchEntries, raceTypes, updateDataVersion]);
+
+  useEffect(() => {
     const previousEventReplayStartDate = previousSetupSyncStateRef.current.meta.eventReplayStartDate;
     previousSetupSyncStateRef.current.meta = {
       ...(previousSetupSyncStateRef.current.meta || {}),
@@ -6375,6 +6418,7 @@ export const RallyProvider = ({ children }) => {
     const normalizedPilotId = normalizePilotId(pilotId);
     const normalizedStageId = String(stageId || '').trim();
     const isHighPriority = options?.highPriority === true;
+    const shouldPublishClear = options?.publishClear === true;
     const nextStageSosLevel = normalizeStageSosLevel(sos ? (options?.level || 1) : 0);
 
     if (isHighPriority && clientRole === 'setup') {
@@ -6396,7 +6440,48 @@ export const RallyProvider = ({ children }) => {
         pilotId: normalizedPilotId,
         stageId: normalizedStageId
       });
-      return;
+
+      if (!shouldPublishClear) {
+        return;
+      }
+
+      const notificationId = buildSosNotificationId({
+        pilotId: normalizedPilotId,
+        stageId: normalizedStageId,
+        timestamp: getNextLogicalTimestamp()
+      });
+
+      return enqueueChangePackages({
+        stageSos: {
+          [normalizedPilotId]: {
+            [normalizedStageId]: 0
+          }
+        }
+      }, {
+        highPriority: isHighPriority,
+        extraMeta: {
+          notificationId,
+          clearedAt: Date.now(),
+          clearedBy: setupInstanceIdRef.current,
+          clearedByRole: wsRoleRef.current || clientRole
+        }
+      }).then((result) => {
+        if (!result) {
+          setSosDeliveryStatus(normalizedPilotId, normalizedStageId, {
+            status: 'error',
+            notificationId,
+            errorMessage: 'Unable to publish SOS cancel.'
+          });
+        }
+        return result;
+      }).catch((error) => {
+        setSosDeliveryStatus(normalizedPilotId, normalizedStageId, {
+          status: 'error',
+          notificationId,
+          errorMessage: error?.message || 'Unable to publish SOS cancel.'
+        });
+        return null;
+      });
     }
 
     if (!isHighPriority) {
@@ -6514,6 +6599,7 @@ export const RallyProvider = ({ children }) => {
       transitionImageUrl: loadFromStorage('rally_transition_image', ''),
       currentStageId: loadFromStorage('rally_current_stage', null),
       eventIsOver: loadFromStorage('rally_event_is_over', false) === true,
+      raceTypes: normalizeRaceTypes(loadFromStorage('rally_race_types', DEFAULT_RACE_TYPES)),
       eventReplayStartDate: loadFromStorage('rally_event_replay_start_date', ''),
       eventReplayStartTime: loadFromStorage('rally_event_replay_start_time', ''),
       eventReplayStageIntervalSeconds: Number(loadFromStorage('rally_event_replay_stage_interval_seconds', 0)) || 0,
@@ -6557,6 +6643,7 @@ export const RallyProvider = ({ children }) => {
       if (data.transitionImageUrl !== undefined) setTransitionImageUrl(data.transitionImageUrl);
       if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
       if (data.eventIsOver !== undefined) setEventIsOver(data.eventIsOver === true);
+      if (data.raceTypes !== undefined) setRaceTypes(normalizeRaceTypes(data.raceTypes));
       if (data.eventReplayStartDate !== undefined) setEventReplayStartDate(data.eventReplayStartDate || '');
       if (data.eventReplayStartTime !== undefined) setEventReplayStartTime(data.eventReplayStartTime || '');
       if (data.eventReplayStageIntervalSeconds !== undefined) {
@@ -6576,7 +6663,7 @@ export const RallyProvider = ({ children }) => {
       console.error('Error importing data:', error);
       return false;
     }
-  }, [applyPilotTelemetryState, setArrivalTimes, setCategories, setCameras, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [applyPilotTelemetryState, setArrivalTimes, setCategories, setCameras, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRaceTypes, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
 
   const clearAllData = useCallback(() => {
     setEventName('');
@@ -6605,6 +6692,7 @@ export const RallyProvider = ({ children }) => {
     setGlobalAudio({ volume: 100, muted: false });
     setCurrentStageId(null);
     setEventIsOver(false);
+    setRaceTypes({ ...DEFAULT_RACE_TYPES });
     setEventReplayStartDate('');
     setEventReplayStartTime('');
     setEventReplayStageIntervalSeconds(0);
@@ -6618,7 +6706,7 @@ export const RallyProvider = ({ children }) => {
     setMetaCurrentSession(null);
     updateDataVersion('pilotTelemetry');
     updateDataVersion(ALL_STORAGE_DOMAINS);
-  }, [applyPilotTelemetryState, setArrivalTimes, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStageIntervalSeconds, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [applyPilotTelemetryState, setArrivalTimes, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStageIntervalSeconds, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRaceTypes, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -6648,6 +6736,7 @@ export const RallyProvider = ({ children }) => {
     cameras,
     currentStageId,
     eventIsOver,
+    raceTypes,
     eventReplayStartDate,
     eventReplayStartTime,
     eventReplayStageIntervalSeconds,
@@ -6701,6 +6790,7 @@ export const RallyProvider = ({ children }) => {
     setTransitionImageUrl,
     setCurrentStageId,
     setEventIsOver,
+    setRaceTypes,
     setEventReplayStartDate,
     setEventReplayStartTime,
     setEventReplayStageIntervalSeconds,
@@ -6748,6 +6838,7 @@ export const RallyProvider = ({ children }) => {
     isStageAlert,
     setStageSos,
     isStageSos,
+    getSosDeliveryStatus,
     // Lap time functions
     setLapTime,
     removeLapTimeColumn,
@@ -6791,6 +6882,7 @@ export const RallyProvider = ({ children }) => {
     cameras,
     timeDecimals,
     eventIsOver,
+    raceTypes,
     eventReplayStartDate,
     eventReplayStartTime,
     eventReplayStageIntervalSeconds,
@@ -6803,6 +6895,7 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl,
     setTransitionImageUrl,
     setEventIsOver,
+    setRaceTypes,
     setEventReplayStartDate,
     setEventReplayStartTime,
     setEventReplayStageIntervalSeconds,
@@ -6831,6 +6924,7 @@ export const RallyProvider = ({ children }) => {
     cameras,
     timeDecimals,
     eventIsOver,
+    raceTypes,
     eventReplayStartDate,
     eventReplayStartTime,
     eventReplayStageIntervalSeconds,
@@ -6843,6 +6937,7 @@ export const RallyProvider = ({ children }) => {
     setLogoUrl,
     setTransitionImageUrl,
     setEventIsOver,
+    setRaceTypes,
     setEventReplayStartDate,
     setEventReplayStartTime,
     setEventReplayStageIntervalSeconds,
@@ -6871,11 +6966,12 @@ export const RallyProvider = ({ children }) => {
     stages,
     currentStageId,
     eventIsOver,
+    raceTypes,
     eventReplayStartDate,
     eventReplayStartTime,
     eventReplayStageIntervalSeconds,
     updateStage
-  }), [categories, currentStageId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, pilots, stages, updateStage]);
+  }), [categories, currentStageId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, pilots, raceTypes, stages, updateStage]);
 
   const timingValue = useMemo(() => ({
     times,

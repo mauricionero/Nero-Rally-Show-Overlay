@@ -374,6 +374,12 @@ config:
   eventStatus: "Status do Evento"
   eventIsOver: "Evento Encerrado"
   eventIsOverHint: "Usa os videos de replay no lugar dos streams ao vivo nas cenas do overlay."
+  raceTypeConfig: "Tipo de Corrida"
+  raceTypeConfigHint: "Selecione os modos de corrida que se aplicam a este evento."
+  realLifeRace: "Corrida Real"
+  realLifeRaceHint: "Use quando o evento acontece em vias ou pistas reais."
+  virtualDirtRally2: "Virtual (Dirt Rally 2)"
+  virtualDirtRally2Hint: "Use quando o evento é dirigido por telemetria do Dirt Rally 2."
   
   liveSync: "Sincronização ao Vivo (WebSocket)"
   liveSyncDesc: "Compartilhe os dados do painel em tempo real com a página de overlay"

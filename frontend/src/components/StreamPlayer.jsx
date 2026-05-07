@@ -162,7 +162,6 @@ export const StreamPlayer = ({
       const url = new URL(effectiveStreamUrl);
 
       if (supportsVdoIframeApi) {
-        url.searchParams.set('cleanoutput', '1');
         url.searchParams.set('cleanviewer', '1');
 
         if (forceFullscreen) {
@@ -170,8 +169,7 @@ export const StreamPlayer = ({
         }
 
         if (!showControls) {
-          url.searchParams.set('nomouseevents', '1');
-          url.searchParams.set('nocursor', '1');
+          // Keep the iframe interactive for VDO push/view pages when requested by the caller.
         }
       }
 
