@@ -11,7 +11,6 @@ import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Wifi, X, VideoOff } from 'lucide-react';
 import WsLedStrip from '../components/WsLedStrip.jsx';
 import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
@@ -49,13 +48,7 @@ export default function Overlay() {
   const [hideTelemetry, setHideTelemetry] = useState(false);
   const [overlayDebugFlags, setOverlayDebugFlags] = useState(() => loadDebugFlags());
   const defaultTransitionImageUrl = resolvePublicAssetUrl('/transition-default.png');
-  const [transitionType, setTransitionType] = useState(() => {
-    try {
-      return localStorage.getItem('rally_transition_type') || 'fade';
-    } catch (error) {
-      return 'fade';
-    }
-  });
+  const transitionType = 'wipe';
   const [transitionDurationMs, setTransitionDurationMs] = useState(() => {
     try {
       const stored = Number(localStorage.getItem('rally_transition_duration_ms'));
@@ -79,14 +72,6 @@ export default function Overlay() {
   useEffect(() => {
     document.title = `${t('header.title')} - ${t('header.overlay')}`;
   }, [t]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('rally_transition_type', transitionType);
-    } catch (error) {
-      console.error('Failed to store transition type:', error);
-    }
-  }, [transitionType]);
 
   useEffect(() => {
     try {
@@ -292,13 +277,6 @@ export default function Overlay() {
       ? transitionImageUrl.trim()
       : defaultTransitionImageUrl
   );
-  const transitionOptions = [
-    { value: 'none', label: t('header.transitionNone') },
-    { value: 'fade', label: t('header.transitionFade') },
-    { value: 'wipe', label: t('header.transitionWipe') },
-    { value: 'slide', label: t('header.transitionSlide') }
-  ];
-
   return (
     <div
       className="fixed inset-0 overflow-hidden"
@@ -377,18 +355,9 @@ export default function Overlay() {
                 <span className="text-[10px] uppercase tracking-wide text-zinc-500">
                   {t('header.transition')}
                 </span>
-                <Select value={transitionType} onValueChange={setTransitionType}>
-                  <SelectTrigger className="h-7 w-[92px] bg-[#09090B] border-zinc-700 text-xs text-white">
-                    <SelectValue placeholder={t('header.transition')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {transitionOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex h-7 items-center rounded-md border border-zinc-700 bg-[#09090B] px-3 text-xs text-white">
+                  {t('header.transitionWipe')}
+                </div>
                 <Input
                   type="number"
                   min="0"

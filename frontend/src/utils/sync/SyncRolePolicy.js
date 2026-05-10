@@ -208,7 +208,8 @@ export const canReceiveDomainForRoles = (recipientRole, sourceRole, domain) => {
     }
 
     if (recipient === SYNC_ROLES.CLIENT) {
-      return normalizedDomain === 'pilots';
+      return normalizedDomain === 'pilots'
+        || TELEMETRY_DOMAINS.has(normalizedDomain);
     }
 
     if (recipient === SYNC_ROLES.TIMES) {

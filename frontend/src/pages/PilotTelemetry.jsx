@@ -1,7 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Camera, CameraOff, Copy, Download, Gauge, Radio, Sparkles, TriangleAlert, VideoOff } from 'lucide-react';
+import {
+  Activity,
+  ArrowUp,
+  Camera,
+  CameraOff,
+  Clock3,
+  Cog,
+  Copy,
+  Download,
+  Gauge,
+  Battery,
+  Radio,
+  Route,
+  Satellite,
+  Sparkles,
+  Thermometer,
+  TriangleAlert,
+  VideoOff,
+  Wifi
+} from 'lucide-react';
 import { useRally, useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { useSecondAlignedClock } from '../hooks/useSecondAlignedClock.js';
@@ -9,6 +28,7 @@ import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
 import { Checkbox } from '../components/ui/checkbox';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import TelemetryMetricTile from '../components/TelemetryMetricTile.jsx';
 import { LanguageSelectorCompact } from '../components/LanguageSelector.jsx';
 import WsLedStrip from '../components/WsLedStrip.jsx';
 import { StreamPlayer } from '../components/StreamPlayer.jsx';
@@ -27,6 +47,7 @@ import {
   downloadTextFile,
   requestPilotTelemetryLaunchToken
 } from '../utils/pilotTelemetryLaunch.js';
+import { formatClockFromDate } from '../utils/timeFormat.js';
 
 const PREFERRED_STAGE_REGISTRY_PATHS = [
   '/pilot-telemetry-stage-registry.json',
@@ -175,6 +196,7 @@ export default function PilotTelemetry() {
     currentStageId,
     raceTypes,
     pilotTelemetryByPilotId,
+    getPilotTelemetry,
     isStageSos,
     setStageSos,
     getSosDeliveryStatus,
@@ -221,7 +243,13 @@ export default function PilotTelemetry() {
     selectedPilotStageId ? stages.find((stage) => stage.id === selectedPilotStageId) || null : null
   ), [selectedPilotStageId, stages]);
 
-  const selectedTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, selectedPilot?.id);
+  const resolvedPilotTelemetryId = selectedPilot?.id || queryPilotId;
+  const liveSelectedTelemetry = getPilotTelemetry(resolvedPilotTelemetryId);
+  const storedSelectedTelemetry = getPilotTelemetryForId(pilotTelemetryByPilotId, resolvedPilotTelemetryId);
+  const selectedTelemetry = {
+    ...(storedSelectedTelemetry || {}),
+    ...(liveSelectedTelemetry || {})
+  };
   const selectedPilotSosDelivery = useMemo(() => (
     selectedPilot?.id && selectedPilotStage?.id
       ? getSosDeliveryStatus(selectedPilot.id, selectedPilotStage.id)
@@ -244,6 +272,24 @@ export default function PilotTelemetry() {
     ? `${Number(selectedTelemetry.distance).toFixed(3)}`
     : '--';
   const displayLatLong = selectedTelemetry?.latLong || '--';
+  const displayTemperature = Number.isFinite(Number(selectedTelemetry?.temperature))
+    ? `${Number(selectedTelemetry.temperature).toFixed(0)}°C`
+    : '--';
+  const displayConnectionType = String(selectedTelemetry?.connectionType || '--');
+  const displayLastTelemetryAt = selectedTelemetry?.lastTelemetryAt
+    ? formatClockFromDate(new Date(Number(selectedTelemetry.lastTelemetryAt)), 0)
+    : '--';
+  const displayHeading = Number.isFinite(Number(selectedTelemetry?.heading))
+    ? `${Math.round(Number(selectedTelemetry.heading))}`
+    : '--';
+  const displayBattery = Number.isFinite(Number(selectedTelemetry?.battery ?? selectedTelemetry?.batteryLevel))
+    ? `${Math.round(Number(selectedTelemetry.battery ?? selectedTelemetry.batteryLevel))}%`
+    : '--';
+  const liveTelemetryAgeText = selectedTelemetry?.lastTelemetryAt
+    ? t('pilotTelemetry.secondsAgo', {
+      value: Math.max(0, Math.round((pageNow - Number(selectedTelemetry.lastTelemetryAt || 0)) / 1000))
+    })
+    : t('pilotTelemetry.waiting');
   const vdoStreamKey = useMemo(() => normalizeVdoStreamKey(selectedPilot?.id), [selectedPilot?.id]);
   const vdoPushUrl = useMemo(() => getPilotVdoPushUrl(selectedPilot?.id), [selectedPilot?.id]);
   const vdoViewUrl = useMemo(() => getPilotVdoViewUrl(selectedPilot?.id), [selectedPilot?.id]);
@@ -259,7 +305,6 @@ export default function PilotTelemetry() {
   );
   const showApkDownloadCard = raceTypes?.realLifeRace === true;
   const showStandaloneLauncherCard = raceTypes?.virtualDirtRally2 === true;
-
   const launchArtifacts = useMemo(() => buildPilotTelemetryLaunchArtifacts({
     channelKey: resolvedChannelKey,
     pilot: selectedPilot,
@@ -679,51 +724,19 @@ export default function PilotTelemetry() {
                   {t('pilotTelemetry.liveStatusDescription')}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.channel')}</div>
-                  <div className="font-mono text-[#FACC15] break-all">
-                    {resolvedChannelKey || t('pilotTelemetry.notConnected')}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.telemetryAge')}</div>
-                  <div className="font-mono text-white">
-                    {selectedTelemetry?.lastTelemetryAt
-                      ? t('pilotTelemetry.secondsAgo', {
-                        value: Math.max(0, Math.round((pageNow - Number(selectedTelemetry.lastTelemetryAt || 0)) / 1000))
-                      })
-                      : t('pilotTelemetry.waiting')}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.speed')}</div>
-                  <div className="font-mono text-white">
-                    {Number.isFinite(Number(selectedTelemetry?.speed)) ? `${Number(selectedTelemetry.speed).toFixed(1)} km/h` : '--'}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.gForce')}</div>
-                  <div className="font-mono text-white">
-                    {Number.isFinite(Number(selectedTelemetry?.gForce)) ? `${Number(selectedTelemetry.gForce).toFixed(2)}G` : '--'}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.rpm')}</div>
-                  <div className="font-mono text-white">{displayRpm}</div>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.gear')}</div>
-                  <div className="font-mono text-white">{displayGear}</div>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.distance')}</div>
-                  <div className="font-mono text-white">{displayDistance}</div>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-black/30 px-3 py-2 text-sm">
-                  <div className="text-zinc-500 text-xs uppercase tracking-wide">{t('pilotTelemetry.latLong')}</div>
-                  <div className="font-mono text-white break-all">{displayLatLong}</div>
-                </div>
+              <CardContent className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
+                <TelemetryMetricTile density="comfortable" icon={Radio} value={resolvedChannelKey || t('pilotTelemetry.notConnected')} iconClassName="text-[#FACC15]" />
+                <TelemetryMetricTile density="comfortable" icon={Clock3} value={liveTelemetryAgeText} iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Gauge} value={Number.isFinite(Number(selectedTelemetry?.speed)) ? `${Number(selectedTelemetry.speed).toFixed(1)}` : '--'} suffix="km/h" iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Activity} value={Number.isFinite(Number(selectedTelemetry?.gForce)) ? `${Number(selectedTelemetry.gForce).toFixed(2)}` : '--'} suffix="G" iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Cog} combined combinedValue={displayRpm} gearValue={displayGear} iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Route} value={displayDistance} suffix="m" iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Thermometer} value={displayTemperature} rawValue={Number(selectedTelemetry?.temperature)} iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={ArrowUp} iconRotation={Number.isFinite(Number(selectedTelemetry?.heading)) ? Number(selectedTelemetry.heading) : 0} value={displayHeading} suffix="°" iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Battery} value={displayBattery} rawValue={Number(selectedTelemetry?.battery ?? selectedTelemetry?.batteryLevel)} iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Satellite} value={displayLatLong} iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Wifi} connectionType={displayConnectionType} signalStrength={Number(selectedTelemetry?.signalStrength ?? selectedTelemetry?.connectionStrength)} iconClassName="text-[#38BDF8]" />
+                <TelemetryMetricTile density="comfortable" icon={Clock3} value={displayLastTelemetryAt} iconClassName="text-[#38BDF8]" />
               </CardContent>
             </Card>
 

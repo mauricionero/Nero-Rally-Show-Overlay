@@ -4,6 +4,7 @@ import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
+import TelemetryMetricTile from '../TelemetryMetricTile.jsx';
 import CurrentStageBadge from '../CurrentStageBadge.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { PlacemarkMapFeed, MapWeatherBadges, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
@@ -11,7 +12,8 @@ import StatusPill from '../StatusPill.jsx';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Clock3, Map as MapIcon, Radio, UserRound, Video, VideoOff } from 'lucide-react';
+import { SignalStrengthBars } from '../TelemetryMetricTile.jsx';
+import { Activity, ArrowUp, Battery, Clock3, Cog, Gauge, Map as MapIcon, Radio, Route, Satellite, Thermometer, UserRound, Video, VideoOff, Wifi } from 'lucide-react';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
@@ -55,7 +57,7 @@ const getTelemetryConnectionLabel = (telemetry = {}) => (
 );
 
 const getTelemetryConnectionStrength = (telemetry = {}) => {
-  const numericValue = Number(telemetry?.connectionStrength);
+  const numericValue = Number(telemetry?.signalStrength ?? telemetry?.connectionStrength);
   if (!Number.isFinite(numericValue) || numericValue <= 0) {
     return 0;
   }
@@ -77,22 +79,11 @@ function ConnectionIndicator({ telemetry = {}, className = '' }) {
 
   return (
     <div className={`inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/75 px-3 py-1.5 backdrop-blur-sm ${className}`.trim()}>
+      <Wifi className="h-3.5 w-3.5 text-[#38BDF8]" />
       <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-200">
         {label || 'link'}
       </span>
-      <div className="flex items-end gap-0.5">
-        {[1, 2, 3, 4].map((bar) => (
-          <span
-            key={bar}
-            className={bar <= strength ? 'bg-[#22C55E]' : 'bg-white/20'}
-            style={{
-              width: 3,
-              height: 4 + (bar * 3),
-              borderRadius: 999
-            }}
-          />
-        ))}
-      </div>
+      <SignalStrengthBars strength={strength} />
     </div>
   );
 }
@@ -255,16 +246,30 @@ function PilotMonitorRow({
   const heading = toFiniteTelemetryNumber(telemetry?.heading);
   const gear = toFiniteTelemetryNumber(telemetry?.gear);
   const gpsPrecision = toFiniteTelemetryNumber(telemetry?.gpsPrecision);
-  const connectionStrength = toFiniteTelemetryNumber(telemetry?.connectionStrength);
+  const temperature = toFiniteTelemetryNumber(telemetry?.temperature);
+  const battery = toFiniteTelemetryNumber(telemetry?.battery ?? telemetry?.batteryLevel);
+  const signalStrength = toFiniteTelemetryNumber(telemetry?.signalStrength ?? telemetry?.connectionStrength);
+  const connectionType = String(telemetry?.connectionType || '').trim();
+  const lastTelemetryAt = Number.isFinite(Number(telemetry?.lastTelemetryAt))
+    ? formatClockFromDate(new Date(Number(telemetry.lastTelemetryAt)), 0)
+    : '';
   const telemetryMetrics = [
-    { key: 'speed', value: Number.isFinite(speed) ? `${Math.round(speed)}` : '-', suffix: 'km/h' },
-    { key: 'gforce', value: Number.isFinite(gForce) ? `${gForce >= 10 ? gForce.toFixed(0) : gForce.toFixed(1)}` : '-', suffix: 'G' },
-    { key: 'rpm', value: Number.isFinite(rpmPercentage) ? `${Math.round(rpmPercentage)}` : (Number.isFinite(rpmReal) ? `${Math.round(rpmReal)}` : '-'), suffix: Number.isFinite(rpmPercentage) ? '%' : '' },
-    { key: 'distance', value: Number.isFinite(distance) ? `${Math.round(distance)}` : '-', suffix: 'm' },
-    { key: 'heading', value: Number.isFinite(heading) ? `${Math.round(heading)}` : '-', suffix: '°' },
-    { key: 'gear', value: Number.isFinite(gear) ? (gear === -1 ? 'R' : `${Math.trunc(gear)}`) : '-', suffix: '' },
-    { key: 'gps', value: Number.isFinite(gpsPrecision) ? `${gpsPrecision.toFixed(gpsPrecision >= 10 ? 0 : 1)}` : '-', suffix: 'm' },
-    { key: 'link', value: Number.isFinite(connectionStrength) ? `${Math.round(connectionStrength)}` : '-', suffix: '' }
+    { key: 'speed', icon: Gauge, value: Number.isFinite(speed) ? `${Math.round(speed)}` : '-', suffix: 'km/h' },
+    {
+      key: 'rpmGear',
+      icon: Cog,
+      combined: true,
+      combinedValue: Number.isFinite(rpmPercentage) ? `${Math.round(rpmPercentage)}` : (Number.isFinite(rpmReal) ? `${Math.round(rpmReal)}` : '--'),
+      gearValue: Number.isFinite(gear) ? (gear === -1 ? 'R' : `${Math.trunc(gear)}`) : '-'
+    },
+    { key: 'gforce', icon: Activity, value: Number.isFinite(gForce) ? `${gForce >= 10 ? gForce.toFixed(0) : gForce.toFixed(1)}` : '-', suffix: 'G' },
+    { key: 'distance', icon: Route, value: Number.isFinite(distance) ? `${Math.round(distance)}` : '-', suffix: 'm' },
+    { key: 'temperature', icon: Thermometer, value: Number.isFinite(temperature) ? `${Math.round(temperature)}` : '-', rawValue: temperature, suffix: '°C' },
+    { key: 'heading', icon: ArrowUp, iconRotation: Number.isFinite(heading) ? heading : 0, value: Number.isFinite(heading) ? `${Math.round(heading)}` : '-', suffix: '°' },
+    { key: 'gps', icon: Satellite, value: Number.isFinite(gpsPrecision) ? `${gpsPrecision.toFixed(gpsPrecision >= 10 ? 0 : 1)}` : '-', suffix: 'm' },
+    { key: 'battery', icon: Battery, value: Number.isFinite(battery) ? `${Math.round(battery)}` : '-', rawValue: battery, suffix: '%' },
+    { key: 'connection', icon: Wifi, connectionType, signalStrength },
+    { key: 'lastTelemetry', icon: Clock3, value: lastTelemetryAt || '-', suffix: '' }
   ];
   const timingStatus = stageTimingInfo?.status || 'not_started';
   const timingStatusText = timingStatus === 'finished'
@@ -285,7 +290,7 @@ function PilotMonitorRow({
   const stageTitle = stage ? getStageTitle(stage) : t('scene2.noCurrentStage');
 
   return (
-    <div className="grid grid-cols-[10rem_minmax(0,1.45fr)_minmax(0,1.45fr)_minmax(0,14rem)] gap-0 border-b border-white/10 bg-black/25">
+    <div className="grid grid-cols-[9rem_minmax(0,1.25fr)_minmax(0,2.05fr)_minmax(0,12rem)] gap-0 border-b border-white/10 bg-black/25">
       <div className="relative overflow-hidden border-r border-white/10 bg-black/60 p-1">
         {hasVideo && !hideStreams ? (
           <StreamPlayer
@@ -369,17 +374,21 @@ function PilotMonitorRow({
             {t('common.hide')} {t('pilotTelemetry.telemetry')}
           </div>
         ) : (
-          <div className="grid h-[4.5rem] grid-cols-4 grid-rows-2 gap-x-2 gap-y-1 content-center">
+          <div className="grid h-[4.5rem] grid-cols-5 grid-rows-2 gap-x-1 gap-y-1 content-center">
             {telemetryMetrics.map((metric) => (
-              <div key={metric.key} className="flex items-center justify-center gap-0.5 rounded border border-white/10 px-1 py-0.5">
-                <span className="font-mono text-[11px] font-bold leading-none text-white">{metric.value}</span>
-                {metric.suffix && (
-                  <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-zinc-400">{metric.suffix}</span>
-                )}
-              </div>
+              <TelemetryMetricTile
+                key={metric.key}
+                icon={metric.icon}
+                iconRotation={metric.iconRotation || 0}
+                value={metric.value}
+                rawValue={metric.rawValue}
+                suffix={metric.suffix}
+                connectionType={metric.connectionType}
+                signalStrength={metric.signalStrength}
+              />
             ))}
           </div>
-        )}
+        )} 
       </div>
 
       <div className="min-w-0 px-2 py-1.5">
@@ -1014,7 +1023,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
                     {visiblePilots.length}/{displaySortedPilots.length}
                   </p>
                 </div>
-                <div className="sticky top-0 z-20 grid grid-cols-[12rem_minmax(0,1.45fr)_minmax(0,1.45fr)_minmax(0,14rem)] gap-2 border-b border-white/10 bg-[#111113]/95 px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-400 backdrop-blur-sm">
+                <div className="sticky top-0 z-20 grid grid-cols-[12rem_minmax(0,1.45fr)_minmax(0,1.8fr)_minmax(0,14rem)] gap-2 border-b border-white/10 bg-[#111113]/95 px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-400 backdrop-blur-sm">
                   <div>{t('scene5.onboard')}</div>
                   <div>{t('scene3.pilot')}</div>
                   <div>{t('pilotTelemetry.telemetry')}</div>

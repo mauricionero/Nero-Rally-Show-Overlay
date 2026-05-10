@@ -103,6 +103,57 @@ The separation is intentional:
 - `telemetry` can be noisy without affecting the rest of the sync system.
 - `priority` gives urgent traffic its own lane instead of mixing it into normal deltas.
 
+### Telemetry Payload
+
+Send live telemetry on the `rally-telemetry:{channelId}` channel as a `pilot-telemetry` message.
+The app stores the payload by `pilotId` and keeps the latest values per pilot.
+
+Recommended payload shape:
+
+```json
+{
+  "messageType": "pilot-telemetry",
+  "pilotId": "pilot_2a5ed1ac-4e3d-4dcf-bdda-6068491ff826",
+  "source": "android-app",
+  "latLong": "-25.4313542,-49.2596533",
+  "latlongTimestamp": 1778364775833,
+  "speed": 0,
+  "heading": 0,
+  "gForce": 0,
+  "rpmReal": 0,
+  "rpmPercentage": 0,
+  "gear": 2,
+  "distance": 12345,
+  "temperature": 68,
+  "signalStrength": 3,
+  "connectionType": "WIFI"
+}
+```
+
+Supported telemetry fields:
+
+- Identity and routing:
+  - `pilotId`, `source`, `gameId`, `stageId`, `gameStageName`
+- Freshness and positioning:
+  - `latLong`, `latlongTimestamp`, `lastLatLongUpdatedAt`, `lastTelemetryAt`
+- Driving metrics:
+  - `speed`, `heading`, `gForce`, `rpmPercentage`, `rpmReal`, `gear`, `distance`
+  - `distanceDrivenLap`, `distanceDrivenOverall`, `temperature`
+- Connection quality:
+  - `signalStrength` preferred, legacy alias `connectionStrength`
+  - `connectionType`
+- Raw/vector inputs:
+  - `longitudinalG`, `lateralG`, `verticalG`
+  - `longitudinalForce`, `lateralForce`, `verticalForce`
+  - `accelerationX`, `accelerationY`, `accelerationZ`
+- Spatial coordinates:
+  - `posX`, `posY`, `posZ`
+
+Notes:
+
+- `signalStrength` and `connectionStrength` are both accepted. The UI treats them as a 1-4 signal quality value.
+- The same telemetry fields can also be published inside the sync layer under `pilotTelemetry`, but the live telemetry channel is the preferred route.
+
 ## Build
 
 - `yarn build`

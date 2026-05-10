@@ -246,7 +246,12 @@ const normalizeConnectionStrength = (value) => {
     return null;
   }
 
-  return Math.max(0, Math.min(4, Math.trunc(numericValue)));
+  const strength = Math.trunc(numericValue);
+  if (strength <= 0) {
+    return null;
+  }
+
+  return Math.max(1, Math.min(4, strength));
 };
 
 const normalizeConnectionType = (value) => {
@@ -2073,10 +2078,6 @@ export const RallyProvider = ({ children }) => {
       setPilots(normalizePilotArrayPayload(loadFromStorage('rally_pilots', [])));
     }
 
-    if (nextDomains.includes('pilotTelemetry')) {
-      applyPilotTelemetryState({});
-    }
-
     if (nextDomains.includes('categories')) {
       hydratingDomainsRef.current.add('categories');
       setCategories(loadFromStorage('rally_categories', []));
@@ -3288,7 +3289,13 @@ export const RallyProvider = ({ children }) => {
     if (normalizedChanges.pilotTelemetry !== undefined) {
       const telemetryEntries = Object.entries(normalizedChanges.pilotTelemetry || {}).map(([pilotId, telemetry]) => ([
         normalizePilotId(pilotId),
-        telemetry
+        {
+          ...telemetry,
+          lastTelemetryAt: telemetry?.lastTelemetryAt ?? messageTimestamp,
+          latlongTimestamp: telemetry?.latlongTimestamp ?? telemetry?.lastLatLongUpdatedAt ?? messageTimestamp,
+          lastLatLongUpdatedAt: telemetry?.lastLatLongUpdatedAt ?? telemetry?.latlongTimestamp ?? messageTimestamp,
+          source: telemetry?.source ?? metadata?.source ?? metadata?.sourceRole ?? ''
+        }
       ]));
       mergePilotTelemetryEntries(telemetryEntries, {
         suppressSync: true
@@ -3622,6 +3629,14 @@ export const RallyProvider = ({ children }) => {
 
           if (immediateTelemetry.connectionStrength !== undefined) {
             immediateTelemetry.connectionStrength = normalizeConnectionStrength(immediateTelemetry.connectionStrength);
+            immediateTelemetry.signalStrength = immediateTelemetry.connectionStrength;
+          }
+
+          if (immediateTelemetry.signalStrength !== undefined) {
+            immediateTelemetry.signalStrength = normalizeConnectionStrength(immediateTelemetry.signalStrength);
+            if (immediateTelemetry.connectionStrength === undefined) {
+              immediateTelemetry.connectionStrength = immediateTelemetry.signalStrength;
+            }
           }
 
           if (immediateTelemetry.connectionType !== undefined) {
@@ -5522,6 +5537,14 @@ export const RallyProvider = ({ children }) => {
 
     if (normalizedTelemetry.connectionStrength !== undefined) {
       normalizedTelemetry.connectionStrength = normalizeConnectionStrength(normalizedTelemetry.connectionStrength);
+      normalizedTelemetry.signalStrength = normalizedTelemetry.connectionStrength;
+    }
+
+    if (telemetry.signalStrength !== undefined) {
+      normalizedTelemetry.signalStrength = normalizeConnectionStrength(telemetry.signalStrength);
+      if (normalizedTelemetry.connectionStrength === undefined) {
+        normalizedTelemetry.connectionStrength = normalizedTelemetry.signalStrength;
+      }
     }
 
     if (normalizedTelemetry.connectionType !== undefined) {
