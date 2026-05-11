@@ -18,6 +18,7 @@ const shallowEqual = (left = {}, right = {}) => {
 const areLiveStartInformationPropsEqual = (prevProps, nextProps) => (
   prevProps.startTime === nextProps.startTime &&
   prevProps.finishTime === nextProps.finishTime &&
+  prevProps.arrivalTime === nextProps.arrivalTime &&
   prevProps.retired === nextProps.retired &&
   prevProps.stageDate === nextProps.stageDate &&
   prevProps.stageId === nextProps.stageId &&
@@ -35,6 +36,7 @@ const areLiveStartInformationPropsEqual = (prevProps, nextProps) => (
 function LiveStartInformationValueBase({
   startTime = '',
   finishTime = '',
+  arrivalTime = '',
   retired = false,
   stageDate,
   stageId = '',
@@ -54,18 +56,20 @@ function LiveStartInformationValueBase({
       stageId,
       stageDate,
       startTime,
+      useReplayStageSchedule: eventIsOver,
       replayStageScheduleById
     })
-  ), [replayStageScheduleById, stageDate, stageId, startTime]);
+  ), [eventIsOver, replayStageScheduleById, stageDate, stageId, startTime]);
   const resolvedStageFinishDateTime = useMemo(() => (
     getResolvedStageFinishDateTime({
       stageId,
       stageDate,
       startTime,
       finishTime,
+      useReplayStageSchedule: eventIsOver,
       replayStageScheduleById
     })
-  ), [finishTime, replayStageScheduleById, stageDate, stageId, startTime]);
+  ), [eventIsOver, finishTime, replayStageScheduleById, stageDate, stageId, startTime]);
   const tickingNow = useSecondAlignedClock(true);
   const currentNow = useMemo(() => getReferenceNow(debugDate, tickingNow), [debugDate, tickingNow]);
 
@@ -73,6 +77,7 @@ function LiveStartInformationValueBase({
     getStartInformationFromValues({
       startTime,
       finishTime,
+      arrivalTime,
       retired,
       stageDate,
       stageStartDateTime: resolvedStageStartDateTime,
@@ -82,9 +87,9 @@ function LiveStartInformationValueBase({
       startLabel,
       retiredLabel
     })
-  ), [currentNow, finishTime, retired, retiredLabel, resolvedStageFinishDateTime, resolvedStageStartDateTime, stageDate, startLabel, startTime, timeDecimals]);
+  ), [arrivalTime, currentNow, finishTime, retired, retiredLabel, resolvedStageFinishDateTime, resolvedStageStartDateTime, stageDate, startLabel, startTime, timeDecimals]);
 
-  if (eventIsOver && !finishTime && !retired) {
+  if (eventIsOver && !(finishTime || arrivalTime) && !retired) {
     return null;
   }
 

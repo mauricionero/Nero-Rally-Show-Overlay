@@ -110,8 +110,9 @@ export default function CurrentStageCard({ showDebugIds = false }) {
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_200px_200px_180px] md:items-start">
             <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-[#09090B] px-4 py-3">
               <Switch
-                checked={eventIsOver}
+                checked={eventIsOver === true}
                 onCheckedChange={(checked) => setEventIsOver(checked === true)}
+                className="data-[state=checked]:bg-[#FF4500] data-[state=unchecked]:bg-zinc-700"
               />
               <div>
                 <p className="text-sm text-white">{t('config.eventIsOver')}</p>
@@ -123,6 +124,7 @@ export default function CurrentStageCard({ showDebugIds = false }) {
               <DateInput
                 value={eventReplayStartDate || ''}
                 onCommit={setEventReplayStartDate}
+                placeholder={t('common.selectDate')}
                 className="bg-[#09090B] border-zinc-700 text-white"
                 disabled={!eventIsOver}
                 data-testid="input-event-replay-start-date"

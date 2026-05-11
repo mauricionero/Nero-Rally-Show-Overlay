@@ -46,10 +46,11 @@ export const getResolvedStageStartDateTime = ({
   stageId = '',
   stageDate = '',
   startTime = '',
+  useReplayStageSchedule = false,
   replayStageScheduleById = null
 } = {}) => {
   const normalizedStageId = String(stageId || '').trim();
-  if (replayStageScheduleById instanceof Map && normalizedStageId) {
+  if (useReplayStageSchedule && replayStageScheduleById instanceof Map && normalizedStageId) {
     const replayStageSchedule = replayStageScheduleById.get(normalizedStageId);
     if (replayStageSchedule?.replayStartDateTime instanceof Date && !Number.isNaN(replayStageSchedule.replayStartDateTime.getTime())) {
       return replayStageSchedule.replayStartDateTime;
@@ -64,12 +65,14 @@ export const getResolvedStageFinishDateTime = ({
   stageDate = '',
   startTime = '',
   finishTime = '',
+  useReplayStageSchedule = false,
   replayStageScheduleById = null
 } = {}) => {
   const resolvedStartDateTime = getResolvedStageStartDateTime({
     stageId,
     stageDate,
     startTime,
+    useReplayStageSchedule,
     replayStageScheduleById
   });
   const finishSeconds = parseClockTimeToSeconds(finishTime, 'duration');
@@ -219,26 +222,38 @@ const formatCountdownTime = (remainingMs) => {
 
 export const startInformationTime = ({
   pilotId,
+  pilot = null,
+  stage = null,
   stageId,
   startTimes,
   times,
+  arrivalTimes = {},
   retiredStages,
   stageDate,
   stageFinishDateTime = null,
+  useReplayStageSchedule = false,
   replayStageScheduleById = null,
+  startTimeOverride = '',
   now = new Date(),
   decimals = 3,
   includeLabel = true,
   startLabel = 'Start',
   retiredLabel = 'Retired'
 }) => {
-  const startTime = startTimes[pilotId]?.[stageId] || '';
+  const startTime = startTimeOverride || getPilotEffectiveStageStartTime({
+    pilotId,
+    pilot,
+    stage,
+    startTimes
+  });
   const finishTime = times[pilotId]?.[stageId] || '';
+  const arrivalTime = arrivalTimes[pilotId]?.[stageId] || '';
   const retired = isPilotRetiredForStage(pilotId, stageId, retiredStages);
   const stageStartDateTime = getResolvedStageStartDateTime({
     stageId,
     stageDate,
     startTime,
+    useReplayStageSchedule,
     replayStageScheduleById
   });
   const resolvedStageFinishDateTime = stageFinishDateTime instanceof Date && !Number.isNaN(stageFinishDateTime.getTime())
@@ -248,11 +263,13 @@ export const startInformationTime = ({
         stageDate,
         startTime,
         finishTime,
+        useReplayStageSchedule,
         replayStageScheduleById
       });
   return getStartInformationFromValues({
     startTime,
     finishTime,
+    arrivalTime,
     retired,
     stageDate,
     stageStartDateTime,
@@ -268,6 +285,7 @@ export const startInformationTime = ({
 export const getStartInformationFromValues = ({
   startTime = '',
   finishTime = '',
+  arrivalTime = '',
   retired = false,
   stageDate,
   stageStartDateTime = null,
@@ -288,12 +306,13 @@ export const getStartInformationFromValues = ({
     ? formatClockTimeFromDate(resolvedStageStartDateTime)
     : startTime;
   const shouldUseReplayFinishGate = resolvedStageFinishDateTime instanceof Date;
+  const completionTime = finishTime || arrivalTime || '';
   const remainingToStartMs = resolvedStageStartDateTime ? (resolvedStageStartDateTime.getTime() - now.getTime()) : null;
   const elapsedSinceStartMs = resolvedStageStartDateTime ? (now.getTime() - resolvedStageStartDateTime.getTime()) : null;
   let status = 'not_started';
 
-  if (finishTime) {
-    if (shouldUseReplayFinishGate) {
+  if (completionTime) {
+    if (finishTime && shouldUseReplayFinishGate) {
       if (now >= resolvedStageFinishDateTime) {
         status = 'finished';
       } else if (resolvedStageStartDateTime && now >= resolvedStageStartDateTime) {
@@ -353,10 +372,10 @@ export const getStartInformationFromValues = ({
     }
     timer = getRunningTime(resolvedStartTime, stageDate, now, decimals, resolvedStageStartDateTime);
     text = timer;
-  } else if (status === 'finished' && finishTime) {
-    timer = finishTime;
+  } else if (status === 'finished' && completionTime) {
+    timer = completionTime;
     label = retired ? 'RET' : '';
-    text = retired && includeLabel ? `${finishTime} RET` : finishTime;
+    text = retired && includeLabel ? `${completionTime} RET` : completionTime;
   } else if (resolvedStartTime) {
     label = startLabel;
     timer = shouldShowStartCountdown ? formatCountdownTime(remainingToStartMs) : resolvedStartTime;
@@ -375,7 +394,7 @@ export const getStartInformationFromValues = ({
     isCountdown,
     signal,
     startTime: resolvedStartTime,
-    finishTime,
+    finishTime: completionTime,
     retired,
     stageStartDateTime: resolvedStageStartDateTime
   };
@@ -403,8 +422,20 @@ export const parseTime = (timeStr) => {
   }
 };
 
-export const getPilotStageStartTime = (pilotId, stage, startTimes = {}) => (
-  startTimes?.[pilotId]?.[stage?.id] || stage?.startTime || ''
+export const getPilotEffectiveStageStartTime = ({
+  pilotId = '',
+  pilot = null,
+  stage = null,
+  startTimes = {}
+} = {}) => (
+  startTimes?.[pilotId]?.[stage?.id]
+  || getPilotScheduledStartTime(stage, pilot)
+  || stage?.startTime
+  || ''
+);
+
+export const getPilotStageStartTime = (pilotId, stage, startTimes = {}, pilot = null) => (
+  getPilotEffectiveStageStartTime({ pilotId, pilot, stage, startTimes })
 );
 
 export const getLapRaceTotalTimeMode = (stage) => (
@@ -680,8 +711,10 @@ export const getPilotStageTimingInfo = ({
   stage,
   startTimes = {},
   times = {},
+  arrivalTimes = {},
   lapTimes = {},
   retiredStages = {},
+  useReplayStageSchedule = false,
   replayStageScheduleById = null,
   now = new Date(),
   timeDecimals = 3,
@@ -723,6 +756,7 @@ export const getPilotStageTimingInfo = ({
         stageId: stage.id,
         stageDate: stage.date,
         startTime: lapInfo.startTime || '',
+        useReplayStageSchedule,
         replayStageScheduleById
       }),
       now,
@@ -757,22 +791,29 @@ export const getPilotStageTimingInfo = ({
   }
 
   if (isSpecialStageType(stage.type)) {
+    const effectiveStartTime = getPilotEffectiveStageStartTime({ pilotId, pilot, stage, startTimes });
     const stageFinishDateTime = getResolvedStageFinishDateTime({
       stageId: stage.id,
       stageDate: stage.date,
-      startTime: startTimes?.[pilotId]?.[stage.id] || getPilotScheduledStartTime(stage, pilot) || '',
+      startTime: effectiveStartTime,
       finishTime: times?.[pilotId]?.[stage.id] || '',
+      useReplayStageSchedule,
       replayStageScheduleById
     });
     const startInfo = startInformationTime({
       pilotId,
+      pilot,
+      stage,
       stageId: stage.id,
       startTimes,
       times,
+      arrivalTimes,
       retiredStages,
       stageDate: stage.date,
       stageFinishDateTime,
+      useReplayStageSchedule,
       replayStageScheduleById,
+      startTimeOverride: effectiveStartTime,
       now,
       decimals: timeDecimals,
       includeLabel,
@@ -796,7 +837,7 @@ export const getPilotStageTimingInfo = ({
     };
   }
 
-  const startTime = startTimes?.[pilotId]?.[stage.id] || getPilotScheduledStartTime(stage, pilot) || '';
+  const startTime = getPilotEffectiveStageStartTime({ pilotId, pilot, stage, startTimes });
   const endTime = getPilotScheduledEndTime(stage, pilot) || '';
   const retired = isPilotRetiredForStage(pilotId, stage.id, retiredStages);
 
@@ -835,6 +876,7 @@ export const buildLapRaceLeaderboard = ({
   startTimes = {},
   times = {},
   retiredStages = {},
+  useReplayStageSchedule = false,
   now = new Date(),
   timeDecimals = 3,
   fallbackOrderByPilotId = new Map()
@@ -857,6 +899,7 @@ export const buildLapRaceLeaderboard = ({
         times,
         lapTimes,
         retiredStages,
+        useReplayStageSchedule,
         now,
         timeDecimals,
         includeLabel: false

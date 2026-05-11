@@ -19,6 +19,7 @@ common:
   noData: "No data available"
   search: "Search"
   select: "Select"
+  selectDate: "Select date"
   none: "None"
   all: "All"
   apply: "Apply"

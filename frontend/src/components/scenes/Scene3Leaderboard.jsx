@@ -12,6 +12,7 @@ import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
 import { LiveOverallTimeValue } from '../LiveOverallTimeValue.jsx';
 import {
   buildLapRaceLeaderboard,
+  getPilotEffectiveStageStartTime,
   getLapRaceStageMetaParts,
   getReferenceNow,
   getStageDateTime,
@@ -36,7 +37,7 @@ import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
 const SCENE_3_CONFIG_KEY = 'scene3Config';
 
 export default function Scene3Leaderboard({ hideStreams = false }) {
-  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds } = useRally();
+  const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, arrivalTimes } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
@@ -233,6 +234,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           startTimes,
           times,
           retiredStages,
+          useReplayStageSchedule: eventIsOver,
           now: sceneNow,
           timeDecimals,
           fallbackOrderByPilotId: displayOrderByPilotId
@@ -262,7 +264,9 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
             stage: selectedStage,
             startTimes,
             times,
+            arrivalTimes,
             retiredStages,
+            useReplayStageSchedule: eventIsOver,
             replayStageScheduleById,
             now: sceneNow,
             timeDecimals,
@@ -348,7 +352,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         isRetired
       };
     }));
-  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedOverallStages, referenceOverallStage, overallStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t]);
+  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedOverallStages, referenceOverallStage, overallStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t, eventIsOver, replayStageScheduleById]);
 
   const isLapRaceSelected = isLapTimingStageType(selectedStage?.type);
   const isSuperPrimeSelected = selectedStage?.type === SUPER_PRIME_STAGE_TYPE;
@@ -682,8 +686,14 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                       <>
                         <td className="p-4 text-right">
                       <LiveStartInformationValue
-                        startTime={startTimes[pilot.id]?.[selectedStageId] || ''}
-                        finishTime={times[pilot.id]?.[selectedStageId] || ''}
+                        startTime={getPilotEffectiveStageStartTime({
+                          pilotId: pilot.id,
+                          pilot,
+                          stage: selectedStage,
+                          startTimes
+                        })}
+                        finishTime={times[pilot.id]?.[selectedStageId] || arrivalTimes[pilot.id]?.[selectedStageId] || ''}
+                        arrivalTime={arrivalTimes[pilot.id]?.[selectedStageId] || ''}
                         retired={!!retiredStages?.[pilot.id]?.[selectedStageId]}
                         stageDate={selectedStage?.date}
                         stageId={selectedStage?.id}

@@ -37,6 +37,53 @@ const perpendicularDistance = (point, start, end) => {
   return denominator === 0 ? 0 : numerator / denominator;
 };
 
+export const getMapPlacemarkPointCount = (placemark) => (
+  (Array.isArray(placemark?.coordinateGroups) ? placemark.coordinateGroups : [])
+    .reduce((total, group) => total + (Array.isArray(group) ? group.length : 0), 0)
+);
+
+const normalizeMapPlacemarkName = (name) => (
+  String(name || '')
+    .trim()
+    .replace(/\s*\(-\d+%\)\s*$/u, '')
+    .trim()
+);
+
+const sampleEvenlySpacedPoints = (points, step, geometryType = '') => {
+  if (!Array.isArray(points) || points.length <= 2) {
+    return (points || []).map(clonePoint).filter(isValidPoint);
+  }
+
+  const normalizedStep = Math.max(2, Math.floor(Number(step) || 2));
+  const isClosedRing = geometryType === 'polygon' && points.length > 3 && pointsAlmostEqual(points[0], points[points.length - 1]);
+  const workPoints = isClosedRing ? points.slice(0, -1) : points;
+  const sampled = [];
+
+  workPoints.forEach((point, index) => {
+    if (
+      index === 0
+      || index === workPoints.length - 1
+      || ((index + 1) % normalizedStep !== 0)
+    ) {
+      sampled.push(clonePoint(point));
+    }
+  });
+
+  if (sampled.length < 2) {
+    return [clonePoint(workPoints[0]), clonePoint(workPoints[workPoints.length - 1])].filter(isValidPoint);
+  }
+
+  if (isClosedRing && sampled.length > 0) {
+    const closed = sampled.map(clonePoint);
+    if (!pointsAlmostEqual(closed[0], closed[closed.length - 1])) {
+      closed.push(clonePoint(closed[0]));
+    }
+    return closed.filter(isValidPoint);
+  }
+
+  return sampled.filter(isValidPoint);
+};
+
 const simplifyOpenPath = (points, tolerance) => {
   if (!Array.isArray(points) || points.length <= 2) {
     return (points || []).map(clonePoint).filter(isValidPoint);
@@ -88,6 +135,38 @@ const simplifyCoordinateGroup = (group = [], tolerance = 0.00001, geometryType =
   return simplified;
 };
 
+const downsamplePlacemarkCoordinateGroups = (placemark, maxBytes) => {
+  const sourceGroups = Array.isArray(placemark.coordinateGroups) ? placemark.coordinateGroups : [];
+  if (sourceGroups.length === 0) {
+    return placemark;
+  }
+
+  const originalSize = JSON.stringify(placemark).length;
+  if (!Number.isFinite(originalSize) || originalSize <= maxBytes) {
+    return placemark;
+  }
+
+  const targetRatio = Math.min(0.95, Math.max(0.05, maxBytes / originalSize));
+  const initialStep = Math.max(2, Math.round(1 / Math.max(0.05, 1 - targetRatio)));
+  let bestCandidate = placemark;
+
+  for (let step = initialStep; step <= Math.max(initialStep + 32, 256); step += 1) {
+    const candidate = {
+      ...placemark,
+      coordinateGroups: sourceGroups
+        .map((group) => sampleEvenlySpacedPoints(group, step, placemark.geometryType))
+        .filter((group) => group.length > 0)
+    };
+
+    bestCandidate = candidate;
+    if (JSON.stringify(candidate).length <= maxBytes) {
+      return candidate;
+    }
+  }
+
+  return bestCandidate;
+};
+
 export const compressMapPlacemarkForTransport = (placemark, {
   maxBytes = 55000,
   initialTolerance = 0.00001,
@@ -112,6 +191,11 @@ export const compressMapPlacemarkForTransport = (placemark, {
     return placemark;
   }
 
+  const downsampled = downsamplePlacemarkCoordinateGroups(placemark, maxBytes);
+  if (JSON.stringify(downsampled).length <= maxBytes) {
+    return downsampled;
+  }
+
   let tolerance = initialTolerance;
   let bestCandidate = createCandidate(tolerance);
 
@@ -127,4 +211,27 @@ export const compressMapPlacemarkForTransport = (placemark, {
   }
 
   return bestCandidate;
+};
+
+export const prepareMapPlacemarkForImport = (placemark, {
+  maxBytes = 55000
+} = {}) => {
+  if (!placemark || typeof placemark !== 'object') {
+    return placemark;
+  }
+
+  const originalName = normalizeMapPlacemarkName(placemark.name);
+  const originalSize = JSON.stringify(placemark).length;
+  const compressedPlacemark = compressMapPlacemarkForTransport(placemark, { maxBytes });
+  const compressedSize = JSON.stringify(compressedPlacemark).length;
+  const reductionPercent = originalSize > 0
+    ? Math.max(0, Math.min(99, Math.round((1 - (compressedSize / originalSize)) * 100)))
+    : 0;
+
+  return {
+    ...compressedPlacemark,
+    name: reductionPercent > 0
+      ? `${originalName || compressedPlacemark.name || ''} (-${reductionPercent}%)`
+      : (originalName || compressedPlacemark.name || '')
+  };
 };

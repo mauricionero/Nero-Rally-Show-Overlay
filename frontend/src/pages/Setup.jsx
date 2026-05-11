@@ -7,7 +7,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { Download, Play, VideoOff, Wifi } from 'lucide-react';
+import { Play, VideoOff, Wifi } from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import { getResolvedBrandingLogoUrl } from '../utils/branding.js';
 import WsLedStrip from '../components/WsLedStrip.jsx';
@@ -16,7 +16,7 @@ import SosAlertStack from '../components/SosAlertStack.jsx';
 import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
 
 // app version constant
-import { APK_FILE_NAME, VERSION, getApkDownloadUrl } from '../config/version.js';
+import { VERSION } from '../config/version.js';
 
 // Tab Components
 import PilotsTab from '../components/setup/PilotsTab.jsx';
@@ -135,12 +135,6 @@ export default function Setup() {
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
             v{VERSION}
           </span>
-          <Button asChild size="sm" variant="outline" className="h-7 gap-1.5 border-zinc-700 bg-transparent px-2 text-[10px] text-zinc-200 hover:bg-zinc-800 hover:text-white">
-            <a href={getApkDownloadUrl()} download={APK_FILE_NAME} title={APK_FILE_NAME}>
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">APK</span>
-            </a>
-          </Button>
           <WsLedStrip
             wsEnabled={wsEnabled}
             wsConnectionStatus={wsConnectionStatus}

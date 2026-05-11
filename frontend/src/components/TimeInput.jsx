@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Input } from './ui/input';
 import { clampTimeDecimals } from '../utils/timeFormat.js';
 import { getTimeInputPlaceholder, normalizeTimingInput } from '../utils/timeConversion.js';
@@ -27,15 +27,36 @@ const formatDraftTimeValue = (value, decimals = 3) => {
 };
 
 export const TimeInput = ({ value, onChange, placeholder, format = 'total', decimals = 3, onBlur, onKeyDown, readOnly = false, ...props }) => {
-  const [draftValue, setDraftValue] = useState(() => formatDraftTimeValue(value, decimals));
+  const [draftValue, setDraftValue] = useState(() => normalizeTimingInput(String(value ?? ''), decimals));
+  const isDirtyRef = useRef(false);
 
   useEffect(() => {
-    setDraftValue(formatDraftTimeValue(value, decimals));
+    setDraftValue(normalizeTimingInput(String(value ?? ''), decimals));
+    isDirtyRef.current = false;
   }, [decimals, value]);
 
   const commitValue = (nextValue) => {
-    const formattedValue = normalizeTimingInput(formatDraftTimeValue(nextValue, decimals), decimals);
-    setDraftValue(formatDraftTimeValue(formattedValue, decimals));
+    if (!isDirtyRef.current) {
+      return;
+    }
+
+    const currentValue = normalizeTimingInput(String(value ?? ''), decimals);
+    const formattedValue = normalizeTimingInput(String(nextValue ?? ''), decimals);
+
+    if (formattedValue === currentValue) {
+      setDraftValue(currentValue);
+      isDirtyRef.current = false;
+      return;
+    }
+
+    if (!formattedValue && currentValue) {
+      setDraftValue(currentValue);
+      isDirtyRef.current = false;
+      return;
+    }
+
+    setDraftValue(formattedValue);
+    isDirtyRef.current = false;
     onChange?.(formattedValue);
   };
 
@@ -44,6 +65,7 @@ export const TimeInput = ({ value, onChange, placeholder, format = 'total', deci
       {...props}
       value={draftValue}
       onChange={(event) => {
+        isDirtyRef.current = true;
         setDraftValue(formatDraftTimeValue(event.target.value, decimals));
       }}
       onKeyDown={(event) => {

@@ -7,11 +7,13 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
+import DateInput from '../DateInput.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Flag, Trophy, RotateCcw, Timer, Car } from 'lucide-react';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
+import { getMapPlacemarkPointCount } from '../../utils/mapPlacemarkCompression.js';
 import CurrentStageCard from './CurrentStageCard.jsx';
 import DebugIdText from './DebugIdText.jsx';
 import {
@@ -105,7 +107,16 @@ export default function TheRaceTab() {
   } = useRally();
 
   const mapPlacemarkOptions = useMemo(
-    () => [...mapPlacemarks].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    () => [...mapPlacemarks].sort((a, b) => {
+      const pointsA = getMapPlacemarkPointCount(a);
+      const pointsB = getMapPlacemarkPointCount(b);
+
+      if (pointsA !== pointsB) {
+        return pointsB - pointsA;
+      }
+
+      return (a.name || '').localeCompare(b.name || '');
+    }),
     [mapPlacemarks]
   );
 
@@ -475,7 +486,7 @@ export default function TheRaceTab() {
                     onValueChange={(value) => handleStageGameChange(setNewStage, handleNullableSelectValue(value))}
                   >
                     <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                      <SelectValue placeholder={t('theRace.placeholder.game')} />
+                      <SelectValue placeholder="" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
@@ -515,10 +526,9 @@ export default function TheRaceTab() {
                 </div>
                 <div className="xl:col-span-2 min-w-0">
                   <Label className="text-white">{t('theRace.date')}</Label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={newStage.date}
-                    onChange={(e) => setNewStage({ ...newStage, date: e.target.value })}
+                    onCommit={(value) => setNewStage({ ...newStage, date: value })}
                     className="bg-[#09090B] border-zinc-700 text-white"
                   />
                 </div>
@@ -631,7 +641,7 @@ export default function TheRaceTab() {
                   onValueChange={(value) => handleStageGameChange(setNewStage, handleNullableSelectValue(value))}
                 >
                   <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                    <SelectValue placeholder={t('theRace.placeholder.game')} />
+                    <SelectValue placeholder="" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
@@ -690,10 +700,10 @@ export default function TheRaceTab() {
 
               <div>
                 <Label className="text-white">{t('theRace.date')}</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={newStage.date}
-                  onChange={(e) => setNewStage({ ...newStage, date: e.target.value })}
+                  onCommit={(value) => setNewStage({ ...newStage, date: value })}
+                  placeholder={t('common.selectDate')}
                   className="bg-[#09090B] border-zinc-700 text-white"
                 />
               </div>
@@ -816,7 +826,7 @@ export default function TheRaceTab() {
                           size="icon"
                           onClick={() => setEditingStage({
                             ...stage,
-                            game: stage.game || 'dirtRally2',
+                            game: stage.game || '',
                             gameStageName: stage.gameStageName || '',
                             date: formatDateForEditing(stage.date)
                           })}
@@ -860,7 +870,7 @@ export default function TheRaceTab() {
                                 onValueChange={(value) => handleStageGameChange(setEditingStage, handleNullableSelectValue(value))}
                               >
                                 <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
-                                  <SelectValue placeholder={t('theRace.placeholder.game')} />
+                                  <SelectValue placeholder="" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value={EMPTY_SELECT_VALUE}>{t('common.none')}</SelectItem>
@@ -962,12 +972,11 @@ export default function TheRaceTab() {
                             )}
                             <div>
                               <Label className="text-white">{t('theRace.date')}</Label>
-                              <Input
-                                value={editingStage.date || ''}
-                                onChange={(e) => setEditingStage({ ...editingStage, date: formatEditableDateInput(e.target.value) })}
-                                placeholder="DD/MM/YYYY"
+                              <DateInput
+                                value={normalizeEditedDate(editingStage.date) || ''}
+                                onCommit={(value) => setEditingStage({ ...editingStage, date: value })}
+                                placeholder={t('common.selectDate')}
                                 className="bg-[#09090B] border-zinc-700 text-white"
-                                inputMode="numeric"
                               />
                             </div>
                             <div>

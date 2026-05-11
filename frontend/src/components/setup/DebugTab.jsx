@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
@@ -7,6 +7,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import DateInput from '../DateInput.jsx';
 import { Bug, CalendarDays } from 'lucide-react';
 import { DEFAULT_DEBUG_FLAGS, loadDebugFlags, saveDebugFlags } from '../../utils/debugFlags.js';
 
@@ -20,12 +21,6 @@ export default function DebugTab() {
     wsLastSnapshotReceivedAt
   } = useRallyWs();
   const [debugFlags, setDebugFlags] = useState(() => loadDebugFlags());
-  const [debugDateDraft, setDebugDateDraft] = useState(debugDate || '');
-
-  useEffect(() => {
-    setDebugDateDraft(debugDate || '');
-  }, [debugDate]);
-
   const debugOptions = useMemo(() => ([
     {
       key: 'sync',
@@ -104,11 +99,10 @@ export default function DebugTab() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label className="text-white">{t('debug.simulatedDate')}</Label>
-            <Input
-              type="date"
-              value={debugDateDraft}
-              onChange={(e) => setDebugDateDraft(e.target.value)}
-              onBlur={() => setDebugDate(debugDateDraft)}
+            <DateInput
+              value={debugDate || ''}
+              onCommit={setDebugDate}
+              placeholder={t('common.selectDate')}
               className="bg-[#09090B] border-zinc-700 text-white"
               data-testid="input-debug-date"
             />

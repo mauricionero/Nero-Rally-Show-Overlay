@@ -27,6 +27,10 @@ const measureJsonSize = (value) => {
 };
 
 const splitChangeValueByApproximateSize = (domain, value, maxBytes = DEFAULT_SYNC_MESSAGE_MAX_BYTES) => {
+  if (domain === 'mapPlacemarks' && Array.isArray(value)) {
+    return value.map((item) => ({ mapPlacemarks: [item] }));
+  }
+
   const wrappedValue = { [domain]: value };
   if (measureJsonSize(wrappedValue) <= maxBytes) {
     return [wrappedValue];
@@ -147,6 +151,14 @@ export const chunkChangesByApproximateSize = (changes = {}, maxBytes = DEFAULT_S
 
   domainChunks.forEach((domainChunk) => {
     const [domain] = Object.keys(domainChunk);
+    if (domain === 'mapPlacemarks') {
+      if (Object.keys(currentChunk).length > 0) {
+        chunks.push(currentChunk);
+        currentChunk = {};
+      }
+      chunks.push(domainChunk);
+      return;
+    }
     const currentHasSameDomain = Object.prototype.hasOwnProperty.call(currentChunk, domain);
     const tentativeChunk = currentHasSameDomain
       ? null

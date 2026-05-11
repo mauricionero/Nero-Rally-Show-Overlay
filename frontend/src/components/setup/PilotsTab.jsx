@@ -48,6 +48,15 @@ const normalizeOptionalNumberInput = (value) => {
   return Number.isFinite(numericValue) ? numericValue : '';
 };
 
+const normalizeOffsetMinutesInput = (value) => {
+  const normalized = normalizeOptionalNumberInput(value);
+  if (normalized === '') {
+    return '';
+  }
+
+  return Math.max(0, Math.trunc(Number(normalized)));
+};
+
 const normalizeOptionalTextInput = (value) => String(value ?? '').trim();
 
 const TELEMETRY_PLACEHOLDERS = {
@@ -539,7 +548,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     const pilotData = {
       ...newPilot,
       startOrder: parseInt(newPilot.startOrder) || 999,
-      timeOffsetMinutes: parseInt(newPilot.timeOffsetMinutes) || 0
+      timeOffsetMinutes: normalizeOffsetMinutesInput(newPilot.timeOffsetMinutes)
     };
     addPilot(pilotData);
     setNewPilot({
@@ -642,7 +651,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
       ...editingPilot,
       replayStageTimes: normalizeReplayStageTimes(editingPilot.replayStageTimes),
       startOrder: parseInt(editingPilot.startOrder) || 999,
-      timeOffsetMinutes: parseInt(editingPilot.timeOffsetMinutes) || 0
+      timeOffsetMinutes: normalizeOffsetMinutesInput(editingPilot.timeOffsetMinutes)
     };
     TELEMETRY_FORM_FIELD_KEYS.forEach((fieldKey) => {
       delete pilotData[fieldKey];
@@ -818,8 +827,9 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                 <Input
                   id="pilot-offset"
                   type="number"
+                  min="0"
                   value={newPilot.timeOffsetMinutes}
-                  onChange={(e) => setNewPilot({ ...newPilot, timeOffsetMinutes: e.target.value })}
+                  onChange={(e) => setNewPilot({ ...newPilot, timeOffsetMinutes: e.target.value === '' ? '' : String(Math.max(0, Number(e.target.value) || 0)) })}
                   placeholder={t('pilots.placeholder.timeOffsetMinutes')}
                   className="bg-[#09090B] border-zinc-700 text-white"
                   data-testid="input-pilot-offset"
@@ -1107,8 +1117,9 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                                   <Label className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
                                   <Input
                                     type="number"
+                                    min="0"
                                     value={editingPilot.timeOffsetMinutes ?? ''}
-                                    onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value })}
+                                    onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value === '' ? '' : String(Math.max(0, Number(e.target.value) || 0)) })}
                                     placeholder={t('pilots.placeholder.timeOffsetMinutes')}
                                     className="bg-[#09090B] border-zinc-700 text-white"
                                   />

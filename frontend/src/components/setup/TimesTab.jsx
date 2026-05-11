@@ -20,7 +20,7 @@ import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
 import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceVisibleLapCount, getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
 import { calculateAverageAndDeviation, parseDurationStringToMs } from '../../utils/timingStats.js';
-import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, RefreshCw, Check, CheckCheck, CircleX, Download } from 'lucide-react';
+import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, Check, CheckCheck, CircleX, Download } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
 import RollingClockInput from '../RollingClockInput.jsx';
 import {
@@ -322,10 +322,10 @@ const getStageTypeColor = (type) => {
 
 function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, pilotById, manualStartTime = false, layout = 'cards', isReadOnly = false, firstColumnWidth = 130, showDebugIds = false }) {
   const { t } = useTranslation();
-  const showLineSyncRequest = typeof window !== 'undefined' && window.location?.pathname !== '/times';
   const {
     setTime,
     setArrivalTime,
+    setArrivalAndTotalTime,
     setStartTime,
     setRealStartTime,
     setRetiredFromStage,
@@ -341,7 +341,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     stageSos,
     timeDecimals
   } = useRallyTiming();
-  const { clientRole, wsConnectionStatus, lineSyncResults, requestTimingLineSync, getSosDeliveryStatus } = useRallyWs();
+  const { clientRole, lineSyncResults, getSosDeliveryStatus } = useRallyWs();
   const statusControlsReadOnly = isReadOnly || clientRole === 'times';
   const sosControlsReadOnly = isReadOnly;
   const [pendingSosToggle, setPendingSosToggle] = useState(null);
@@ -501,51 +501,40 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 
   const handleArrivalTimeChange = (pilotId, value) => {
     if (isReadOnly) return;
-    setArrivalTime(pilotId, stage.id, value);
     const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime
       ? getEffectiveIdealStartTime(stage, pilot, startTimes[pilotId]?.[stage.id] || '')
       : getPilotScheduledStartTime(stage, pilot);
-    if (isValidClockTime(startTime) && value) {
-      const totalTime = arrivalTimeToTotal(value, startTime, timeDecimals);
-      if (totalTime) {
-        setTime(pilotId, stage.id, totalTime);
-      }
-    }
+    const totalTime = isValidClockTime(startTime) && value
+      ? arrivalTimeToTotal(value, startTime, timeDecimals)
+      : '';
+    setArrivalAndTotalTime(pilotId, stage.id, value, totalTime || undefined);
   };
 
   const handleSetArrivalTimeNow = (pilotId) => {
     if (isReadOnly) return;
 
     const currentTime = getCurrentTimeString(timeDecimals);
-    setArrivalTime(pilotId, stage.id, currentTime);
-
     const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime
       ? getEffectiveIdealStartTime(stage, pilot, startTimes[pilotId]?.[stage.id] || '')
       : getPilotScheduledStartTime(stage, pilot);
-
-    if (isValidClockTime(startTime)) {
-      const totalTime = arrivalTimeToTotal(currentTime, startTime, timeDecimals);
-      if (totalTime) {
-        setTime(pilotId, stage.id, totalTime);
-      }
-    }
+    const totalTime = isValidClockTime(startTime)
+      ? arrivalTimeToTotal(currentTime, startTime, timeDecimals)
+      : '';
+    setArrivalAndTotalTime(pilotId, stage.id, currentTime, totalTime || undefined);
   };
 
   const handleTotalTimeChange = (pilotId, value) => {
     if (isReadOnly) return;
-    setTime(pilotId, stage.id, value);
     const pilot = pilotById.get(pilotId);
     const startTime = manualStartTime
       ? getEffectiveIdealStartTime(stage, pilot, startTimes[pilotId]?.[stage.id] || '')
       : getPilotScheduledStartTime(stage, pilot);
-    if (isValidClockTime(startTime) && value) {
-      const arrivalTime = totalTimeToArrival(value, startTime, timeDecimals);
-      if (arrivalTime) {
-        setArrivalTime(pilotId, stage.id, arrivalTime);
-      }
-    }
+    const arrivalTime = isValidClockTime(startTime) && value
+      ? totalTimeToArrival(value, startTime, timeDecimals)
+      : '';
+    setArrivalAndTotalTime(pilotId, stage.id, arrivalTime || '', value || '');
   };
 
   const commitStartTimeChange = (pilotId, value) => {
@@ -771,27 +760,14 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
                         </span>
                         {showDebugIds && <DebugIdText id={pilot.id} />}
-                        {showLineSyncRequest && (
-                          <>
-                            <button
-                              onClick={() => requestTimingLineSync(pilot.id, stage.id)}
-                              className={`h-6 w-6 flex items-center justify-center rounded border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 ${wsConnectionStatus !== 'connected' ? 'opacity-60 cursor-not-allowed' : ''}`}
-                              title={t('times.syncLine')}
-                              disabled={wsConnectionStatus !== 'connected' || !showLineSyncRequest}
-                              type="button"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                            </button>
-                            {lineSync && (
-                              <StatusPill
-                                variant="info"
-                                text={t('status.info')}
-                                className={`text-[10px] ${lineSync.status === 'pending' ? 'animate-pulse' : ''}`}
-                                tooltipTitle={t('times.syncLine')}
-                                tooltipText={lineSyncText}
-                              />
-                            )}
-                          </>
+                        {lineSync && (
+                          <StatusPill
+                            variant="info"
+                            text={t('status.info')}
+                            className={`text-[10px] ${lineSync.status === 'pending' ? 'animate-pulse' : ''}`}
+                            tooltipTitle={t('times.syncLine')}
+                            tooltipText={lineSyncText}
+                          />
                         )}
                         {isJumpStart && (
                           <StatusPill
@@ -879,11 +855,12 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     <td className="p-1 sm:p-2">
                       <div className="flex items-center gap-1">
                         <TimingSourceIndicator source={row.finishTimeSource} />
-                        <TimeInput
+                        <RollingClockInput
                           value={arrivalTimeValue}
-                          onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
+                          onCommit={(val) => handleArrivalTimeChange(pilot.id, val)}
                           placeholder={getTimePlaceholder('clock', timeDecimals)}
-                          format="clock"
+                          showHours
+                          showSeconds
                           decimals={timeDecimals}
                           className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 w-28"
                           readOnly={isReadOnly}
@@ -899,8 +876,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         </button>
                         <button
                           onClick={() => {
-                            setArrivalTime(pilot.id, stage.id, '');
-                            setTime(pilot.id, stage.id, '');
+                            setArrivalAndTotalTime(pilot.id, stage.id, '', '');
                           }}
                           type="button"
                           className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}
@@ -1045,27 +1021,14 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                         {showDebugIds && <DebugIdText id={pilot.id} />}
                       </div>
                     </div>
-                    {showLineSyncRequest && (
-                      <>
-                        <button
-                          onClick={() => requestTimingLineSync(pilot.id, stage.id)}
-                          className={`h-6 w-6 flex items-center justify-center rounded border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 ${wsConnectionStatus !== 'connected' ? 'opacity-60 cursor-not-allowed' : ''}`}
-                          title={t('times.syncLine')}
-                          disabled={wsConnectionStatus !== 'connected' || !showLineSyncRequest}
-                          type="button"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
-                        {lineSync && (
-                          <StatusPill
-                            variant="info"
-                            text={t('status.info')}
-                            className={`text-[10px] ${lineSync.status === 'pending' ? 'animate-pulse' : ''}`}
-                            tooltipTitle={t('times.syncLine')}
-                            tooltipText={lineSyncText}
-                          />
-                        )}
-                      </>
+                    {lineSync && (
+                      <StatusPill
+                        variant="info"
+                        text={t('status.info')}
+                        className={`text-[10px] ${lineSync.status === 'pending' ? 'animate-pulse' : ''}`}
+                        tooltipTitle={t('times.syncLine')}
+                        tooltipText={lineSyncText}
+                      />
                     )}
                     {isJumpStart && (
                       <StatusPill
@@ -1163,11 +1126,12 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     <Label className="text-xs text-zinc-400">{t('times.arrivalTime')}</Label>
                     <div className="flex items-center gap-1">
                   <TimingSourceIndicator source={finishTimeSource} />
-                  <TimeInput
+                  <RollingClockInput
                     value={arrivalTimeValue}
-                    onChange={(val) => handleArrivalTimeChange(pilot.id, val)}
+                    onCommit={(val) => handleArrivalTimeChange(pilot.id, val)}
                     placeholder={getTimePlaceholder('clock', timeDecimals)}
-                    format="clock"
+                    showHours
+                    showSeconds
                     decimals={timeDecimals}
                     className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7 flex-1"
                     readOnly={isReadOnly}
@@ -1183,8 +1147,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   </button>
                   <button
                         onClick={() => {
-                          setArrivalTime(pilot.id, stage.id, '');
-                          setTime(pilot.id, stage.id, '');
+                          setArrivalAndTotalTime(pilot.id, stage.id, '', '');
                         }}
                     type="button"
                     className={`h-7 w-4 flex-shrink-0 transition-colors flex items-center justify-center ${isReadOnly ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-500'}`}

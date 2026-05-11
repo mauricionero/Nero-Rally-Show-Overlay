@@ -19,6 +19,7 @@ common:
   noData: "Nenhum dado disponível"
   search: "Buscar"
   select: "Selecionar"
+  selectDate: "Selecionar data"
   none: "Nenhum"
   all: "Todos"
   apply: "Aplicar"

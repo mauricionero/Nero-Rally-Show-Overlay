@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Input } from './ui/input';
 import { clampTimeDecimals } from '../utils/timeFormat.js';
 
@@ -157,14 +157,35 @@ export default function RollingClockInput({
   ...props
 }) {
   const [draftValue, setDraftValue] = useState(value || '');
+  const isDirtyRef = useRef(false);
 
   useEffect(() => {
     setDraftValue(value || '');
+    isDirtyRef.current = false;
   }, [value]);
 
   const commitValue = (nextValue) => {
+    if (!isDirtyRef.current) {
+      return;
+    }
+
+    const currentValue = formatRollingClockSegments(value || '', { showHours, showSeconds, decimals });
     const formattedValue = formatRollingClockSegments(nextValue || '', { showHours, showSeconds, decimals });
+
+    if (formattedValue === currentValue) {
+      setDraftValue(currentValue);
+      isDirtyRef.current = false;
+      return;
+    }
+
+    if (!formattedValue && currentValue) {
+      setDraftValue(currentValue);
+      isDirtyRef.current = false;
+      return;
+    }
+
     setDraftValue(formattedValue);
+    isDirtyRef.current = false;
     onCommit?.(formattedValue);
   };
 
@@ -172,6 +193,7 @@ export default function RollingClockInput({
     <Input
       value={draftValue}
       onChange={(event) => {
+        isDirtyRef.current = true;
         setDraftValue(formatRollingClockSegments(event.target.value, { showHours, showSeconds, decimals }));
       }}
       onKeyDown={(event) => {
@@ -198,6 +220,7 @@ export default function RollingClockInput({
               : '00:00');
           const step = event.shiftKey ? 5 : 1;
           const steppedValue = stepRollingClockMinutes(baseValue, event.key === 'ArrowUp' ? step : -step, { showHours, showSeconds, decimals });
+          isDirtyRef.current = true;
           setDraftValue(formatRollingClockSegments(steppedValue, { showHours, showSeconds, decimals }));
         }
       }}

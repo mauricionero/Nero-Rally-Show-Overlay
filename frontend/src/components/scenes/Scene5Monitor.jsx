@@ -38,6 +38,7 @@ import {
 import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import { getPilotTelemetryGForce, toFiniteTelemetryNumber } from '../../utils/pilotTelemetry.js';
+import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 
 const SCENE_5_CONFIG_KEY = 'scene5MonitorConfig';
 
@@ -567,6 +568,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
     startTimes,
     realStartTimes,
     times,
+    arrivalTimes,
     categories,
     mapPlacemarks,
     debugDate,
@@ -630,6 +632,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
       stageId: currentStage.id,
       stageDate: currentStage.date,
       startTime: currentStage.startTime || '',
+      useReplayStageSchedule: eventIsOver,
       replayStageScheduleById
     });
 
@@ -661,7 +664,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
     }
 
     return stageStartInfo?.timer || stageStartInfo?.text || '';
-  }, [currentStage?.date, currentStage?.id, currentStage?.startTime, replayStageScheduleById, sceneNow, t, timeDecimals]);
+  }, [currentStage?.date, currentStage?.id, currentStage?.startTime, replayStageScheduleById, sceneNow, t, timeDecimals, eventIsOver]);
   const effectiveHideTelemetry = hideTelemetry || !showTelemetry;
 
   const replayPilotStageSignature = useMemo(() => (
@@ -773,7 +776,9 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
         stage: effectiveStage,
         startTimes,
         times,
+        arrivalTimes,
         retiredStages,
+        useReplayStageSchedule: eventIsOver,
         replayStageScheduleById,
         now: sceneNow,
         timeDecimals,
@@ -794,7 +799,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
         retired,
       };
     });
-  }, [currentStage, currentStageId, displaySortedPilots, getStreamConfig, isStageAlert, pilotPlaybackById, pilotTelemetryByPilotId, realStartTimes, replayStageScheduleById, retiredStages, sceneNow, stages, startTimes, t, timeDecimals, times]);
+  }, [currentStage, currentStageId, displaySortedPilots, eventIsOver, getStreamConfig, isStageAlert, pilotPlaybackById, pilotTelemetryByPilotId, realStartTimes, replayStageScheduleById, retiredStages, sceneNow, stages, startTimes, t, timeDecimals, times]);
 
   const selectedItemIdSet = useMemo(() => new Set(Array.isArray(selectedItemIds) ? selectedItemIds : []), [selectedItemIds]);
   const selectedItemCount = Array.isArray(selectedItemIds) ? selectedItemIds.length : selectablePilotItems.length;
@@ -813,11 +818,12 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
 
     const candidates = displaySortedPilots
       .map((pilot) => {
-        const startTime = startTimes[pilot.id]?.[currentStage.id] || '';
+        const startTime = startTimes[pilot.id]?.[currentStage.id] || getPilotScheduledStartTime(currentStage, pilot) || '';
         const resolvedStartDateTime = getResolvedStageStartDateTime({
           stageId: currentStage.id,
           stageDate: currentStage.date,
           startTime,
+          useReplayStageSchedule: eventIsOver,
           replayStageScheduleById
         });
 
@@ -840,7 +846,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
       ...nextEntry.pilot,
       startClockText: formatMonitorClock(nextEntry.resolvedStartDateTime).slice(0, 5)
     };
-  }, [currentStage, displaySortedPilots, isLapRace, replayStageScheduleById, sceneNow, startTimes]);
+  }, [currentStage, displaySortedPilots, eventIsOver, isLapRace, replayStageScheduleById, sceneNow, startTimes]);
 
   React.useEffect(() => {
     saveSceneConfig(SCENE_5_CONFIG_KEY, {

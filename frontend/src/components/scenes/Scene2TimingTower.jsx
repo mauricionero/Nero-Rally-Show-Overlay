@@ -26,6 +26,7 @@ import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { formatDurationMs, formatSecondsValue } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
+import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
 import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
 import { getResolvedStageStartDateTime } from '../../utils/rallyHelpers.js';
@@ -57,7 +58,7 @@ const abbreviateCompactName = (name) => {
 export default function Scene2TimingTower({ hideStreams = false, hideTelemetry = false }) {
   const { 
     pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, 
-    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate, pilotTelemetryByPilotId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds
+    chromaKey, logoUrl, lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, retiredStages, stageAlerts, timeDecimals, debugDate, pilotTelemetryByPilotId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, arrivalTimes
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
@@ -232,11 +233,12 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
       startTimes,
       times,
       retiredStages,
+      useReplayStageSchedule: eventIsOver,
       now: sceneNow,
       timeDecimals,
       fallbackOrderByPilotId: displayOrderByPilotId
     });
-  }, [currentStage, currentStageId, displayOrderByPilotId, isLapRace, lapTimes, pilots, retiredStages, sceneNow, stagePilots, startTimes, timeDecimals, times]);
+  }, [currentStage, currentStageId, displayOrderByPilotId, eventIsOver, isLapRace, lapTimes, pilots, retiredStages, sceneNow, stagePilots, startTimes, timeDecimals, times]);
   const isLapRaceStageFinished = useMemo(() => (
     isLapRace
       && sortedLapRacePilotsData.length > 0
@@ -251,6 +253,7 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
       stageId: currentStage.id,
       stageDate: currentStage.date,
       startTime: currentStage.startTime || '',
+      useReplayStageSchedule: eventIsOver,
       replayStageScheduleById
     });
 
@@ -259,7 +262,7 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
     }
 
     return `${String(stageStartDateTime.getHours()).padStart(2, '0')}:${String(stageStartDateTime.getMinutes()).padStart(2, '0')}`;
-  }, [currentStage, replayStageScheduleById]);
+  }, [currentStage, eventIsOver, replayStageScheduleById]);
 
   const specialStageBaseItems = useMemo(() => {
     if (!currentStageId || !currentStage || isLapRace) {
@@ -267,13 +270,14 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
     }
 
     return pilots.map((pilot) => {
-      const startTime = startTimes[pilot.id]?.[currentStageId] || '';
-      const finishTime = times[pilot.id]?.[currentStageId] || '';
+      const startTime = startTimes[pilot.id]?.[currentStageId] || getPilotScheduledStartTime(currentStage, pilot) || '';
+      const finishTime = times[pilot.id]?.[currentStageId] || arrivalTimes[pilot.id]?.[currentStageId] || '';
       const retired = !!retiredStages?.[pilot.id]?.[currentStageId];
       const startDateTime = getResolvedStageStartDateTime({
         stageId: currentStage.id,
         stageDate: currentStage.date,
         startTime,
+        useReplayStageSchedule: eventIsOver,
         replayStageScheduleById
       });
       const finishDateTime = getResolvedStageFinishDateTime({
@@ -281,9 +285,10 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
         stageDate: currentStage.date,
         startTime,
         finishTime,
+        useReplayStageSchedule: eventIsOver,
         replayStageScheduleById
       });
-      const hasReplayFinished = finishDateTime instanceof Date && !Number.isNaN(finishDateTime.getTime()) && sceneNow >= finishDateTime;
+      const hasStageFinished = Boolean(finishTime);
       const displayOrder = displayOrderByPilotId.get(pilot.id) ?? Number.MAX_SAFE_INTEGER;
 
       return {
@@ -292,19 +297,19 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
         startTime,
         finishTime,
         retired,
-        fixedStatus: retired ? 'retired' : (hasReplayFinished ? 'finished' : (startDateTime && sceneNow >= startDateTime ? 'racing' : 'not_started')),
+        fixedStatus: retired ? 'retired' : (hasStageFinished ? 'finished' : (startDateTime && sceneNow >= startDateTime ? 'racing' : 'not_started')),
         preStartAtMs: startDateTime ? startDateTime.getTime() - 10000 : null,
         startAtMs: startDateTime ? startDateTime.getTime() : null,
         sortValues: {
           racing: displayOrder,
           pre_start: displayOrder,
-          finished: hasReplayFinished ? parseTime(finishTime) : Number.MAX_SAFE_INTEGER,
+          finished: hasStageFinished ? parseTime(finishTime) : Number.MAX_SAFE_INTEGER,
           not_started: displayOrder,
           retired: displayOrder
         }
       };
     });
-  }, [currentStage, currentStageId, displayOrderByPilotId, isLapRace, pilots, replayStageScheduleById, retiredStages, sceneNow, startTimes, times]);
+  }, [arrivalTimes, currentStage, currentStageId, displayOrderByPilotId, eventIsOver, isLapRace, pilots, replayStageScheduleById, retiredStages, sceneNow, startTimes, times]);
 
   const orderedSpecialStageItems = useScheduledPilotBuckets(specialStageBaseItems, {
     racing: 0,
@@ -676,6 +681,7 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
               <LiveStartInformationValue
                 startTime={startTime}
                 finishTime={finishTime}
+                arrivalTime={arrivalTimes[pilot.id]?.[currentStageId] || ''}
                 retired={retired}
                 stageDate={currentStage?.date}
                 stageId={currentStage?.id}

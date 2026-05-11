@@ -23,6 +23,7 @@ import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { arrivalTimeToTotal, normalizeTimingInput, totalTimeToArrival } from '../../utils/timeConversion.js';
 import { parseKmlPlacemarks } from '../../utils/kmlImport.js';
+import { getMapPlacemarkPointCount, prepareMapPlacemarkForImport } from '../../utils/mapPlacemarkCompression.js';
 
 const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'currentStageId', 'latLong', 'picture', 'streamUrl'];
 const STAGE_HEADERS = ['name', 'type', 'game', 'gameStageName', 'ssNumber', 'date', 'startTime', 'endTime', 'distance', 'numberOfLaps'];
@@ -634,10 +635,11 @@ export default function BulkLoadTab() {
         return;
       }
 
-      importMapPlacemarks(parsed.placemarks);
-      const summary = t('bulkLoad.importSummaryMaps', { imported: parsed.placemarks.length });
+      const preparedPlacemarks = parsed.placemarks.map((placemark) => prepareMapPlacemarkForImport(placemark, { maxBytes: 55000 }));
+      importMapPlacemarks(preparedPlacemarks);
+      const summary = t('bulkLoad.importSummaryMaps', { imported: preparedPlacemarks.length });
       setMapResult({
-        importedCount: parsed.placemarks.length,
+        importedCount: preparedPlacemarks.length,
         updatedCount: 0,
         errors: [],
         summary
@@ -1021,30 +1023,41 @@ export default function BulkLoadTab() {
               <p className="text-sm text-zinc-500">{t('bulkLoad.noMapsYet')}</p>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {mapPlacemarks.map((placemark) => (
-                  <div key={placemark.id} className="bg-[#09090B] border border-zinc-700 rounded p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-white text-sm font-medium truncate">{placemark.name}</p>
-                        <p className="text-zinc-500 text-xs mt-1 uppercase">
-                          {placemark.geometryType} • {placemark.coordinateGroups.reduce((total, group) => total + group.length, 0)} pts
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <MapIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                        <button
-                          type="button"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:border-red-500 hover:text-red-400"
-                          onClick={() => removeMapPlacemark(placemark.id)}
-                          title={t('bulkLoad.deletePlacemark')}
-                          aria-label={t('bulkLoad.deletePlacemark')}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                {[...mapPlacemarks]
+                  .sort((a, b) => {
+                    const pointsA = getMapPlacemarkPointCount(a);
+                    const pointsB = getMapPlacemarkPointCount(b);
+
+                    if (pointsA !== pointsB) {
+                      return pointsB - pointsA;
+                    }
+
+                    return (a.name || '').localeCompare(b.name || '');
+                  })
+                  .map((placemark) => (
+                    <div key={placemark.id} className="bg-[#09090B] border border-zinc-700 rounded p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{placemark.name}</p>
+                          <p className="text-zinc-500 text-xs mt-1 uppercase">
+                            {placemark.geometryType} • {placemark.coordinateGroups.reduce((total, group) => total + group.length, 0)} pts
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <MapIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                          <button
+                            type="button"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:border-red-500 hover:text-red-400"
+                            onClick={() => removeMapPlacemark(placemark.id)}
+                            title={t('bulkLoad.deletePlacemark')}
+                            aria-label={t('bulkLoad.deletePlacemark')}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>

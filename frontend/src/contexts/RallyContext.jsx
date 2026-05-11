@@ -23,7 +23,9 @@ import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../utils/stageSchedule.js';
 import { isLapTimingStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
 import { formatDurationSeconds } from '../utils/timeFormat.js';
+import { arrivalTimeToTotal } from '../utils/timeConversion.js';
 import { getLapRaceStoredTotalTimeSeconds, getLapTimingStartTime } from '../utils/rallyHelpers.js';
+import { compressMapPlacemarkForTransport } from '../utils/mapPlacemarkCompression.js';
 import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
 import { getPilotTelemetryForId, normalizePilotId } from '../utils/pilotIdentity.js';
 import {
@@ -1189,10 +1191,10 @@ export const RallyProvider = ({ children }) => {
   const [debugDate, setDebugDate] = useState(() => loadFromStorage('rally_debug_date', ''));
   const [displayIdsInSetup, setDisplayIdsInSetup] = useState(() => loadFromStorage(SETUP_DISPLAY_IDS_STORAGE_KEY, false) === true);
   const [timeDecimals, setTimeDecimals] = useState(() => {
-    const storedValue = loadFromStorage('rally_time_decimals', 3);
+    const storedValue = loadFromStorage('rally_time_decimals', 1);
     const numericValue = Number(storedValue);
     if (!Number.isFinite(numericValue)) {
-      return 3;
+      return 1;
     }
     return Math.min(3, Math.max(0, Math.trunc(numericValue)));
   });
@@ -1864,14 +1866,88 @@ export const RallyProvider = ({ children }) => {
   }, []);
 
   const getPendingSetupPatchEntries = useCallback((allowedSections = null) => {
-    const entries = Array.from(pendingSetupPatchEntriesRef.current.values());
+    const entries = Array.from(pendingSetupPatchEntriesRef.current.values()).map((entry) => ({ ...entry }));
+
+    const stageById = new Map(
+      (Array.isArray(stagesRef.current) ? stagesRef.current : [])
+        .filter((stage) => stage?.id)
+        .map((stage) => [stage.id, stage])
+    );
+    const pilotById = new Map(
+      (Array.isArray(pilotsRef.current) ? pilotsRef.current : [])
+        .filter((pilot) => pilot?.id)
+        .map((pilot) => [pilot.id, pilot])
+    );
+    const pendingArrivalByLine = new Map();
+
+    entries.forEach((entry) => {
+      if (entry?.section !== 'arrivalTimes') {
+        return;
+      }
+
+      const pilotId = String(entry?.pilotId || '').trim();
+      const stageId = String(entry?.stageId || '').trim();
+      const arrivalValue = String(entry?.value || '').trim();
+
+      if (!pilotId || !stageId || !arrivalValue) {
+        return;
+      }
+
+      pendingArrivalByLine.set(`${pilotId}:${stageId}`, arrivalValue);
+    });
+
+    const normalizedEntries = entries.flatMap((entry) => {
+      if (entry?.section !== 'times') {
+        return [entry];
+      }
+
+      const pilotId = String(entry?.pilotId || '').trim();
+      const stageId = String(entry?.stageId || '').trim();
+      const nextTimeValue = String(entry?.value || '').trim();
+
+      if (!pilotId || !stageId || nextTimeValue) {
+        return [entry];
+      }
+
+      const lineKey = `${pilotId}:${stageId}`;
+      const arrivalValue = pendingArrivalByLine.get(lineKey)
+        || String(arrivalTimesRef.current?.[pilotId]?.[stageId] || '').trim();
+
+      if (!arrivalValue) {
+        return [entry];
+      }
+
+      const stage = stageById.get(stageId);
+      const pilot = pilotById.get(pilotId);
+      const explicitStartTime = String(startTimesRef.current?.[pilotId]?.[stageId] || '').trim();
+      const derivedStartTime = explicitStartTime
+        || getPilotScheduledStartTime(stage, pilot);
+      const derivedTotalTime = arrivalTimeToTotal(arrivalValue, derivedStartTime, timeDecimals);
+
+      if (derivedTotalTime) {
+        return [{
+          ...entry,
+          value: derivedTotalTime
+        }];
+      }
+
+      const currentTimeValue = String(timesRef.current?.[pilotId]?.[stageId] || '').trim();
+      if (currentTimeValue) {
+        return [{
+          ...entry,
+          value: currentTimeValue
+        }];
+      }
+
+      return [];
+    });
 
     if (!Array.isArray(allowedSections) || allowedSections.length === 0) {
-      return entries;
+      return normalizedEntries;
     }
 
-    return entries.filter((entry) => allowedSections.includes(entry.section));
-  }, []);
+    return normalizedEntries.filter((entry) => allowedSections.includes(entry.section));
+  }, [timeDecimals]);
 
   const clearPendingSetupPatchEntries = useCallback((allowedSections = null) => {
     if (!Array.isArray(allowedSections) || allowedSections.length === 0) {
@@ -2017,10 +2093,10 @@ export const RallyProvider = ({ children }) => {
     setMapPlacemarks(loadFromStorage('rally_map_placemarks', []));
     setCurrentStageId(loadFromStorage('rally_current_stage', null));
     setDebugDate(loadFromStorage('rally_debug_date', ''));
-    const storedTimeDecimals = loadFromStorage('rally_time_decimals', 3);
+    const storedTimeDecimals = loadFromStorage('rally_time_decimals', 1);
     const normalizedTimeDecimals = Number.isFinite(Number(storedTimeDecimals))
       ? Math.min(3, Math.max(0, Math.trunc(Number(storedTimeDecimals))))
-      : 3;
+      : 1;
     setTimeDecimals(normalizedTimeDecimals);
     setChromaKey(loadFromStorage('rally_chroma_key', '#000000'));
     setMapUrl(loadFromStorage('rally_map_url', ''));
@@ -3010,15 +3086,19 @@ export const RallyProvider = ({ children }) => {
           const nextArrivalValue = hasArrivalPatch ? (arrivalStageEntries[stageId] ?? '') : undefined;
           const nextTimeValue = hasTimePatch ? (timeStageEntries[stageId] ?? '') : undefined;
           const nextFinishSource = (nextArrivalValue || nextTimeValue) ? incomingTimingSource : '';
+          const hasNextArrivalValue = String(nextArrivalValue ?? '').trim() !== '';
+          const hasNextTimeValue = String(nextTimeValue ?? '').trim() !== '';
 
           if (!stage || !isLapTimingStageType(stage.type)) {
-            if (hasArrivalPatch) {
+            if (hasArrivalPatch && (hasNextArrivalValue || !currentArrivalValue)) {
               assignPilotStagePatchValue(acceptedArrivalTimes, normalizedPilotId, normalizedStageId, nextArrivalValue);
             }
-            if (hasTimePatch) {
+            if (hasTimePatch && (hasNextTimeValue || !currentTimeValue)) {
               assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextTimeValue);
             }
-            assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
+            if (hasNextArrivalValue || hasNextTimeValue || !hasCurrentFinishValue) {
+              assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
+            }
             return;
           }
 
@@ -3416,10 +3496,16 @@ export const RallyProvider = ({ children }) => {
       const currentPosition = positionsRef.current?.[pilotId]?.[stageId] ?? null;
       const currentRetired = !!retiredStagesRef.current?.[pilotId]?.[stageId];
       const currentAlert = !!stageAlertsRef.current?.[pilotId]?.[stageId];
+      const shouldAcceptTimingResponseValue = (incomingValue, currentValue) => (
+        incomingValue !== undefined
+        && incomingValue !== null
+        && String(incomingValue).trim() !== ''
+        && incomingValue !== currentValue
+      );
 
       let updated = false;
 
-      if (lineData.time !== undefined && lineData.time !== currentTime) {
+      if (shouldAcceptTimingResponseValue(lineData.time, currentTime)) {
         setTimes((prev) => ({
           ...prev,
           [pilotId]: {
@@ -3430,7 +3516,7 @@ export const RallyProvider = ({ children }) => {
         updated = true;
       }
 
-      if (lineData.arrivalTime !== undefined && lineData.arrivalTime !== currentArrival) {
+      if (shouldAcceptTimingResponseValue(lineData.arrivalTime, currentArrival)) {
         setArrivalTimes((prev) => ({
           ...prev,
           [pilotId]: {
@@ -3441,7 +3527,7 @@ export const RallyProvider = ({ children }) => {
         updated = true;
       }
 
-      if (lineData.startTime !== undefined && lineData.startTime !== currentStart) {
+      if (shouldAcceptTimingResponseValue(lineData.startTime, currentStart)) {
         setStartTimes((prev) => ({
           ...prev,
           [pilotId]: {
@@ -3452,7 +3538,7 @@ export const RallyProvider = ({ children }) => {
         updated = true;
       }
 
-      if (lineData.realStartTime !== undefined && lineData.realStartTime !== currentRealStart) {
+      if (shouldAcceptTimingResponseValue(lineData.realStartTime, currentRealStart)) {
         setRealStartTimes((prev) => ({
           ...prev,
           [pilotId]: {
@@ -3896,7 +3982,9 @@ export const RallyProvider = ({ children }) => {
     retiredStages,
     stageAlerts,
     stageSos,
-    mapPlacemarks,
+    mapPlacemarks: Array.isArray(mapPlacemarks)
+      ? mapPlacemarks.map((placemark) => compressMapPlacemarkForTransport(placemark, { maxBytes: 55000 }))
+      : [],
     currentStageId,
     eventIsOver,
     raceTypes,
@@ -6225,6 +6313,40 @@ export const RallyProvider = ({ children }) => {
     markTimingLineDirty('arrivalTimes', pilotId, stageId);
   }, [clientRole, markTimingLineDirty, markTimingSectionDirty, setArrivalTimes, setFinishTimeSourceValue]);
 
+  const setArrivalAndTotalTime = useCallback((pilotId, stageId, arrivalTime, totalTime) => {
+    const manualTimingSource = getManualTimingSourceForRole(clientRole);
+
+    unstable_batchedUpdates(() => {
+      setArrivalTimes((prev) => ({
+        ...prev,
+        [pilotId]: {
+          ...(prev[pilotId] || {}),
+          [stageId]: arrivalTime
+        }
+      }));
+
+      if (totalTime !== undefined) {
+        setTimes((prev) => ({
+          ...prev,
+          [pilotId]: {
+            ...(prev[pilotId] || {}),
+            [stageId]: totalTime
+          }
+        }));
+      }
+
+      setFinishTimeSourceValue(pilotId, stageId, (arrivalTime || totalTime) ? manualTimingSource : '');
+    });
+
+    markTimingSectionDirty('arrivalTimes');
+    markTimingLineDirty('arrivalTimes', pilotId, stageId);
+
+    if (totalTime !== undefined) {
+      markTimingSectionDirty('times');
+      markTimingLineDirty('times', pilotId, stageId);
+    }
+  }, [clientRole, markTimingLineDirty, markTimingSectionDirty, setArrivalTimes, setFinishTimeSourceValue, setTimes]);
+
   const getArrivalTime = useCallback((pilotId, stageId) => (
     arrivalTimes[pilotId]?.[stageId] || ''
   ), [arrivalTimes]);
@@ -6614,7 +6736,7 @@ export const RallyProvider = ({ children }) => {
       retiredStages: loadFromStorage('rally_retired_stages', {}),
       stageAlerts: loadFromStorage('rally_stage_alerts', {}),
       stageSos: loadFromStorage('rally_stage_sos', {}),
-      timeDecimals: loadFromStorage('rally_time_decimals', 3),
+      timeDecimals: loadFromStorage('rally_time_decimals', 1),
       streamConfigs: loadFromStorage('rally_stream_configs', {}),
       globalAudio: loadFromStorage('rally_global_audio', { volume: 100, muted: false }),
       cameras: loadFromStorage('rally_cameras', []),
@@ -6708,7 +6830,7 @@ export const RallyProvider = ({ children }) => {
     setMapPlacemarks([]);
     applyPilotTelemetryState({});
     setDebugDate('');
-    setTimeDecimals(3);
+    setTimeDecimals(1);
     setStreamConfigs({});
     setCameras([]);
     setExternalMedia([]);
@@ -6847,6 +6969,7 @@ export const RallyProvider = ({ children }) => {
     setTime,
     getTime,
     setArrivalTime,
+    setArrivalAndTotalTime,
     getArrivalTime,
     setStartTime,
     getStartTime,
@@ -7013,6 +7136,7 @@ export const RallyProvider = ({ children }) => {
     setTime,
     getTime,
     setArrivalTime,
+    setArrivalAndTotalTime,
     getArrivalTime,
     setStartTime,
     getStartTime,
@@ -7058,6 +7182,7 @@ export const RallyProvider = ({ children }) => {
     retiredStages,
     selectAllPilotsInStage,
     setArrivalTime,
+    setArrivalAndTotalTime,
     setLapTime,
     removeLapTimeColumn,
     setPosition,

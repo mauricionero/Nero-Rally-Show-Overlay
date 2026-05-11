@@ -13,7 +13,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import StatusPill from '../StatusPill.jsx';
-import { getPilotStageTimingInfo, getReferenceNow, hasStageDateTimePassed, isJumpStartForStage } from '../../utils/rallyHelpers';
+import { getPilotEffectiveStageStartTime, getPilotStageTimingInfo, getReferenceNow, hasStageDateTimePassed, isJumpStartForStage } from '../../utils/rallyHelpers';
 import { Flag, RotateCcw, Car, Timer, Video, Map as MapIcon } from 'lucide-react';
 import { buildFeedOptions, findFeedByValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
@@ -147,7 +147,7 @@ function Scene4StageTimeValue({
 
 export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = false }) {
   const { 
-    pilots, categories, stages, times, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
+    pilots, categories, stages, times, arrivalTimes, startTimes, realStartTimes, currentStageId, chromaKey, logoUrl,
     lapTimes, stagePilots, cameras, externalMedia, mapPlacemarks, debugDate, retiredStages, isStageAlert, timeDecimals, pilotTelemetryByPilotId, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds
   } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
@@ -298,9 +298,10 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
           stage,
           startTimes,
           times,
+          arrivalTimes,
           lapTimes,
           retiredStages,
-          replayStageScheduleById,
+          replayStageScheduleById: eventIsOver ? replayStageScheduleById : null,
           now: sceneNow,
           timeDecimals,
           startLabel: t('status.start'),
@@ -332,8 +333,9 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
           stage,
           startTimes,
           times,
+          arrivalTimes,
           retiredStages,
-          replayStageScheduleById,
+          replayStageScheduleById: eventIsOver ? replayStageScheduleById : null,
           now: sceneNow,
           timeDecimals,
           startLabel: t('status.start'),
@@ -358,7 +360,12 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
         };
       } else {
         // Liaison / Service Park
-        const startTime = startTimes[focusPilot.id]?.[stage.id];
+        const startTime = getPilotEffectiveStageStartTime({
+          pilotId: focusPilot.id,
+          pilot: focusPilot,
+          stage,
+          startTimes
+        });
         const endTime = getPilotScheduledEndTime(stage, focusPilot);
 
         let displayTime = `${startTime || ''} -> ${endTime || ''}`.trim();
@@ -382,7 +389,7 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
         };
       }
     });
-  }, [sortedStages, focusPilot, lapTimes, startTimes, times, retiredStages, sceneNow, t, timeDecimals]);
+  }, [sortedStages, focusPilot, lapTimes, startTimes, times, arrivalTimes, retiredStages, sceneNow, t, timeDecimals]);
 
   const selectedStageData = pilotStageData.find(d => d.stage.id === selectedStageId);
   const overlayPilots = useMemo(() => (
