@@ -21,6 +21,7 @@ import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { formatClockFromDate, formatDurationSeconds } from '../../utils/timeFormat.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
+import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import {
   getReferenceNow,
   getResolvedStageStartDateTime,
@@ -324,7 +325,10 @@ function PilotMonitorRow({
         <div className="flex min-h-[4.5rem] flex-col justify-center">
           <div className="min-w-0">
               <p className="truncate text-[14px] font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                <span className="mr-2 text-sm text-zinc-400">#{pilot.carNumber || '?'}</span>
+                <span className="mr-2 inline-flex items-center gap-1 whitespace-nowrap text-sm text-zinc-400">
+                  <span>#{pilot.carNumber || '?'}</span>
+                  <CarBrandBadge carName={pilot.car} iconOnly fallbackToText={false} className="align-middle" />
+                </span>
                 {pilot.name}
                 <FeedStatusIcon pilotPlayback={pilotPlayback} className="ml-2 inline-block align-middle" />
                 {alert && (
@@ -386,6 +390,7 @@ function PilotMonitorRow({
                 suffix={metric.suffix}
                 connectionType={metric.connectionType}
                 signalStrength={metric.signalStrength}
+                scale="large"
               />
             ))}
           </div>
@@ -492,8 +497,9 @@ function PilotMonitorCard({
                   <span className="rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-white">
                     #{pilot.startOrder || '?'}
                   </span>
-                  <span className="rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-white">
-                    #{pilot.carNumber || '?'}
+                  <span className="inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-white whitespace-nowrap">
+                    <span>#{pilot.carNumber || '?'}</span>
+                    <CarBrandBadge carName={pilot.car} iconOnly fallbackToText={false} className="align-middle" />
                   </span>
                   {showMoreOsd && (
                     <p className="truncate text-lg font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif', textShadow: '0 0 10px rgba(0,0,0,0.95)' }}>

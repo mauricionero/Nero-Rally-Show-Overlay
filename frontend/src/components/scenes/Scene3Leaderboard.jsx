@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
+import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -172,7 +173,8 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
       pilot.id,
       {
         category: categoryById.get(pilot.categoryId) || null,
-        pilotMeta: [pilot.car, pilot.team].filter(Boolean).join(' • '),
+        carName: pilot.car || '',
+        teamName: pilot.team || '',
         alert: alertStageId ? isStageAlert(pilot.id, alertStageId) : false,
         jumpStart: alertStageId ? isJumpStartForStage(pilot.id, alertStageId, startTimes, realStartTimes) : false
       }
@@ -565,7 +567,8 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                 
                 const pilotUiMeta = pilotUiMetaById.get(pilot.id) || {};
                 const category = pilotUiMeta.category || null;
-                const pilotMeta = pilotUiMeta.pilotMeta || '';
+                const carName = pilotUiMeta.carName || '';
+                const teamName = pilotUiMeta.teamName || '';
                 const alert = pilotUiMeta.alert || false;
                 const jumpStart = pilotUiMeta.jumpStart || false;
 
@@ -648,9 +651,16 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                               </span>
                             )}
                           </div>
-                          {pilotMeta && (
+                          {(carName || teamName) && (
                             <span className="text-zinc-400 text-xs uppercase tracking-wide truncate block leading-tight mt-0.5">
-                              {pilotMeta}
+                              {carName && (
+                                <CarBrandBadge carName={carName} className="mr-1 align-middle" />
+                              )}
+                              {teamName && (
+                                <span className="align-middle">
+                                  {teamName}
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>

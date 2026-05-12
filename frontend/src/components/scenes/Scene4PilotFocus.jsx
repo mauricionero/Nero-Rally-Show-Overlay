@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
+import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
 import { PlacemarkMapFeed, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
@@ -601,7 +602,7 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
               <div className="bg-black/50 border border-white/10 rounded-lg px-4 py-2 min-w-[220px]">
                 {focusPilot.car && (
                   <p className="text-zinc-200 text-sm uppercase tracking-wide truncate">
-                    {focusPilot.car}
+                    <CarBrandBadge carName={focusPilot.car} className="align-middle" />
                   </p>
                 )}
                 {focusPilot.team && (

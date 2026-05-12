@@ -1,3 +1,7 @@
+const normalizeTelemetryObject = (telemetry) => (
+  telemetry && typeof telemetry === 'object' ? telemetry : {}
+);
+
 export const PILOT_G_FORCE_FIELD_KEYS = [
   'gForce',
   'gforce',
@@ -45,6 +49,10 @@ export const PILOT_TELEMETRY_FIELD_KEYS = [
 ];
 
 export const toFiniteTelemetryNumber = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : null;
 };
@@ -64,10 +72,11 @@ export const normalizePilotTelemetryTimestamp = (value) => {
 };
 
 export const getPilotTelemetryLatestTimestamp = (telemetry = {}) => {
+  const safeTelemetry = normalizeTelemetryObject(telemetry);
   const candidates = [
-    telemetry.lastTelemetryAt,
-    telemetry.lastLatLongUpdatedAt,
-    telemetry.latlongTimestamp
+    safeTelemetry.lastTelemetryAt,
+    safeTelemetry.lastLatLongUpdatedAt,
+    safeTelemetry.latlongTimestamp
   ]
     .map(normalizePilotTelemetryTimestamp)
     .filter((value) => value !== null);
@@ -80,7 +89,8 @@ export const getPilotTelemetryLatestTimestamp = (telemetry = {}) => {
 };
 
 export const isPilotTelemetryFresh = (telemetry = {}, now = Date.now(), maxAgeMs = 10000) => {
-  const latestTimestamp = getPilotTelemetryLatestTimestamp(telemetry);
+  const safeTelemetry = normalizeTelemetryObject(telemetry);
+  const latestTimestamp = getPilotTelemetryLatestTimestamp(safeTelemetry);
   if (latestTimestamp === null) {
     return false;
   }
@@ -94,12 +104,13 @@ export const isPilotTelemetryFresh = (telemetry = {}, now = Date.now(), maxAgeMs
 };
 
 export const getPilotTelemetryGForce = (telemetry = {}) => {
+  const safeTelemetry = normalizeTelemetryObject(telemetry);
   const directCandidates = [
-    telemetry.gForce,
-    telemetry.gforce,
-    telemetry.gForceTotal,
-    telemetry.totalG,
-    telemetry.accelerationG
+    safeTelemetry.gForce,
+    safeTelemetry.gforce,
+    safeTelemetry.gForceTotal,
+    safeTelemetry.totalG,
+    safeTelemetry.accelerationG
   ];
 
   for (const candidate of directCandidates) {
@@ -110,19 +121,19 @@ export const getPilotTelemetryGForce = (telemetry = {}) => {
   }
 
   const longitudinal = toFiniteTelemetryNumber(
-    telemetry.longitudinalG
-    ?? telemetry.longitudinalForce
-    ?? telemetry.accelerationX
+    safeTelemetry.longitudinalG
+    ?? safeTelemetry.longitudinalForce
+    ?? safeTelemetry.accelerationX
   );
   const lateral = toFiniteTelemetryNumber(
-    telemetry.lateralG
-    ?? telemetry.lateralForce
-    ?? telemetry.accelerationY
+    safeTelemetry.lateralG
+    ?? safeTelemetry.lateralForce
+    ?? safeTelemetry.accelerationY
   );
   const vertical = toFiniteTelemetryNumber(
-    telemetry.verticalG
-    ?? telemetry.verticalForce
-    ?? telemetry.accelerationZ
+    safeTelemetry.verticalG
+    ?? safeTelemetry.verticalForce
+    ?? safeTelemetry.accelerationZ
   );
 
   if (longitudinal === null && lateral === null && vertical === null) {
@@ -156,9 +167,10 @@ export const getPilotTelemetryGForceColor = (gForceValue, baseColor = '#FFFFFF')
 };
 
 export const assignPilotTelemetryGForceFields = (target = {}, telemetry = {}) => {
+  const safeTelemetry = normalizeTelemetryObject(telemetry);
   PILOT_G_FORCE_FIELD_KEYS.forEach((fieldKey) => {
-    if (telemetry[fieldKey] !== undefined) {
-      target[fieldKey] = telemetry[fieldKey];
+    if (safeTelemetry[fieldKey] !== undefined) {
+      target[fieldKey] = safeTelemetry[fieldKey];
     }
   });
 
@@ -166,9 +178,10 @@ export const assignPilotTelemetryGForceFields = (target = {}, telemetry = {}) =>
 };
 
 export const assignPilotTelemetryFields = (target = {}, telemetry = {}) => {
+  const safeTelemetry = normalizeTelemetryObject(telemetry);
   PILOT_TELEMETRY_FIELD_KEYS.forEach((fieldKey) => {
-    if (telemetry[fieldKey] !== undefined) {
-      target[fieldKey] = telemetry[fieldKey];
+    if (safeTelemetry[fieldKey] !== undefined) {
+      target[fieldKey] = safeTelemetry[fieldKey];
     }
   });
 

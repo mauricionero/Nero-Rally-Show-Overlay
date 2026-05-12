@@ -14,6 +14,7 @@ import { ChevronRight, Radio, RotateCcw, Flag, Video, Map as MapIcon } from 'luc
 import { buildFeedOptions, findFeedByValue, getFeedOptionValue } from '../../utils/feedOptions.js';
 import { getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
+import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage.js';
 import { getStageNumberLabel, getStageTitle, isLapTimingStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -494,7 +495,10 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
     stages.find((stage) => stage.id === String(selectedPilot?.currentStageId || '').trim()) || null
   ), [selectedPilot?.currentStageId, stages]);
   const selectedPilotMeta = selectedPilot
-    ? [selectedPilot.car, selectedPilot.team].filter(Boolean).join(' • ')
+    ? {
+        carName: selectedPilot.car || '',
+        teamName: selectedPilot.team || ''
+      }
     : '';
   const SelectedMediaIcon = selectedFeed?.type === 'media'
     ? getExternalMediaIconComponent(selectedFeed.icon)
@@ -639,6 +643,7 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
           {/* Pilot name */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
+              <CarBrandBadge carName={pilot.car} iconOnly fallbackToText={false} className="flex-shrink-0" />
               <span className="text-white text-sm font-bold uppercase truncate block" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                 {rowDisplayName}
               </span>
@@ -971,9 +976,16 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
                       </span>
                     )}
                   </div>
-                  {selectedPilotMeta && (
+                  {(selectedPilotMeta?.carName || selectedPilotMeta?.teamName) && (
                     <p className="text-zinc-300 text-sm uppercase tracking-wide mt-1">
-                      {selectedPilotMeta}
+                      {selectedPilotMeta?.carName && (
+                        <CarBrandBadge carName={selectedPilotMeta.carName} className="mr-1 align-middle" />
+                      )}
+                      {selectedPilotMeta?.teamName && (
+                        <span className="align-middle">
+                          {selectedPilotMeta.teamName}
+                        </span>
+                      )}
                     </p>
                   )}
                   {isLapRace && selectedPilotData && (
@@ -1012,9 +1024,16 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
                         </span>
                       )}
                     </div>
-                    {selectedPilotMeta && (
+                    {(selectedPilotMeta?.carName || selectedPilotMeta?.teamName) && (
                       <p className="text-zinc-300 text-sm uppercase tracking-wide mt-1">
-                        {selectedPilotMeta}
+                        {selectedPilotMeta?.carName && (
+                          <CarBrandBadge carName={selectedPilotMeta.carName} className="mr-1 align-middle" />
+                        )}
+                        {selectedPilotMeta?.teamName && (
+                          <span className="align-middle">
+                            {selectedPilotMeta.teamName}
+                          </span>
+                        )}
                       </p>
                     )}
                   </div>

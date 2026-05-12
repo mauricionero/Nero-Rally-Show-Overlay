@@ -27,6 +27,7 @@ import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
+import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
@@ -200,7 +201,8 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
       {
         category: categoryById.get(pilot.categoryId) || null,
         abbreviatedName: abbreviateTickerName(pilot.name),
-        pilotMeta: [pilot.car, pilot.team].filter(Boolean).join(' • ')
+        carName: pilot.car || '',
+        teamName: pilot.team || ''
       }
     ]))
   ), [categoryById, pilots]);
@@ -1118,7 +1120,8 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                 {displayedTickerItems.map(({ pilot, position, completedLaps, isFinished, statusKey }) => {
                   const pilotMetaInfo = tickerPilotMetaById.get(pilot.id) || {};
                   const category = pilotMetaInfo.category || null;
-                  const pilotMeta = pilotMetaInfo.pilotMeta || '';
+                  const carName = pilotMetaInfo.carName || '';
+                  const teamName = pilotMetaInfo.teamName || '';
                   const lapInfo = isLapRace ? getPilotLapInfo(pilot.id) : null;
                   const alert = currentStageId ? alertByPilotId.has(pilot.id) : false;
                   const jumpStart = currentStageId ? jumpStartByPilotId.has(pilot.id) : false;
@@ -1205,9 +1208,16 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                               />
                             )}
                           </div>
-                          {pilotMeta && (
+                          {(carName || teamName) && (
                             <p className="text-zinc-400 text-[11px] leading-tight truncate">
-                              {pilotMeta}
+                              {carName && (
+                                <CarBrandBadge carName={carName} className="mr-1 align-middle" />
+                              )}
+                              {teamName && (
+                                <span className="align-middle">
+                                  {teamName}
+                                </span>
+                              )}
                             </p>
                           )}
                           {showLiveTime && (

@@ -157,11 +157,13 @@ export function TelemetryMetricTile({
   signalStrength = undefined,
   iconClassName = 'text-[#38BDF8]',
   density = 'compact',
+  scale = 'default',
   className = ''
 }) {
   const isConnectionTile = connectionType !== undefined || signalStrength !== undefined;
   const isHeadingTile = icon === ArrowUp && iconRotation !== 0;
   const isComfortable = density === 'comfortable';
+  const isLarge = scale === 'large';
   const rawNumericValue = Number(rawValue);
   const isBatteryTile = icon === Battery;
   const isTemperatureTile = icon === Thermometer || icon === Snowflake || icon === Skull;
@@ -170,16 +172,22 @@ export function TelemetryMetricTile({
   const tileClassName = isComfortable
     ? `min-h-[2.8rem] rounded border border-white/10 px-2.5 py-1.5 ${className}`.trim()
     : `rounded border border-white/10 px-1 py-0.5 ${className}`.trim();
-  const iconSizeClass = isComfortable ? 'h-3.5 w-3.5' : 'h-3 w-3';
+  const iconSizeClass = isLarge ? 'h-4 w-4' : (isComfortable ? 'h-3.5 w-3.5' : 'h-3 w-3');
   const valueClassName = isComfortable
     ? 'min-w-0 truncate font-mono text-[10px] font-bold leading-none text-white'
-    : 'min-w-0 truncate font-mono text-[9px] font-bold leading-none text-white';
+    : (isLarge
+      ? 'min-w-0 truncate font-mono text-[11px] font-bold leading-none text-white'
+      : 'min-w-0 truncate font-mono text-[9px] font-bold leading-none text-white');
   const suffixClassName = isComfortable
     ? 'text-[8px] font-bold uppercase tracking-[0.1em] text-zinc-400'
-    : 'text-[7px] font-bold uppercase tracking-[0.08em] text-zinc-400';
+    : (isLarge
+      ? 'text-[8px] font-bold uppercase tracking-[0.08em] text-zinc-400'
+      : 'text-[7px] font-bold uppercase tracking-[0.08em] text-zinc-400');
   const combinedTextClassName = isComfortable
     ? 'min-w-0 whitespace-pre font-mono text-[10px] font-bold leading-none text-white'
-    : 'min-w-0 whitespace-pre font-mono text-[9px] font-bold leading-none text-white';
+    : (isLarge
+      ? 'min-w-0 whitespace-pre font-mono text-[11px] font-bold leading-none text-white'
+      : 'min-w-0 whitespace-pre font-mono text-[9px] font-bold leading-none text-white');
 
   if (combined) {
     return (
@@ -194,13 +202,11 @@ export function TelemetryMetricTile({
 
   if (isConnectionTile) {
     return (
-      <div className={`flex min-w-0 items-center justify-between gap-2 ${tileClassName}`.trim()}>
-        <div className="flex min-w-0 items-center gap-1">
-          <MetricIcon icon={icon || Wifi} rotation={iconRotation} className={`${iconClassName} ${iconSizeClass}`.trim()} />
-          <span className={valueClassName}>
-            {connectionType || '-'}
-          </span>
-        </div>
+      <div className={`flex min-w-0 items-center justify-center gap-1 ${tileClassName}`.trim()}>
+        <MetricIcon icon={icon || Wifi} rotation={iconRotation} className={`${iconClassName} ${iconSizeClass}`.trim()} />
+        <span className={valueClassName}>
+          {connectionType || '-'}
+        </span>
         <SignalStrengthBars strength={signalStrength} className="flex-none" />
       </div>
     );

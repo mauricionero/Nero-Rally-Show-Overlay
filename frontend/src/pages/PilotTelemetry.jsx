@@ -25,6 +25,7 @@ import { useRally, useRallyWs } from '../contexts/RallyContext.jsx';
 import { useTranslation } from '../contexts/TranslationContext.jsx';
 import { useSecondAlignedClock } from '../hooks/useSecondAlignedClock.js';
 import useWsActivityCounters from '../hooks/useWsActivityCounters.js';
+import QRCode from 'qrcode';
 import { Checkbox } from '../components/ui/checkbox';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -216,6 +217,7 @@ export default function PilotTelemetry() {
   const [hideStream, setHideStream] = useState(false);
   const [hideTelemetry, setHideTelemetry] = useState(false);
   const [isDownloadingLauncher, setIsDownloadingLauncher] = useState(false);
+  const [apkQrCodeDataUrl, setApkQrCodeDataUrl] = useState('');
   const [lastAutoConnectAttemptAt, setLastAutoConnectAttemptAt] = useState(0);
   const [stageRegistry, setStageRegistry] = useState({});
   const previousPilotStreamUrlRef = useRef('');
@@ -260,6 +262,41 @@ export default function PilotTelemetry() {
       ? getWebSocketPilotTelemetryUrl(resolvedChannelKey, queryPilotId)
       : getWebSocketPilotTelemetryUrl(resolvedChannelKey)
   ), [queryPilotId, resolvedChannelKey]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const wsKey = String(resolvedChannelKey || '').trim();
+    if (!wsKey) {
+      setApkQrCodeDataUrl('');
+      return undefined;
+    }
+
+    QRCode.toDataURL(wsKey, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 192,
+      color: {
+        dark: '#000000',
+        light: '#00000000'
+      }
+    })
+      .then((dataUrl) => {
+        if (isMounted) {
+          setApkQrCodeDataUrl(dataUrl);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setApkQrCodeDataUrl('');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [resolvedChannelKey]);
+
   const displayRpm = Number.isFinite(Number(selectedTelemetry?.rpmReal))
     ? Number(selectedTelemetry.rpmReal).toFixed(1)
     : (Number.isFinite(Number(selectedTelemetry?.rpmPercentage))
@@ -758,6 +795,12 @@ export default function PilotTelemetry() {
                     <div>
                       <span className="text-zinc-600">{t('pilotTelemetry.pilotId')}</span> <span className="font-mono text-zinc-200">{selectedPilot?.id || '--'}</span>
                     </div>
+                    <div>
+                      <span className="text-zinc-600">{t('pilotTelemetry.channelId')}</span> <span className="font-mono text-zinc-200">{resolvedChannelKey || '--'}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">
+                    {t('pilotTelemetry.apkDownloadDetails')}
                   </div>
                   <Button
                     asChild
@@ -768,8 +811,26 @@ export default function PilotTelemetry() {
                       {t('pilotTelemetry.downloadApk')}
                     </a>
                   </Button>
-                  <div className="rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-400">
-                    {t('pilotTelemetry.apkDownloadDetails')}
+                  <div className="rounded-lg border border-zinc-800 bg-black/30 p-3">
+                    <div className="mb-3 text-center text-[11px] uppercase tracking-[0.22em] text-zinc-500">
+                      Scan this code in the app to connect using the event key
+                    </div>
+                    <div className="flex flex-col items-center gap-3">
+                      {apkQrCodeDataUrl ? (
+                        <img
+                          src={apkQrCodeDataUrl}
+                          alt={resolvedChannelKey}
+                          className="h-48 w-48 rounded bg-white p-2"
+                        />
+                      ) : (
+                        <div className="flex h-48 w-48 items-center justify-center rounded border border-dashed border-zinc-700 bg-black/20 text-center text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+                          {t('pilotTelemetry.notConnected')}
+                        </div>
+                      )}
+                      <p className="max-w-full truncate font-mono text-[11px] text-zinc-400">
+                        {resolvedChannelKey || '--'}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { TimeInput } from '../TimeInput.jsx';
 import { StreamThumbnail } from '../StreamThumbnail.jsx';
 import { CategoryBar } from '../CategoryBadge.jsx';
+import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit, Download, MapPin, Clock3, Gauge, Navigation2, ExternalLink, ChevronDown, Sparkles } from 'lucide-react';
 import { sortCategoriesByDisplayOrder, sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
@@ -950,7 +951,8 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                       )}
                       {pilot.car && (
                         <p className="text-xs text-zinc-400 truncate">
-                          <span className="text-zinc-500">{t('pilots.car')}:</span> {pilot.car}
+                          <span className="text-zinc-500">{t('pilots.car')}:</span>{' '}
+                          <CarBrandBadge carName={pilot.car} className="ml-1 align-middle" />
                         </p>
                       )}
                     </div>

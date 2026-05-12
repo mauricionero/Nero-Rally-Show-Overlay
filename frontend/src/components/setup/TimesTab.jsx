@@ -13,6 +13,7 @@ import TimingSourceIndicator from '../TimingSourceIndicator.jsx';
 import StatusPill from '../StatusPill.jsx';
 import CurrentStageCard from './CurrentStageCard.jsx';
 import DebugIdText from './DebugIdText.jsx';
+import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
@@ -739,6 +740,9 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                       >
                         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                           <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
+                          {pilot.car && (
+                            <CarBrandBadge carName={pilot.car} iconOnly fallbackToText={false} className="align-middle" />
+                          )}
                           {pilot.carNumber && (
                             <span className="bg-[#FF4500] text-white text-xs font-bold px-1 py-0.5 rounded">
                               {pilot.carNumber}
@@ -755,10 +759,10 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                       </div>
                     </td>
                     <td className="p-1 sm:p-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                          {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
-                        </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-white font-bold text-sm uppercase whitespace-pre-line" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {(pilot.name || '').split(' / ').join('\n').split('/').join('\n')}
+                      </span>
                         {showDebugIds && <DebugIdText id={pilot.id} />}
                         {lineSync && (
                           <StatusPill
@@ -1330,6 +1334,9 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
               <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
                 <span className="text-zinc-500 text-xs">#{pilot.startOrder || '?'}</span>
                 <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2">
+                  {pilot.car && (
+                    <CarBrandBadge carName={pilot.car} iconOnly fallbackToText={false} className="align-middle" />
+                  )}
                   <span className="min-w-0 text-white font-bold text-sm uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                     {pilot.name}
                   </span>

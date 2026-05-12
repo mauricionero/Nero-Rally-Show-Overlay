@@ -33,9 +33,9 @@ const PILOT_EXAMPLE = `name,team,car,carNumber,category,startOrder,timeOffsetMin
 Ulysses Bertholdo / Mario Marini,Toyota Gazoo Racing,GR Yaris Rally1,42,WRC,1,0,,"-23.550520, -46.633308",https://example.com/pilot.png,https://vdo.ninja/example`;
 
 const STAGE_EXAMPLE = `name,type,game,gameStageName,ssNumber,date,startTime,endTime,distance,numberOfLaps
-Super Prime,sss,dirtRally2,SSS 7,7,2026-03-17,15:31,,3.2,2
+Super Prime,sss,,SSS 7,7,2026-03-17,15:31,,3.2,2
 Service A,service park,,,,2026-03-17,16:00,16:45,,
-Circuit Race,lap race,dirtRally2,Challenge Loop,,2026-03-18,10:00,,5.1,8`;
+Circuit Race,lap race,,Challenge Loop,,2026-03-18,10:00,,5.1,8`;
 
 const TIME_EXAMPLE = `number,pilot,totalTime,arrivalTime,startTime
 42,Ulysses Bertholdo / Mario Marini,12:34.567,10:42:15.123,10:29
@@ -447,7 +447,7 @@ export default function BulkLoadTab() {
       addStage({
         name,
         type: stageType,
-        game: (values.game || 'dirtRally2').trim(),
+        game: (values.game || '').trim(),
         gameStageName: (values.gameStageName || '').trim(),
         ssNumber: (values.ssNumber || '').trim(),
         date: normalizeDate(values.date || ''),

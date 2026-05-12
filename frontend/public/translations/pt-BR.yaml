@@ -522,7 +522,7 @@ scene2:
   selectFeed: "Selecionar Feed"
   finishedDisplay: "Exibição Finalizados"
   showTime: "Mostrar Tempo"
-  showGap: "Mostrar DiferenÃ§a"
+  showGap: "Mostrar Diferença"
   noPilotsOrCameras: "Nenhum piloto ou câmera disponível"
 
 # ===========================================
