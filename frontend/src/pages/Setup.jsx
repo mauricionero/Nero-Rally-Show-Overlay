@@ -7,7 +7,19 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
-import { Play, VideoOff, Wifi } from 'lucide-react';
+import {
+  Play,
+  VideoOff,
+  Wifi,
+  Tag,
+  Flag,
+  Clock3,
+  Box,
+  Wrench,
+  Bug,
+  CircleDot,
+  CarFront
+} from 'lucide-react';
 import { getLocalOverlayUrl, getWebSocketOverlayUrl, getLocalTimesUrl, getWebSocketTimesUrl } from '../utils/overlayUrls.js';
 import { getResolvedBrandingLogoUrl } from '../utils/branding.js';
 import WsLedStrip from '../components/WsLedStrip.jsx';
@@ -29,6 +41,49 @@ import ConfigTab from '../components/setup/ConfigTab.jsx';
 import DebugTab from '../components/setup/DebugTab.jsx';
 import LiveSyncTab from '../components/setup/LiveSyncTab.jsx';
 import { shouldSuppressManualWsReconnect } from '../utils/wsAutoConnect.js';
+
+function PilotHelmetIcon({ className = '' }) {
+  return (
+    <span aria-hidden="true" className={`text-sm leading-none ${className}`.trim()}>
+      🏎️
+    </span>
+  );
+}
+
+function SetupTabLabel({ value, label }) {
+  const iconClassName = 'h-3.5 w-3.5 shrink-0';
+  const icon = (() => {
+    switch (value) {
+      case 'pilots':
+        return <CarFront className={`${iconClassName} text-[#FF4500]`} />;
+      case 'categories':
+        return <Tag className={`${iconClassName} text-[#FACC15]`} />;
+      case 'therace':
+        return <Flag className={`${iconClassName} text-[#22C55E]`} />;
+      case 'times':
+        return <Clock3 className={`${iconClassName} text-[#38BDF8]`} />;
+      case 'streams':
+        return <CircleDot className={`${iconClassName} text-red-500`} />;
+      case 'bulkload':
+        return <Box className={`${iconClassName} text-[#A78BFA]`} />;
+      case 'config':
+        return <Wrench className={`${iconClassName} text-zinc-300`} />;
+      case 'liveSync':
+        return <Wifi className={`${iconClassName} text-[#38BDF8]`} />;
+      case 'debug':
+        return <Bug className={`${iconClassName} text-rose-400`} />;
+      default:
+        return null;
+    }
+  })();
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {icon}
+      <span>{label}</span>
+    </span>
+  );
+}
 
 export default function Setup() {
   const { t } = useTranslation();
@@ -275,16 +330,16 @@ export default function Setup() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-2">
-          <TabsList className="bg-[#18181B] border border-zinc-800">
-            <TabsTrigger value="pilots" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots">{t('tabs.pilots')}</TabsTrigger>
-            <TabsTrigger value="categories" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories">{t('tabs.categories')}</TabsTrigger>
-            <TabsTrigger value="therace" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-therace">{t('tabs.theRace')}</TabsTrigger>
-            <TabsTrigger value="times" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times">{t('tabs.times')}</TabsTrigger>
-            <TabsTrigger value="streams" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams">{t('tabs.streams')}</TabsTrigger>
-            <TabsTrigger value="bulkload" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-bulkload">{t('tabs.bulkLoad')}</TabsTrigger>
-            <TabsTrigger value="config" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config">{t('tabs.config')}</TabsTrigger>
-            <TabsTrigger value="liveSync" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-live-sync">{t('tabs.liveSync')}</TabsTrigger>
-            <TabsTrigger value="debug" className="text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-debug">{t('tabs.debug')}</TabsTrigger>
+          <TabsList className="gap-1 bg-[#18181B] border border-zinc-800">
+            <TabsTrigger value="pilots" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-pilots"><SetupTabLabel value="pilots" label={t('tabs.pilots')} /></TabsTrigger>
+            <TabsTrigger value="categories" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-categories"><SetupTabLabel value="categories" label={t('tabs.categories')} /></TabsTrigger>
+            <TabsTrigger value="therace" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-therace"><SetupTabLabel value="therace" label={t('tabs.theRace')} /></TabsTrigger>
+            <TabsTrigger value="times" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-times"><SetupTabLabel value="times" label={t('tabs.times')} /></TabsTrigger>
+            <TabsTrigger value="streams" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-streams"><SetupTabLabel value="streams" label={t('tabs.streams')} /></TabsTrigger>
+            <TabsTrigger value="bulkload" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-bulkload"><SetupTabLabel value="bulkload" label={t('tabs.bulkLoad')} /></TabsTrigger>
+            <TabsTrigger value="config" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-config"><SetupTabLabel value="config" label={t('tabs.config')} /></TabsTrigger>
+            <TabsTrigger value="liveSync" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-live-sync"><SetupTabLabel value="liveSync" label={t('tabs.liveSync')} /></TabsTrigger>
+            <TabsTrigger value="debug" className="px-1.5 text-white data-[state=active]:bg-[#FF4500]" data-testid="tab-debug"><SetupTabLabel value="debug" label={t('tabs.debug')} /></TabsTrigger>
           </TabsList>
 
           {activeTab === 'pilots' && (

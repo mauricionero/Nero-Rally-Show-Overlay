@@ -66,6 +66,10 @@ export const canTimingSourceOverwrite = (currentSource, incomingSource) => (
   getTimingSourcePriority(incomingSource) >= getTimingSourcePriority(currentSource)
 );
 
+export const canTimingSourceReplaceField = (currentSource, incomingSource) => (
+  getTimingSourcePriority(incomingSource) >= getTimingSourcePriority(currentSource)
+);
+
 export const getHighestTimingSource = (sources = []) => (
   (Array.isArray(sources) ? sources : [])
     .reduce((highestSource, source) => (

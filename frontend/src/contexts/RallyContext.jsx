@@ -37,6 +37,7 @@ import { isSyncDebugEnabled, isTelemetryDebugEnabled } from '../utils/debugFlags
 import { clearManualWsDisconnect, markManualWsDisconnect } from '../utils/wsAutoConnect.js';
 import {
   canTimingSourceOverwrite,
+  canTimingSourceReplaceField,
   getHighestTimingSource,
   normalizeTimingSource,
   TIMING_SOURCES
@@ -3078,6 +3079,8 @@ export const RallyProvider = ({ children }) => {
           const currentArrivalValue = arrivalTimesRef.current?.[normalizedPilotId]?.[normalizedStageId] || '';
           const currentTimeValue = timesRef.current?.[normalizedPilotId]?.[normalizedStageId] || '';
           const hasCurrentFinishValue = Boolean(currentArrivalValue || currentTimeValue);
+          const canReplaceCurrentFinish = !hasCurrentFinishValue
+            || canTimingSourceReplaceField(currentFinishSource, incomingTimingSource);
 
           if (hasCurrentFinishValue && !canTimingSourceOverwrite(currentFinishSource, incomingTimingSource)) {
             return;
@@ -3090,19 +3093,19 @@ export const RallyProvider = ({ children }) => {
           const hasNextTimeValue = String(nextTimeValue ?? '').trim() !== '';
 
           if (!stage || !isLapTimingStageType(stage.type)) {
-            if (hasArrivalPatch && (hasNextArrivalValue || !currentArrivalValue)) {
+            if (hasArrivalPatch && (hasNextArrivalValue || canReplaceCurrentFinish)) {
               assignPilotStagePatchValue(acceptedArrivalTimes, normalizedPilotId, normalizedStageId, nextArrivalValue);
             }
-            if (hasTimePatch && (hasNextTimeValue || !currentTimeValue)) {
+            if (hasTimePatch && (hasNextTimeValue || canReplaceCurrentFinish)) {
               assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextTimeValue);
             }
-            if (hasNextArrivalValue || hasNextTimeValue || !hasCurrentFinishValue) {
+            if (hasArrivalPatch || hasTimePatch) {
               assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
             }
             return;
           }
 
-          if (hasTimePatch) {
+          if (hasTimePatch && (hasNextTimeValue || canReplaceCurrentFinish)) {
             assignPilotStagePatchValue(acceptedTimes, normalizedPilotId, normalizedStageId, nextTimeValue);
             assignPilotStagePatchValue(acceptedFinishSources, normalizedPilotId, normalizedStageId, nextFinishSource);
           }
@@ -6485,9 +6488,6 @@ export const RallyProvider = ({ children }) => {
   ), [retiredStages]);
 
   const setRetiredFromStage = useCallback((pilotId, stageId, retired) => {
-    if (clientRole === 'times') {
-      return;
-    }
     const sortedSpecialStages = [...stages]
       .filter((stage) => isSpecialStageType(stage.type))
       .sort(compareStagesBySchedule);
@@ -6530,9 +6530,6 @@ export const RallyProvider = ({ children }) => {
   ), [stageAlerts]);
 
   const setStageAlert = useCallback((pilotId, stageId, alert) => {
-    if (clientRole === 'times') {
-      return;
-    }
     setStageAlerts((prev) => {
       const next = { ...prev };
       const nextPilotStages = { ...(next[pilotId] || {}) };

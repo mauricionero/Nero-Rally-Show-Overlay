@@ -200,7 +200,7 @@ times:
   endTime: "Horário Final"
   jumpStart: "Queima de largada"
   jumpStartTooltip: "Tempo real antes do ideal (penalidade)."
-  showCompetitiveStagesOnly: "Mostrar apenas provas"
+  showCompetitiveStagesOnly: "Mostrar apenas estágio competitivos"
   raceStartTime: "Horário de Largada da Corrida"
   stageStartTime: "Horário de Largada da Etapa"
   pilotsInRace: "Pilotos nesta corrida"

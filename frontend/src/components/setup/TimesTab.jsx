@@ -343,7 +343,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
     timeDecimals
   } = useRallyTiming();
   const { clientRole, lineSyncResults, getSosDeliveryStatus } = useRallyWs();
-  const statusControlsReadOnly = isReadOnly || clientRole === 'times';
+  const statusControlsReadOnly = isReadOnly;
   const sosControlsReadOnly = isReadOnly;
   const [pendingSosToggle, setPendingSosToggle] = useState(null);
   const getSosDeliveryTooltip = (delivery) => {

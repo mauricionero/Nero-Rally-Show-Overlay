@@ -3,7 +3,7 @@
 // This file is imported by both the Setup and Overlay pages to display the
 // version number in the UI.
 
-export const VERSION = '1.12.3';
+export const VERSION = '1.12.4';
 export const APK_VERSION = '1.4';
 export const APK_FILE_NAME = `nrs-control-zone-${APK_VERSION}.apk`;
 

@@ -250,7 +250,7 @@ times:
   avgAlertWarning: "Acima da MÉD + DESV"
   avgAlertDanger: "Acima da MÉD + 2×DESV"
   avgThreshold: "Limite"
-  showCompetitiveStagesOnly: "Mostrar apenas provas"
+  showCompetitiveStagesOnly: "Mostrar apenas estágio competitivos"
   showTimesAsCards: "Mostrar como cards"
   selectStageToEdit: "Selecionar etapa para editar"
   selectStageHelp: "Selecione a etapa para fazer alterações"
