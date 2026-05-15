@@ -24,6 +24,7 @@ import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { arrivalTimeToTotal, normalizeTimingInput, totalTimeToArrival } from '../../utils/timeConversion.js';
 import { parseKmlPlacemarks } from '../../utils/kmlImport.js';
 import { getMapPlacemarkPointCount, prepareMapPlacemarkForImport } from '../../utils/mapPlacemarkCompression.js';
+import DebugIdText from './DebugIdText.jsx';
 
 const PILOT_HEADERS = ['name', 'team', 'car', 'carNumber', 'category', 'startOrder', 'timeOffsetMinutes', 'currentStageId', 'latLong', 'picture', 'streamUrl'];
 const STAGE_HEADERS = ['name', 'type', 'game', 'gameStageName', 'ssNumber', 'date', 'startTime', 'endTime', 'distance', 'numberOfLaps'];
@@ -242,6 +243,7 @@ export default function BulkLoadTab() {
     pilots,
     stages,
     categories,
+    displayIdsInSetup,
     startTimes,
     timeDecimals,
     mapPlacemarks,
@@ -1038,7 +1040,10 @@ export default function BulkLoadTab() {
                     <div key={placemark.id} className="bg-[#09090B] border border-zinc-700 rounded p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-white text-sm font-medium truncate">{placemark.name}</p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-white text-sm font-medium truncate">{placemark.name}</p>
+                            {displayIdsInSetup && <DebugIdText id={placemark.id} />}
+                          </div>
                           <p className="text-zinc-500 text-xs mt-1 uppercase">
                             {placemark.geometryType} • {placemark.coordinateGroups.reduce((total, group) => total + group.length, 0)} pts
                           </p>

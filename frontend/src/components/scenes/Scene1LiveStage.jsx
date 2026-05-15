@@ -111,7 +111,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
       lapFastClockEnabled ? new Date(currentFastTime) : currentSecondAlignedTime
     )
   ), [currentFastTime, currentSecondAlignedTime, debugDate, lapFastClockEnabled]);
-  const activeCameras = cameras.filter(c => c.isActive && c.streamUrl);
+  const activeCameras = cameras.filter(c => c.streamUrl);
   const replayPilotStageSignature = useMemo(() => (
     pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
   ), [pilots]);
