@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -7,11 +7,13 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Slider } from '../ui/slider';
 import { Switch } from '../ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
-import { Volume2, VolumeX, Headphones, Plus, Trash2, Edit, Video, VideoOff } from 'lucide-react';
+import { Volume2, VolumeX, Headphones, Plus, Trash2, Edit, Video, VideoOff, Globe } from 'lucide-react';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 
 function StreamPreview({ item, hideStreams, t }) {
   return (
@@ -44,6 +46,10 @@ export default function StreamsTab({ hideStreams = false }) {
     pilots,
     categories,
     cameras,
+    externalMedia,
+    addExternalMedia,
+    updateExternalMedia,
+    deleteExternalMedia,
     streamConfigs,
     globalAudio,
     setGlobalAudio,
@@ -57,9 +63,13 @@ export default function StreamsTab({ hideStreams = false }) {
   } = useRally();
 
   const [newCamera, setNewCamera] = useState({ name: '', streamUrl: '' });
+  const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
   const [editingCamera, setEditingCamera] = useState(null);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
+  const mediaOptionByValue = useMemo(() => (
+    new Map(EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => [option.value, option]))
+  ), []);
 
   const handleAddCamera = () => {
     if (!newCamera.name.trim()) {
@@ -80,6 +90,28 @@ export default function StreamsTab({ hideStreams = false }) {
     setEditingCamera(null);
     setCameraDialogOpen(false);
     toast.success('Camera updated successfully');
+  };
+
+  const renderMediaIconValue = (iconValue) => {
+    const option = mediaOptionByValue.get(iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
+    const Icon = getExternalMediaIconComponent(option.value);
+
+    return (
+      <div className="flex items-center gap-2">
+        <Icon className="w-4 h-4 text-[#FF4500]" />
+        <span>{option.label}</span>
+      </div>
+    );
+  };
+
+  const handleAddMedia = () => {
+    if (!newMedia.name.trim() || !newMedia.url.trim()) {
+      toast.error(t('config.mediaName') + ' & ' + t('config.mediaUrl') + ' are required');
+      return;
+    }
+    addExternalMedia(newMedia);
+    setNewMedia({ name: '', url: '', icon: 'Map' });
+    toast.success('Media added successfully');
   };
 
   // Render stream card (shared between pilots and cameras)
@@ -432,6 +464,97 @@ export default function StreamsTab({ hideStreams = false }) {
       <div className="text-xs text-zinc-600 text-center px-4">
         Stream previews stay lightweight here. Use the controls above for mute and volume instead of relying on embedded player UI.
       </div>
+
+      {/* External Media list */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Globe className="w-5 h-5" />
+            {t('config.externalMedia')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.externalMediaDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {externalMedia.map((m) => (
+              <div key={m.id} className="flex items-center gap-2">
+                <Input
+                  value={m.name}
+                  onChange={(e) => updateExternalMedia(m.id, { ...m, name: e.target.value })}
+                  placeholder={t('config.mediaName')}
+                  className="bg-[#09090B] border-zinc-700 text-white text-sm"
+                />
+                <Input
+                  value={m.url}
+                  onChange={(e) => updateExternalMedia(m.id, { ...m, url: e.target.value })}
+                  placeholder={t('config.mediaUrl')}
+                  className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
+                />
+                <Select
+                  value={m.icon || 'Map'}
+                  onValueChange={(value) => updateExternalMedia(m.id, { ...m, icon: value })}
+                >
+                  <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
+                    {renderMediaIconValue(m.icon || 'Map')}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {renderMediaIconValue(option.value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => deleteExternalMedia(m.id)}
+                  className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+
+            <div className="flex items-center gap-2">
+              <Input
+                value={newMedia.name}
+                onChange={(e) => setNewMedia({ ...newMedia, name: e.target.value })}
+                placeholder={t('config.mediaName')}
+                className="bg-[#09090B] border-zinc-700 text-white text-sm"
+              />
+              <Input
+                value={newMedia.url}
+                onChange={(e) => setNewMedia({ ...newMedia, url: e.target.value })}
+                placeholder={t('config.mediaUrl')}
+                className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
+              />
+              <Select
+                value={newMedia.icon}
+                onValueChange={(value) => setNewMedia({ ...newMedia, icon: value })}
+              >
+                <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
+                  {renderMediaIconValue(newMedia.icon)}
+                </SelectTrigger>
+                <SelectContent>
+                  {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {renderMediaIconValue(option.value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={handleAddMedia}
+                className="bg-[#FF4500] hover:bg-[#FF4500]/90"
+                data-testid="button-add-media"
+              >
+                {t('config.addMedia')}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

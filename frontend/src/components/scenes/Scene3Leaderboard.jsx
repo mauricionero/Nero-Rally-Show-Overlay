@@ -31,16 +31,46 @@ import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
 import { useFastClock } from '../../hooks/useFastClock.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
-import { formatDurationMs, formatDurationSeconds, formatSecondsValue } from '../../utils/timeFormat.js';
+import { clampTimeDecimals, formatDurationMs, formatDurationSeconds } from '../../utils/timeFormat.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
 import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
 
 const SCENE_3_CONFIG_KEY = 'scene3Config';
 
+const formatLeaderboardGapSeconds = (gapSeconds, decimals = 3) => {
+  if (!Number.isFinite(gapSeconds) || gapSeconds < 0) {
+    return '-';
+  }
+
+  const safeDecimals = clampTimeDecimals(decimals);
+  const roundedValue = Number(gapSeconds.toFixed(safeDecimals));
+  const wholeSeconds = Math.floor(roundedValue);
+  const hours = Math.floor(wholeSeconds / 3600);
+  const minutesWithinHour = Math.floor((wholeSeconds % 3600) / 60);
+  const totalMinutes = Math.floor(wholeSeconds / 60);
+  const seconds = wholeSeconds % 60;
+  const fractionText = safeDecimals > 0
+    ? `.${String(Math.round((roundedValue - wholeSeconds) * (10 ** safeDecimals))).padStart(safeDecimals, '0')}`
+    : '';
+
+  if (wholeSeconds < 60) {
+    return `${String(seconds).padStart(2, '0')}${fractionText}`;
+  }
+
+  if (wholeSeconds < 3600) {
+    return `${String(totalMinutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}${fractionText}`;
+  }
+
+  return `${String(hours).padStart(2, '0')}:${String(minutesWithinHour).padStart(2, '0')}:${String(seconds).padStart(2, '0')}${fractionText}`;
+};
+
 export default function Scene3Leaderboard({ hideStreams = false }) {
   const { pilots, stages, times, startTimes, realStartTimes, retiredStages, categories, logoUrl, lapTimes, stagePilots, debugDate, currentStageId, isStageAlert, timeDecimals, eventIsOver, eventReplayStartDate, eventReplayStartTime, eventReplayStageIntervalSeconds, arrivalTimes } = useRally();
   const resolvedLogoUrl = getResolvedBrandingLogoUrl(logoUrl);
   const { t } = useTranslation();
+  const visiblePilots = useMemo(() => (
+    pilots.filter((pilot) => pilot.isActive !== false)
+  ), [pilots]);
   const [selectedStageId, setSelectedStageId] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { selectedStageId: null }).selectedStageId);
   const [followCurrentStage, setFollowCurrentStage] = useState(() => loadSceneConfig(SCENE_3_CONFIG_KEY, { followCurrentStage: true }).followCurrentStage);
   
@@ -62,8 +92,8 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   ), [debugDate, fastClockEnabled, currentFastTime, currentSecondAlignedTime]);
   const alertStageId = selectedStageId || currentStageId || null;
   const replayPilotStageSignature = useMemo(() => (
-    pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
-  ), [pilots]);
+    visiblePilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
+  ), [visiblePilots]);
   const replaySnapshotKey = eventIsOver
     ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
     : '';
@@ -85,7 +115,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     replayPlaybackSnapshotRef.current = {
       key: replaySnapshotKey,
       map: buildPilotOverlayPlaybackMap({
-      pilots,
+      pilots: visiblePilots,
       globalCurrentStageId: currentStageId,
       eventIsOver: true,
       stages,
@@ -99,11 +129,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   }
   const livePilotPlaybackById = useMemo(() => (
     buildPilotOverlayPlaybackMap({
-      pilots,
+      pilots: visiblePilots,
       globalCurrentStageId: currentStageId,
       eventIsOver: false
     })
-  ), [currentStageId, pilots]);
+  ), [currentStageId, visiblePilots]);
   const pilotPlaybackById = eventIsOver
     ? (replayPlaybackSnapshotRef.current.map || new Map())
     : livePilotPlaybackById;
@@ -169,21 +199,22 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
   ), [categories]);
 
   const pilotUiMetaById = useMemo(() => (
-    new Map(pilots.map((pilot) => [
+    new Map(visiblePilots.map((pilot) => [
       pilot.id,
       {
         category: categoryById.get(pilot.categoryId) || null,
+        carNumber: pilot.carNumber || '',
         carName: pilot.car || '',
         teamName: pilot.team || '',
         alert: alertStageId ? isStageAlert(pilot.id, alertStageId) : false,
         jumpStart: alertStageId ? isJumpStartForStage(pilot.id, alertStageId, startTimes, realStartTimes) : false
       }
     ]))
-  ), [alertStageId, categoryById, isStageAlert, pilots, realStartTimes, startTimes]);
+  ), [alertStageId, categoryById, isStageAlert, realStartTimes, startTimes, visiblePilots]);
 
   const displayOrderByPilotId = useMemo(() => (
-    new Map(pilots.map((pilot, index) => [pilot.id, index]))
-  ), [pilots]);
+    new Map(visiblePilots.map((pilot, index) => [pilot.id, index]))
+  ), [visiblePilots]);
 
   useEffect(() => {
     if (followCurrentStage && currentStageId && stages.some((stage) => stage.id === currentStageId) && currentStageId !== selectedStageId) {
@@ -229,7 +260,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     if (selectedStageId && selectedStage) {
       if (isLapTimingStageType(selectedStage.type)) {
         return buildLapRaceLeaderboard({
-          pilots,
+          pilots: visiblePilots,
           stage: selectedStage,
           lapTimes,
           stagePilots,
@@ -259,7 +290,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         }));
       } else if (isSpecialStageType(selectedStage.type)) {
         // Single special stage leaderboard
-        return sortByRetirementAndTime(pilots.map(pilot => {
+        return sortByRetirementAndTime(visiblePilots.map(pilot => {
           const stageTimingInfo = getPilotStageTimingInfo({
             pilotId: pilot.id,
             pilot,
@@ -291,7 +322,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
           const sortTime = status === 'finished' && finishTime
             ? parseTime(finishTime)
             : (status === 'racing' && stageStartDateTime
-              ? Math.max(0, sceneNow.getTime() - stageStartDateTime.getTime())
+              ? Math.max(0, (sceneNow.getTime() - stageStartDateTime.getTime()) / 1000)
               : (displayOrderByPilotId.get(pilot.id) ?? Number.MAX_SAFE_INTEGER));
           const completedStages = overallStagesUpToSelected.reduce((count, stage) => (
             times[pilot.id]?.[stage.id] ? count + 1 : count
@@ -323,7 +354,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
     }
     
     // Overall SS standings (default)
-    return sortByRetirementAndTime(pilots.map(pilot => {
+    return sortByRetirementAndTime(visiblePilots.map(pilot => {
       let totalTime = 0;
       let completedStages = 0;
       const isRetired = referenceOverallStage
@@ -354,7 +385,7 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
         isRetired
       };
     }));
-  }, [selectedStageId, selectedStage, pilots, times, startTimes, retiredStages, lapTimes, stagePilots, sortedOverallStages, referenceOverallStage, overallStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t, eventIsOver, replayStageScheduleById]);
+  }, [selectedStageId, selectedStage, times, startTimes, retiredStages, lapTimes, stagePilots, sortedOverallStages, referenceOverallStage, overallStagesUpToSelected, timeDecimals, displayOrderByPilotId, sceneNow, t, eventIsOver, replayStageScheduleById, visiblePilots]);
 
   const isLapRaceSelected = isLapTimingStageType(selectedStage?.type);
   const isSuperPrimeSelected = selectedStage?.type === SUPER_PRIME_STAGE_TYPE;
@@ -559,7 +590,10 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                       }
                     }
                   } else {
-                    gap = '+' + formatSecondsValue(pilot.sortTime - displayLeader.sortTime, timeDecimals) + 's';
+                    const gapSeconds = pilot.sortTime - displayLeader.sortTime;
+                    if (Number.isFinite(gapSeconds) && gapSeconds >= 0) {
+                      gap = `+${formatLeaderboardGapSeconds(gapSeconds, timeDecimals)}`;
+                    }
                   }
                 } else if (pilot.hasTime && pilot.id === displayLeader?.id) {
                   gap = t('scene3.leader');
@@ -599,11 +633,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                         {pilot.hasTime ? index + 1 : '-'}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        {/* 16:9 Stream thumbnail or avatar fallback */}
-                        {pilotPlaybackById.get(pilot.id)?.hasVideo && pilot.isActive && !hideStreams ? (
-                          <div className="w-32 h-18 rounded overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+                <td className="p-4">
+                  <div className="flex items-center gap-3">
+                    {/* 16:9 Stream thumbnail or avatar fallback */}
+                    {pilotPlaybackById.get(pilot.id)?.hasVideo && pilot.isActive && !hideStreams ? (
+                      <div className="w-32 h-18 rounded overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
                             <StreamPlayer
                               key={pilotPlaybackById.get(pilot.id)?.mode === 'replay' ? `${pilot.id}:${pilotPlaybackById.get(pilot.id)?.baseUrl || ''}:${pilotPlaybackById.get(pilot.id)?.effectiveStageId || ''}` : `live-${pilot.id}`}
                               pilotId={pilot.id}
@@ -623,6 +657,11 @@ export default function Scene3Leaderboard({ hideStreams = false }) {
                           <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center">
                             <span className="text-lg font-bold text-zinc-600">{pilot.name.charAt(0)}</span>
                           </div>
+                        )}
+                        {pilot.carNumber && (
+                          <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-sm text-[0.85rem] font-black text-white bg-[#FF4500]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {pilot.carNumber}
+                          </span>
                         )}
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 min-w-0">

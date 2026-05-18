@@ -1,5 +1,5 @@
-# Rally Dashboard - Tradução Português (Brasil)
-# Este arquivo contém todas as strings traduzíveis da aplicação
+﻿# Rally Dashboard - Tradução PortuguÃªs (Brasil)
+# Este arquivo contÃ©m todas as strings traduzÃ­veis da aplicação
 # Copie este arquivo e traduza para adicionar um novo idioma
 
 # ===========================================
@@ -16,7 +16,7 @@ common:
   close: "Fechar"
   confirm: "Confirmar"
   loading: "Carregando..."
-  noData: "Nenhum dado disponível"
+  noData: "Nenhum dado disponÃ­vel"
   search: "Buscar"
   select: "Selecionar"
   selectDate: "Selecionar data"
@@ -30,7 +30,7 @@ common:
   hide: "Ocultar"
 
 # ===========================================
-# CABEÇALHO / NAVEGAÇÃO
+# CABEÃ‡ALHO / NAVEGAÃ‡ÃƒO
 # ===========================================
 header:
   transition: "Transicao"
@@ -42,7 +42,7 @@ header:
   title: "NRS Control Zone"
   subtitle: "Configuração"
   goLive: "Ao Vivo"
-  timesModule: "Módulo de Tempos"
+  timesModule: "MÃ³dulo de Tempos"
   hide: "Ocultar"
   stream: "Stream"
   hideStreams: "Ocultar Streams"
@@ -51,19 +51,19 @@ header:
   updated: "Atualizado"
   local: "Local"
   websocket: "Websocket"
-  websocketSetupHint: "Conecte na aba Live sync > Live sync (websocket): gere uma chave, conecte e então este botão será habilitado."
+  websocketSetupHint: "Conecte na aba Live sync > Live sync (websocket): gere uma chave, conecte e então este botão serÃ¡ habilitado."
   websocketReadyHint: "Abre o overlay com a chave ativa da conexão websocket."
   ownershipTitle: "Propriedade da Setup"
   ownershipStatus: "Status"
-  ownershipDescription: "A setup primária publica snapshots e controla o lease do heartbeat."
+  ownershipDescription: "A setup primÃ¡ria publica snapshots e controla o lease do heartbeat."
   ownershipOwnerId: "ID do dono"
   ownershipOffline: "Offline"
-  ownershipPrimary: "Primária"
-  ownershipReplica: "Réplica"
+  ownershipPrimary: "PrimÃ¡ria"
+  ownershipReplica: "RÃ©plica"
   debugLogs: "Logs de Debug"
 
 # ===========================================
-# PÁGINA SETUP - ABAS
+# PÃGINA SETUP - ABAS
 # ===========================================
 tabs:
   pilots: "Pilotos"
@@ -93,8 +93,8 @@ pilots:
   heading: "Direção"
   gpsPrecision: "Precisão do GPS"
   now: "Agora"
-  telemetryHint: "Usado pelo app Android para enviar atualizações de posição em tempo real."
-  lastLatLongUpdatedAt: "Última Atualização da Posição"
+  telemetryHint: "Usado pelo app Android para enviar atualizaçÃµes de posição em tempo real."
+  lastLatLongUpdatedAt: "Ãšltima Atualização da Posição"
   startOrder: "Ordem de Largada"
   timeOffsetMinutes: "Offset de Tempo (min)"
   category: "Categoria"
@@ -146,20 +146,20 @@ theRace:
   addNewStage: "Adicionar Nova Etapa"
   stageName: "Nome da Etapa"
   stageType: "Tipo de Etapa"
-  ssNumber: "Número SS"
-  numberOfLaps: "Número de Voltas"
+  ssNumber: "NÃºmero SS"
+  numberOfLaps: "NÃºmero de Voltas"
   finishLinePasses: "Passagens na Chegada"
   finishLinePassesShort: "passagens"
-  finishLinePassesHint: "Use o número de vezes que o carro vai cruzar a linha de chegada. Em muitos super primes isso acontece duas vezes em uma única volta."
-  variableNumberOfLaps: "Número de voltas variável"
+  finishLinePassesHint: "Use o nÃºmero de vezes que o carro vai cruzar a linha de chegada. Em muitos super primes isso acontece duas vezes em uma Ãºnica volta."
+  variableNumberOfLaps: "NÃºmero de voltas variÃ¡vel"
   lapRaceTotalTimeMode: "Tempo Total da Corrida de Voltas"
-  lapRaceMaxTimeMinutes: "Tempo Máximo (min)"
+  lapRaceMaxTimeMinutes: "Tempo MÃ¡ximo (min)"
   date: "Data"
   distance: "Distância"
   mapPlacemark: "Placemark do Mapa"
   noMapPlacemark: "Sem Placemark"
-  scheduledStart: "Horário Previsto"
-  endTime: "Horário Final"
+  scheduledStart: "HorÃ¡rio Previsto"
+  endTime: "HorÃ¡rio Final"
   noStages: "Nenhuma etapa cadastrada. Adicione sua primeira etapa acima."
   stageTypes:
     ss: "SS (Especial)"
@@ -172,7 +172,7 @@ theRace:
   realLifeRace: "Corrida Real"
   realLifeRaceHint: "Use quando o evento acontece em vias ou pistas reais."
   virtualDirtRally2: "Virtual (Dirt Rally 2)"
-  virtualDirtRally2Hint: "Use quando o evento é dirigido por telemetria do Dirt Rally 2."
+  virtualDirtRally2Hint: "Use quando o evento Ã© dirigido por telemetria do Dirt Rally 2."
   lapRaceTotalTimeModes:
     cumulative: "Tempo Acumulado"
     bestLap: "Melhor Volta"
@@ -192,17 +192,19 @@ theRace:
 times:
   startTime: "Ideal"
   realStartTime: "Real"
-  arrivalTime: "Horário de Chegada"
+  arrivalTime: "HorÃ¡rio de Chegada"
   totalTime: "Tempo Total"
   cumulativeTime: "Tempo Acumulado"
   bestLapTime: "Melhor Tempo de Volta"
   bestLapShort: "MELHOR"
-  endTime: "Horário Final"
+  avg: "Méd"
+  best: "MELHOR"
+  endTime: "HorÃ¡rio Final"
   jumpStart: "Queima de largada"
   jumpStartTooltip: "Tempo real antes do ideal (penalidade)."
-  showCompetitiveStagesOnly: "Mostrar apenas estágio competitivos"
-  raceStartTime: "Horário de Largada da Corrida"
-  stageStartTime: "Horário de Largada da Etapa"
+  showCompetitiveStagesOnly: "Mostrar apenas estÃ¡gio competitivos"
+  raceStartTime: "HorÃ¡rio de Largada da Corrida"
+  stageStartTime: "HorÃ¡rio de Largada da Etapa"
   pilotsInRace: "Pilotos nesta corrida"
   pilotsInStage: "Pilotos nesta etapa"
   selectPilots: "Selecione pilotos para registrar tempos de volta"
@@ -227,13 +229,13 @@ times:
   syncLineUpdated: "Atualizado pelo Times."
   syncLineNoChange: "Times respondeu. Sem mudanças."
   syncLineNoData: "Times não tem dados para esta linha."
-  syncLineError: "Não foi possível solicitar dados do Times."
+  syncLineError: "Não foi possÃ­vel solicitar dados do Times."
 
 # ===========================================
 # ABA STREAMS
 # ===========================================
 streams:
-  globalAudioControl: "Controle Global de Áudio"
+  globalAudioControl: "Controle Global de Ãudio"
   masterVolume: "Volume Principal"
   muteAll: "Mutar Todos"
   unmuteAll: "Desmutar Todos"
@@ -248,7 +250,7 @@ streams:
   saturation: "Saturação"
   contrast: "Contraste"
   brightness: "Brilho"
-  resetDefaults: "Restaurar Padrões"
+  resetDefaults: "Restaurar PadrÃµes"
   noActiveStreams: "Nenhum stream de piloto ativo. Ative pilotos na aba Pilotos."
   placeholder:
     cameraName: "Câmera de Chegada"
@@ -259,18 +261,18 @@ streams:
 # ===========================================
 config:
   backgroundChromaKey: "Cor de Fundo (Chroma Key)"
-  selectBackground: "Selecione a cor de fundo para sobreposição de vídeo"
+  selectBackground: "Selecione a cor de fundo para sobreposição de vÃ­deo"
   black: "Preto"
   greenScreen: "Tela Verde"
   blueScreen: "Tela Azul"
   applyCustom: "Aplicar Personalizado"
   
-  externalMedia: "Mídia Externa"
-  externalMediaDesc: "Adicione qualquer mídia que possa ser incorporada via iframe (Google Maps, VDO.ninja, etc.)"
+  externalMedia: "MÃ­dia Externa"
+  externalMediaDesc: "Adicione qualquer mÃ­dia que possa ser incorporada via iframe (Google Maps, VDO.ninja, etc.)"
   stageMaps: "Mapas de Etapa"
   mediaName: "Nome"
   mediaUrl: "URL"
-  addMedia: "Adicionar Mídia"
+  addMedia: "Adicionar MÃ­dia"
   
   branding: "Marca"
   logoUrl: "URL do Logo do Canal"
@@ -288,12 +290,12 @@ config:
   selectLanguage: "Selecionar Idioma"
   
   liveSync: "Sincronização ao Vivo (WebSocket)"
-  liveSyncDesc: "Compartilhe os dados do painel em tempo real com a página de overlay"
+  liveSyncDesc: "Compartilhe os dados do painel em tempo real com a pÃ¡gina de overlay"
   generateKey: "Gerar Chave"
   yourChannelKey: "Sua Chave de Canal"
   copyKey: "Copiar Chave"
-  shareKeyInfo: "Compartilhe esta chave com a página de overlay para habilitar sincronização ao vivo"
-  pasteKeyToConnect: "Cole a chave de canal da página Setup para conectar"
+  shareKeyInfo: "Compartilhe esta chave com a pÃ¡gina de overlay para habilitar sincronização ao vivo"
+  pasteKeyToConnect: "Cole a chave de canal da pÃ¡gina Setup para conectar"
   channelKeyPlaceholder: "Cole a chave de canal aqui..."
   copyOverlayUrl: "Copiar URL do Overlay"
   copyTimesUrl: "Copiar URL do Times"
@@ -307,7 +309,7 @@ config:
   provider: "Provedor"
   
   keyboardShortcuts: "Atalhos de Teclado"
-  keyboardShortcutsDesc: "Disponíveis na página de Overlay"
+  keyboardShortcutsDesc: "DisponÃ­veis na pÃ¡gina de Overlay"
   switchToScene: "Mudar para Cena"
   
   dataManagement: "Gerenciamento de Dados"
@@ -343,7 +345,7 @@ debug:
   lastSnapshotGotAt: "Ultimo Snapshot Recebido Em"
 
 # ===========================================
-# PÁGINA OVERLAY - CENAS
+# PÃGINA OVERLAY - CENAS
 # ===========================================
 scenes:
   liveStage: "Etapa Ao Vivo"
@@ -358,18 +360,18 @@ scene1:
   cameraSpacing: "Espaçamento das Câmeras"
   expandView: "Expandir Câmeras"
   retractView: "Retrair Câmeras"
-  cameraSpacingHint: "Usa espaçamento de 2px para o grid de câmeras ocupar quase todo o espaço disponível."
+  cameraSpacingHint: "Usa espaçamento de 2px para o grid de câmeras ocupar quase todo o espaço disponÃ­vel."
   layout: "Layout"
   selectItems: "Selecionar Itens"
   reorderDragDrop: "Reordenar (Arrastar e Soltar)"
   noItemsSelected: "Nenhum Item Selecionado"
   selectPilotsOrMaps: "Selecione pilotos ou Google Maps no painel lateral"
-  selectPilotsOrMedia: "Selecione pilotos ou mídia externa no painel lateral"
+  selectPilotsOrMedia: "Selecione pilotos ou mÃ­dia externa no painel lateral"
   currentStage: "Etapa Atual"
   race: "Corrida"
   rallyMap: "Mapa do Rally"
   googleMaps: "Google Maps"
-  externalMedia: "Mídia Externa"
+  externalMedia: "MÃ­dia Externa"
   finished: "FINALIZADO"
   layouts:
     oneStream: "1 Stream"
@@ -395,10 +397,10 @@ scene2:
   finishedDisplay: "Exibição Finalizados"
   showTime: "Mostrar Tempo"
   showGap: "Mostrar Diferença"
-  noPilotsOrCameras: "Nenhum feed disponível"
+  noPilotsOrCameras: "Nenhum feed disponÃ­vel"
 
 # ===========================================
-# CENA 3 - CLASSIFICAÇÃO
+# CENA 3 - CLASSIFICAÃ‡ÃƒO
 # ===========================================
 scene3:
   selectView: "Selecionar Visualização"
@@ -415,7 +417,7 @@ scene3:
   totalTime: "Tempo Total"
   laps: "Voltas"
   gap: "Diferença"
-  leader: "LÍDER"
+  leader: "LÃDER"
 
 # ===========================================
 # CENA 4 - FOCO NO PILOTO
@@ -427,7 +429,7 @@ scene4:
   followCurrentStageHint: "Quando ativado, esta cena muda automaticamente para a etapa atual definida no Setup."
   selectCamera: "Selecionar Câmera"
   noPilotSelected: "Nenhum Piloto Selecionado"
-  noStreamAvailable: "Nenhum stream disponível"
+  noStreamAvailable: "Nenhum stream disponÃ­vel"
   allStageTimes: "Tempos de Todas as Etapas"
   noStagesRegistered: "Nenhuma etapa cadastrada"
   lapTimes: "Tempos de Volta"
@@ -446,7 +448,7 @@ status:
   finished: "Finalizado"
   notStarted: "Não Largou"
   retired: "Retirado"
-  alert: "⚠️"
+  alert: "âš ï¸"
   alertLabel: "Alerta"
   alertTooltip: "Alerta manual para esta etapa."
   sos: "SOS"
@@ -462,7 +464,7 @@ status:
   sosDeliveryAcked: "SOS confirmado."
   sosDeliveryError: "Falha ao enviar SOS."
   info: "i"
-  jumpStart: "⚡"
+  jumpStart: "âš¡"
   start: "Largada"
   active: "Ativo"
   inactive: "Inativo"
@@ -485,9 +487,9 @@ bulkLoad:
   googleMapsViewerPlaceholder: "https://www.google.com/maps/d/viewer?mid=XXXX"
   copyViewerUrl: "Copiar URL Viewer"
   openViewerUrl: "Abrir URL Viewer"
-  invalidGoogleMapsUrl: "Cole uma URL válida do Google My Maps com o parâmetro mid."
+  invalidGoogleMapsUrl: "Cole uma URL vÃ¡lida do Google My Maps com o parâmetro mid."
   googleMapsViewerCopied: "URL viewer copiada."
-  googleMapsViewerCopyFailed: "Não foi possível copiar a URL viewer."
+  googleMapsViewerCopyFailed: "Não foi possÃ­vel copiar a URL viewer."
   expectedHeaders: "Cabecalhos Esperados"
   example: "Exemplo"
   selectStage: "Etapa"
@@ -534,5 +536,6 @@ bulkLoad:
     ambiguousNumber: "Este number corresponde a mais de um piloto."
     identifierMismatch: "O number e o nome do piloto apontam para pilotos diferentes."
     timingValueRequired: "Pelo menos um entre totalTime, arrivalTime ou startTime e obrigatorio."
-    invalidKml: "Arquivo KML inválido."
-    noPlacemarks: "Nenhum placemark utilizável foi encontrado neste KML."
+    invalidKml: "Arquivo KML invÃ¡lido."
+    noPlacemarks: "Nenhum placemark utilizÃ¡vel foi encontrado neste KML."
+

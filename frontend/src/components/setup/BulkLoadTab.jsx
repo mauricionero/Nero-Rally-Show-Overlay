@@ -366,7 +366,8 @@ export default function BulkLoadTab() {
         currentStageId: (values.currentStageId || '').trim(),
         latLong: (values.latLong || '').trim(),
         picture: (values.picture || '').trim(),
-        streamUrl: (values.streamUrl || '').trim()
+        streamUrl: (values.streamUrl || '').trim(),
+        isActive: true
       };
 
       if (existingPilot) {

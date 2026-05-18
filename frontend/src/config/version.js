@@ -4,7 +4,7 @@
 // version number in the UI.
 
 export const VERSION = '1.12.5';
-export const APK_VERSION = '1.5';
+export const APK_VERSION = '1.6';
 export const APK_FILE_NAME = `nrs-control-zone-${APK_VERSION}.apk`;
 
 export const getApkDownloadUrl = () => {

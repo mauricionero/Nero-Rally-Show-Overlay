@@ -915,29 +915,31 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
           <Card key={pilot.id} className="bg-[#18181B] border-zinc-800 relative" data-testid={`pilot-card-${pilot.id}`}>
             <CategoryBar categoryId={pilot.categoryId} />
             <CardContent className="pt-6">
-                  <div className="flex items-start gap-4">
-                <StreamThumbnail
-                  streamUrl={pilot.streamUrl}
-                  name={pilot.name}
-                  showAlways={true}
-                  hideStreams={hideStreams}
-                  className="w-20 h-20 rounded flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-start gap-2 shrink-0">
+                  <StreamThumbnail
+                    streamUrl={pilot.streamUrl}
+                    name={pilot.name}
+                    showAlways={true}
+                    hideStreams={hideStreams}
+                    className="w-20 h-20 rounded flex-shrink-0"
+                  />
+                  {pilot.carNumber && (
+                    <span className="inline-flex items-center justify-center min-w-[2.75rem] px-2 py-0.5 rounded-sm text-sm font-black text-white bg-[#FF4500]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {pilot.carNumber}
+                    </span>
+                  )}
+                  <div className="flex flex-col items-start gap-0.5 text-xs">
                     <span className="text-zinc-500 text-sm">#{pilot.startOrder || '?'}</span>
                     <span className="text-zinc-400 text-xs">+{pilot.timeOffsetMinutes || 0}m</span>
-                    {pilot.carNumber && (
-                      <span className="bg-[#FF4500] text-white text-xs font-bold px-1.5 py-0.5 rounded">
-                        {pilot.carNumber}
-                      </span>
-                    )}
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                      <h3 className="min-w-0 flex-1 font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {pilot.name}
-                      </h3>
-                      {displayIdsInSetup && <DebugIdText id={pilot.id} />}
-                    </div>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h3 className="min-w-0 flex-1 font-bold text-lg uppercase truncate text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {pilot.name}
+                    </h3>
+                    {displayIdsInSetup && <DebugIdText id={pilot.id} />}
                   </div>
                   {pilot.streamUrl && (
                     <p className="text-xs text-zinc-500 truncate font-mono mt-1">{pilot.streamUrl}</p>

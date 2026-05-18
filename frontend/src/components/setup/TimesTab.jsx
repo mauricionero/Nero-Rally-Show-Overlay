@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRally, useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -18,7 +18,7 @@ import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversi
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
 import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
-import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
+import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceVisibleLapCount, getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
 import { calculateAverageAndDeviation, parseDurationStringToMs } from '../../utils/timingStats.js';
 import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, Check, CheckCheck, CircleX, Download } from 'lucide-react';
@@ -154,7 +154,7 @@ const PilotStatusBadges = ({ pilotId, stageId, compact = false }) => {
       )}
       {alert && (
         <span className={`${badgeClassName} bg-amber-500/20 text-amber-300`}>
-          <span aria-hidden="true">⚠️</span>
+          <span aria-hidden="true">âš ï¸</span>
         </span>
       )}
       {sos && (
@@ -162,7 +162,7 @@ const PilotStatusBadges = ({ pilotId, stageId, compact = false }) => {
           <Tooltip>
             <TooltipTrigger asChild>
               <span className={`${badgeClassName} bg-red-500/20 text-red-300`}>
-                <span aria-hidden="true">🆘</span>
+                <span aria-hidden="true">ðŸ†˜</span>
                 {effectiveSosStatus && (
                   <SosDeliveryIndicator
                     status={effectiveSosStatus}
@@ -463,6 +463,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
             category: entry.category,
             avg: null,
             deviation: null,
+            best: null,
             order: categoryOrderById.get(entry.category.id) ?? Number.MAX_SAFE_INTEGER
           };
         }
@@ -473,6 +474,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
           category: entry.category,
           avg,
           deviation,
+          best: Math.min(...values),
           order: categoryOrderById.get(entry.category.id) ?? Number.MAX_SAFE_INTEGER
         };
       })
@@ -649,19 +651,21 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       </AlertDialog>
       {categoryStats.length > 0 && (
         <div className="flex items-center gap-3 bg-[#09090B] border border-zinc-700 rounded px-3 py-2">
-          <div className="text-xs font-bold text-white uppercase">{t('times.avg')}</div>
           <div className="flex flex-wrap gap-2">
             {categoryStats.map((stat) => (
               <div
                 key={stat.category.id}
-                className="text-xs text-zinc-200 bg-[#18181B] border border-zinc-700 rounded px-2 py-1"
+                className="text-xs text-zinc-300 bg-[#18181B] border border-zinc-700 rounded px-2 py-1"
               >
-                <span className="font-bold" style={{ color: stat.category.color }}>
+                <div className="font-bold" style={{ color: stat.category.color }}>
                   {stat.category.name}
-                </span>
-                <span className="ml-2 font-mono">
-                  {formatMsAsShortTime(stat.avg)} ± {formatMsAsShortTime(stat.deviation)}
-                </span>
+                </div>
+                <div className="font-mono">
+                  {t('times.avg')}: {formatDurationMs(stat.avg, timeDecimals)} ± {formatDurationMs(stat.deviation, timeDecimals)}
+                </div>
+                <div className="font-mono text-zinc-100">
+                  {t('times.best')}: {formatDurationMs(stat.best, timeDecimals)}
+                </div>
               </div>
             ))}
           </div>
@@ -697,10 +701,10 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   {t('status.retired')}
                 </th>
                 <th className="text-left text-zinc-400 uppercase font-bold p-1 sm:p-2 min-w-[90px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  ⚠️Alert
+                  âš ï¸Alert
                 </th>
                 <th className="text-left text-zinc-400 uppercase font-bold p-1 sm:p-2 min-w-[90px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  🆘 {t('status.sos')}
+                  ðŸ†˜ {t('status.sos')}
                 </th>
               </tr>
             </thead>
@@ -919,7 +923,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             onCheckedChange={(checked) => setStageAlert(pilot.id, stage.id, checked === true)}
                             disabled={statusControlsReadOnly}
                           />
-                          <span className="text-[11px] text-zinc-400 uppercase">⚠️</span>
+                          <span className="text-[11px] text-zinc-400 uppercase">âš ï¸</span>
                         </label>
                       </td>
                     <td className="p-1 sm:p-2">
@@ -930,7 +934,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             disabled={sosControlsReadOnly}
                           />
                           <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 uppercase">
-                            <span>🆘</span>
+                            <span>ðŸ†˜</span>
                             {effectiveSosStatus && (
                               <TooltipProvider delayDuration={150}>
                                 <Tooltip>
@@ -1194,7 +1198,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     onCheckedChange={(checked) => setStageAlert(pilot.id, stage.id, checked === true)}
                     disabled={statusControlsReadOnly}
                   />
-                  <span className="text-[11px] text-zinc-400 uppercase">⚠️</span>
+                  <span className="text-[11px] text-zinc-400 uppercase">âš ï¸</span>
                 </label>
                 <label className={`flex items-center gap-2 ${sosControlsReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                   <Checkbox
@@ -1203,7 +1207,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     disabled={sosControlsReadOnly}
                   />
                   <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 uppercase">
-                    <span>🆘</span>
+                    <span>ðŸ†˜</span>
                     {sosDelivery?.status && (
                       <TooltipProvider delayDuration={150}>
                         <Tooltip>
@@ -1391,6 +1395,7 @@ export default function TimesTab({
   showDebugIds = false
 }) {
   const { t } = useTranslation();
+  const { timeDecimals } = useRally();
   const { pilots, stages, categories, currentStageId } = useRallyMeta();
   const {
     stageSos,
@@ -1418,7 +1423,7 @@ export default function TimesTab({
       lapsLabel: t('scene3.laps').toLowerCase(),
       passesLabel: t('theRace.finishLinePassesShort'),
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
-    }).join(' • ')
+    }).join(' â€¢ ')
   ), [t]);
 
   const handleExportStageCsv = useCallback((stage) => {
@@ -1710,3 +1715,5 @@ export default function TimesTab({
     </div>
   );
 }
+
+

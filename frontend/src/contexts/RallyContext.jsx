@@ -42,6 +42,7 @@ import {
   normalizeTimingSource,
   TIMING_SOURCES
 } from '../utils/timingSource.js';
+import { RallyConfigTransfer } from '../utils/RallyConfigTransfer.js';
 
 const RallyContext = createContext();
 const RallyConfigContext = createContext();
@@ -6714,98 +6715,63 @@ export const RallyProvider = ({ children }) => {
     }
   };
 
-  const exportData = useCallback(() => {
-    const data = {
-      eventName: loadFromStorage('rally_event_name', ''),
-      positions: loadFromStorage('rally_positions', {}),
-      lapTimes: loadFromStorage('rally_lap_times', {}),
-      stagePilots: loadFromStorage('rally_stage_pilots', {}),
-      pilots: loadFromStorage('rally_pilots', []),
-      pilotsTelemetry: getPilotTelemetrySnapshot(),
-      categories: loadFromStorage('rally_categories', []),
-      stages: loadFromStorage('rally_stages', []),
-      times: loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map,
-      arrivalTimes: loadFromStorage('rally_arrival_times', {}),
-      startTimes: loadFromStorage('rally_start_times', {}),
-      realStartTimes: loadFromStorage('rally_real_start_times', {}),
-      sourceFinishTime: loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}),
-      sourceLapTime: loadFromStorage(SOURCE_LAP_TIME_STORAGE_KEY, {}),
-      retiredStages: loadFromStorage('rally_retired_stages', {}),
-      stageAlerts: loadFromStorage('rally_stage_alerts', {}),
-      stageSos: loadFromStorage('rally_stage_sos', {}),
-      timeDecimals: loadFromStorage('rally_time_decimals', 1),
-      streamConfigs: loadFromStorage('rally_stream_configs', {}),
-      globalAudio: loadFromStorage('rally_global_audio', { volume: 100, muted: false }),
-      cameras: loadFromStorage('rally_cameras', []),
-      externalMedia: loadFromStorage('rally_external_media', []),
-      transitionImageUrl: loadFromStorage('rally_transition_image', ''),
-      currentStageId: loadFromStorage('rally_current_stage', null),
-      eventIsOver: loadFromStorage('rally_event_is_over', false) === true,
-      raceTypes: normalizeRaceTypes(loadFromStorage('rally_race_types', DEFAULT_RACE_TYPES)),
-      eventReplayStartDate: loadFromStorage('rally_event_replay_start_date', ''),
-      eventReplayStartTime: loadFromStorage('rally_event_replay_start_time', ''),
-      eventReplayStageIntervalSeconds: Number(loadFromStorage('rally_event_replay_stage_interval_seconds', 0)) || 0,
-      chromaKey: loadFromStorage('rally_chroma_key', '#000000'),
-      mapUrl: loadFromStorage('rally_map_url', ''),
-      logoUrl: loadFromStorage('rally_logo_url', ''),
-      dataVersion,
-      exportDate: new Date().toISOString()
-    };
-    return JSON.stringify(data, null, 2);
-  }, [dataVersion, getPilotTelemetrySnapshot]);
+  const rallyConfigTransferRef = useRef(null);
+  if (!rallyConfigTransferRef.current) {
+    rallyConfigTransferRef.current = new RallyConfigTransfer({
+      loadFromStorage,
+      loadSplitStageTimingMapFromStorage,
+      getPilotTelemetrySnapshot,
+      normalizePilotArrayPayload,
+      normalizeRaceTypes,
+      applyPilotTelemetryState,
+      setters: {
+        setPilots,
+        setCategories,
+        setStages,
+        setTimes,
+        setArrivalTimes,
+        setStartTimes,
+        setRealStartTimes,
+        setSourceFinishTime,
+        setSourceLapTime,
+        setRetiredStages,
+        setStageAlerts,
+        setStageSosState,
+        setTimeDecimals,
+        setStreamConfigs,
+        setGlobalAudio,
+        setCameras,
+        setExternalMedia,
+        setMapPlacemarks,
+        setTransitionImageUrl,
+        setCurrentStageId,
+        setEventIsOver,
+        setRaceTypes,
+        setEventReplayStartDate,
+        setEventReplayStartTime,
+        setEventReplayStageIntervalSeconds,
+        setChromaKey,
+        setMapUrl,
+        setLogoUrl,
+        setEventName,
+        setPositions,
+        setLapTimes,
+        setStagePilots
+      }
+    });
+  }
+
+  const exportData = useCallback(() => (
+    rallyConfigTransferRef.current.exportData({ dataVersion })
+  ), [dataVersion]);
 
   const importData = useCallback((jsonString) => {
-    try {
-      const data = JSON.parse(jsonString);
-      if (data.pilots) setPilots(normalizePilotArrayPayload(data.pilots));
-      const importedPilotTelemetry = data.pilotsTelemetry || data.pilotTelemetry;
-      if (importedPilotTelemetry) {
-        applyPilotTelemetryState(importedPilotTelemetry);
-      } else {
-        applyPilotTelemetryState({});
-      }
-      if (data.categories) setCategories(data.categories);
-      if (data.stages) setStages(data.stages);
-      if (data.times) setTimes(data.times);
-      if (data.arrivalTimes) setArrivalTimes(data.arrivalTimes);
-      if (data.startTimes) setStartTimes(data.startTimes);
-      if (data.realStartTimes) setRealStartTimes(data.realStartTimes);
-      if (data.sourceFinishTime) setSourceFinishTime(data.sourceFinishTime);
-      if (data.sourceLapTime) setSourceLapTime(data.sourceLapTime);
-      if (data.retiredStages) setRetiredStages(data.retiredStages);
-      if (data.stageAlerts) setStageAlerts(data.stageAlerts);
-      if (data.stageSos) setStageSosState(data.stageSos);
-      if (data.timeDecimals !== undefined) {
-        setTimeDecimals(Math.min(3, Math.max(0, Math.trunc(Number(data.timeDecimals) || 0))));
-      }
-      if (data.streamConfigs) setStreamConfigs(data.streamConfigs);
-      if (data.globalAudio) setGlobalAudio(data.globalAudio);
-      if (data.cameras) setCameras(data.cameras);
-      if (data.externalMedia) setExternalMedia(data.externalMedia);
-      if (data.transitionImageUrl !== undefined) setTransitionImageUrl(data.transitionImageUrl);
-      if (data.currentStageId !== undefined) setCurrentStageId(data.currentStageId);
-      if (data.eventIsOver !== undefined) setEventIsOver(data.eventIsOver === true);
-      if (data.raceTypes !== undefined) setRaceTypes(normalizeRaceTypes(data.raceTypes));
-      if (data.eventReplayStartDate !== undefined) setEventReplayStartDate(data.eventReplayStartDate || '');
-      if (data.eventReplayStartTime !== undefined) setEventReplayStartTime(data.eventReplayStartTime || '');
-      if (data.eventReplayStageIntervalSeconds !== undefined) {
-        const nextReplayStageIntervalSeconds = Number(data.eventReplayStageIntervalSeconds);
-        setEventReplayStageIntervalSeconds(Number.isFinite(nextReplayStageIntervalSeconds) && nextReplayStageIntervalSeconds >= 0 ? Math.trunc(nextReplayStageIntervalSeconds) : 0);
-      }
-      if (data.chromaKey) setChromaKey(data.chromaKey);
-      if (data.mapUrl !== undefined) setMapUrl(data.mapUrl);
-      if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
-      if (data.eventName !== undefined) setEventName(data.eventName);
-      if (data.positions) setPositions(data.positions);
-      if (data.lapTimes) setLapTimes(data.lapTimes);
-      if (data.stagePilots) setStagePilots(data.stagePilots);
+    const success = rallyConfigTransferRef.current.importData(jsonString);
+    if (success) {
       updateDataVersion(ALL_STORAGE_DOMAINS);
-      return true;
-    } catch (error) {
-      console.error('Error importing data:', error);
-      return false;
     }
-  }, [applyPilotTelemetryState, setArrivalTimes, setCategories, setCameras, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapUrl, setPilots, setPositions, setRaceTypes, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
+    return success;
+  }, [updateDataVersion]);
 
   const clearAllData = useCallback(() => {
     setEventName('');

@@ -246,6 +246,7 @@ times:
   jumpStart: "Jump start"
   jumpStartTooltip: "Real time before ideal time (penalty)."
   avg: "AVG"
+  best: "BEST"
   avgAlertWarning: "Above AVG + DEV"
   avgAlertDanger: "Above AVG + 2×DEV"
   avgThreshold: "Threshold"

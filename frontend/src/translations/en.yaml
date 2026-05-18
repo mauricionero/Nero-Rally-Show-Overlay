@@ -196,6 +196,8 @@ times:
   cumulativeTime: "Cumulative Time"
   bestLapTime: "Best Lap Time"
   bestLapShort: "BEST"
+  avg: "AVG"
+  best: "BEST"
   endTime: "End Time"
   jumpStart: "Jump start"
   jumpStartTooltip: "Real time before ideal time (penalty)."

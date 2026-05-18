@@ -1,5 +1,7 @@
 import { getPilotTelemetryForId } from './pilotIdentity.js';
 
+import { getPilotTelemetryGForce } from './pilotTelemetry.js';
+
 export const parseLatLongString = (value) => {
   const trimmed = String(value || '').trim();
   if (!trimmed) {
@@ -79,6 +81,7 @@ export const buildPilotMapMarkers = (pilots = [], categories = [], pilotTelemetr
         color: category?.color || '#FF4500',
         speed: toFiniteNumber(telemetry.speed),
         heading: toFiniteNumber(telemetry.heading),
+        gForce: getPilotTelemetryGForce(telemetry),
         gpsPrecision: toFiniteNumber(telemetry.gpsPrecision),
         lastUpdatedAt: Number(
           telemetry.lastLatLongUpdatedAt

@@ -11,6 +11,7 @@ import {
   Wind
 } from 'lucide-react';
 import { getLedLoadColor } from '../utils/ledLoadColors.js';
+import { getPilotTelemetryGForceColor } from '../utils/pilotTelemetry.js';
 
 const WEATHER_REFRESH_MS = 5 * 60 * 1000;
 const POSITION_STATUS_REFRESH_MS = 30 * 1000;
@@ -158,22 +159,16 @@ const fetchWeatherSnapshot = async (lat, lng) => {
 
 const StartMarker = ({ x, y }) => (
   <g transform={`translate(${x}, ${y})`}>
-    <circle r="22" fill="rgba(255,69,0,0.22)" />
-    <path d="M -5 -12 L 11 -7 L -5 -2 Z" fill="#FF4500" />
-    <path d="M -7 -14 L -7 14" stroke="#FFF" strokeWidth="3" strokeLinecap="round" />
+    <path d="M 0 -26 L 14 -22 L 0 -18 Z" fill="rgb(0, 255, 21)" />
+    <path d="M -1 -28 L -1 -1" stroke="#FFF" strokeWidth="2" strokeLinecap="round" />
   </g>
 );
 
 const FinishMarker = ({ x, y }) => (
   <g transform={`translate(${x}, ${y})`}>
-    <circle r="22" fill="rgba(255,255,255,0.12)" />
-    <path d="M -8 -14 L -8 14" stroke="#FFF" strokeWidth="3" strokeLinecap="round" />
-    <path
-      d="M -8 -13 L 12 -10 L 12 10 L -8 13 Z"
-      fill="#FFF"
-      opacity="0.95"
-    />
-    <path d="M -2 -12 H 4 V -6 H -2 Z M 4 -6 H 10 V 0 H 4 Z M -2 0 H 4 V 6 H -2 Z M 4 6 H 10 V 12 H 4 Z" fill="#0A0A0A" />
+    <path d="M 0 -26 L 14 -22 L 0 -18 Z" fill="#616161" />
+    <path d="M -1 -28 L -1 -1" stroke="#FFF" strokeWidth="2" strokeLinecap="round" />
+    <path d="M 0 -26 L 4 -25 L 4 -21 L 0 -22 Z M 4 -25 L 8 -24 L 8 -20 L 4 -21 Z M 8 -24 L 12 -23 L 12 -19 L 8 -20 Z M 0 -22 L 4 -21 L 4 -17 L 0 -18 Z M 4 -21 L 8 -20 L 8 -16 L 4 -17 Z M 8 -20 L 12 -19 L 12 -15 L 8 -16 Z" fill="#ffffff" opacity="0.95" />
   </g>
 );
 
@@ -227,7 +222,7 @@ const getMarkerStyle = (freshness, color, lastUpdatedAt, now) => {
   if (freshness === 'aging') {
     return {
       borderColor: freshnessColor,
-      fillColor: hexToRgba(freshnessColor, 0.9),
+      fillColor: hexToRgba(freshnessColor, 0.72),
       textColor: '#FFFFFF',
       opacity: 0.88,
       filter: 'saturate(0.65)'
@@ -236,7 +231,7 @@ const getMarkerStyle = (freshness, color, lastUpdatedAt, now) => {
 
   return {
     borderColor: freshnessColor,
-    fillColor: hexToRgba(freshnessColor, 0.95),
+    fillColor: hexToRgba(freshnessColor, 0.8),
     textColor: '#FFFFFF',
     opacity: 1,
     filter: 'none'
@@ -379,20 +374,25 @@ const getGpsPrecisionRadius = (marker, bounds) => {
     return 0;
   }
 
-  return Math.max(0, precisionMeters / metersPerSvgUnit);
+  const cappedPrecisionMeters = Math.min(precisionMeters, 50);
+
+  return Math.max(0, cappedPrecisionMeters / metersPerSvgUnit);
 };
 
-const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick }) => {
+const getScreenPoint = (point, zoom, pan) => ({
+  x: Number(((point.x * zoom) + pan.x).toFixed(2)),
+  y: Number(((point.y * zoom) + pan.y).toFixed(2))
+});
+
+const PilotPositionMarker = ({ marker, now, screenX, screenY, onHover, onBlur, onClick }) => {
   const freshness = getMarkerFreshness(marker.lastUpdatedAt, now);
   const style = getMarkerStyle(freshness, marker.color, marker.lastUpdatedAt, now);
   const labelLength = String(marker.label || '').trim().length;
-  const fontSize = labelLength <= 2 ? 22 : 18;
-  const auraRadius = getGpsPrecisionRadius(marker, bounds);
-  const auraVisible = auraRadius > 0;
+  const fontSize = labelLength <= 2 ? 40 : 30;
 
   return (
     <g
-      transform={`translate(${marker.x}, ${marker.y})`}
+      transform={`translate(${screenX}, ${screenY})`}
       opacity={style.opacity}
       style={{ filter: style.filter, cursor: 'pointer' }}
       onMouseEnter={() => onHover?.(marker)}
@@ -407,24 +407,20 @@ const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick }) 
       tabIndex={0}
       role="button"
       aria-label={`Pilot ${marker.carNumber || marker.label || ''}`.trim()}
-    >
-      {auraVisible && (
-        <circle
-          r={Math.max(auraRadius, 12)}
-          fill="rgba(59,130,246,0.16)"
-          stroke="rgba(30,58,138,0.92)"
-          strokeWidth="2.5"
-        />
-      )}
-      <circle
-        r="24"
-        fill={style.fillColor}
+      >
+      <line
+        x1="0"
+        y1="0"
+        x2="0"
+        y2="-30"
         stroke={style.borderColor}
-        strokeWidth="5"
+        strokeWidth="8"
+        strokeLinecap="round"
       />
+      <circle cx="0" cy="-52" r="30" fill="rgba(7,7,9,0.92)" stroke={style.borderColor} strokeWidth="3" />
       <text
         x="0"
-        y="7"
+        y="-40"
         textAnchor="middle"
         fontSize={fontSize}
         fontWeight="700"
@@ -446,6 +442,9 @@ const PilotMarkerPopover = ({ marker }) => {
   const displayCarNumber = String(marker.carNumber || marker.label || '??').trim();
   const displaySpeed = Number.isFinite(marker.speed) ? Math.round(marker.speed) : null;
   const heading = Number.isFinite(marker.heading) ? marker.heading : null;
+  const gForce = Number.isFinite(marker.gForce) ? marker.gForce : null;
+  const gForceText = gForce !== null ? `${gForce >= 10 ? gForce.toFixed(0) : gForce.toFixed(1)}G` : null;
+  const gForceColor = getPilotTelemetryGForceColor(gForce, '#FFFFFF');
   const badgeFill = displayCarNumber ? '#FACC15' : '#52525B';
   const badgeTextFill = '#0A0A0B';
   const speedFill = displaySpeed !== null ? '#FFFFFF' : '#71717A';
@@ -540,6 +539,21 @@ const PilotMarkerPopover = ({ marker }) => {
             </text>
           </>
         )}
+        {gForceText && (
+          <g transform={`translate(${layout.width / 2 + 70} ${-6})`}>
+            <text
+              x="-110"
+              y="50"
+              textAnchor="middle"
+              fontSize="30"
+              fontWeight="600"
+              fill={gForceColor}
+              style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.02em' }}
+            >
+              {gForceText}
+            </text>
+          </g>
+        )}
         {displaySpeed === null && (
           <text
             x="0"
@@ -625,7 +639,9 @@ const WeatherReadingRow = ({
   label,
   reading,
   className = '',
-  compact = false
+  compact = false,
+  labelWidth = '3.2rem',
+  gapClassName = 'gap-x-2'
 }) => {
   if (!reading) {
     return null;
@@ -634,7 +650,10 @@ const WeatherReadingRow = ({
   const WeatherIcon = getWeatherIconComponent(reading.weatherCode);
 
   return (
-    <div className={`grid grid-cols-[3.2rem_minmax(0,1fr)] items-center gap-x-2 ${className}`.trim()}>
+    <div
+      className={`grid items-center ${gapClassName} ${className}`.trim()}
+      style={{ gridTemplateColumns: `${labelWidth} minmax(0, 1fr)` }}
+    >
       <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
         {label}
       </span>
@@ -664,7 +683,11 @@ export function PlacemarkWeatherNowNext({
   className = '',
   layout = 'stacked',
   compact = false,
-  frame = 'card'
+  frame = 'card',
+  showTitle = true,
+  rowsClassName = 'space-y-2',
+  rowLabelWidth = '3.2rem',
+  rowGapClassName = 'gap-x-2'
 }) {
   const weather = usePlacemarkWeather(placemark);
   const WeatherIcon = getWeatherIconComponent(weather?.weatherCode);
@@ -679,12 +702,16 @@ export function PlacemarkWeatherNowNext({
         label={nowLabel}
         reading={weather}
         compact={compact}
+        labelWidth={rowLabelWidth}
+        gapClassName={rowGapClassName}
       />
       {weather.nextHour && (
         <WeatherReadingRow
           label={nextHourLabel}
           reading={weather.nextHour}
           compact={compact}
+          labelWidth={rowLabelWidth}
+          gapClassName={rowGapClassName}
         />
       )}
     </>
@@ -694,13 +721,7 @@ export function PlacemarkWeatherNowNext({
     if (frame === 'bare') {
       return (
         <div className={`flex items-start gap-3 ${className}`.trim()}>
-          <div className="flex flex-none items-center gap-2 text-zinc-300">
-            <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-              {title}
-            </span>
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
+          <div className={`min-w-0 flex-1 ${rowsClassName}`.trim()}>
             {sharedRows}
           </div>
         </div>
@@ -711,11 +732,13 @@ export function PlacemarkWeatherNowNext({
       <div className={`flex items-start gap-3 rounded border border-white/10 bg-black/35 px-2.5 py-2 ${className}`.trim()}>
         <div className="flex flex-none items-center gap-2 text-zinc-300">
           <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-            {title}
-          </span>
+          {showTitle && (
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+              {title}
+            </span>
+          )}
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className={`min-w-0 flex-1 ${rowsClassName}`.trim()}>
           {sharedRows}
         </div>
       </div>
@@ -806,7 +829,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
 
   if (!placemark || normalized.groups.length === 0) {
     return (
-      <div className={`w-full h-full bg-[#05070B] flex items-center justify-center ${className}`}>
+      <div className={`w-full h-full bg-[#020304] flex items-center justify-center ${className}`}>
         <span className="text-zinc-500 text-sm uppercase">Map Unavailable</span>
       </div>
     );
@@ -820,11 +843,21 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
 
   return (
     <div
-      className={`relative overflow-hidden bg-[#05070B] ${className}`}
+      className={`relative overflow-hidden bg-[#020304] ${className}`}
       onWheel={(event) => {
         event.preventDefault();
+        const rect = event.currentTarget.getBoundingClientRect();
+        const pointerX = event.clientX - rect.left;
+        const pointerY = event.clientY - rect.top;
         const zoomDelta = event.deltaY < 0 ? 0.15 : -0.15;
-        setZoom((prev) => clampZoom(prev + zoomDelta));
+        const nextZoom = clampZoom(zoom + zoomDelta);
+        const scaleFactor = nextZoom / Math.max(zoom, 0.0001);
+
+        setPan((prevPan) => ({
+          x: pointerX - ((pointerX - prevPan.x) * scaleFactor),
+          y: pointerY - ((pointerY - prevPan.y) * scaleFactor)
+        }));
+        setZoom(nextZoom);
       }}
       onMouseDown={(event) => {
         dragStateRef.current = {
@@ -859,67 +892,89 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
       }}
       style={{ cursor: dragStateRef.current ? 'grabbing' : 'grab' }}
     >
-      <div className="absolute inset-0 opacity-70" style={{
-        backgroundImage: 'radial-gradient(circle at top left, rgba(255,69,0,0.18), transparent 35%), radial-gradient(circle at bottom right, rgba(234,179,8,0.14), transparent 30%)'
+      <div className="absolute inset-0 opacity-55" style={{
+        backgroundImage: 'radial-gradient(circle at top left, rgba(255,69,0,0.10), transparent 35%), radial-gradient(circle at bottom right, rgba(234,179,8,0.08), transparent 30%)'
       }} />
       <svg
         viewBox="0 0 1000 1000"
-        className="absolute inset-0 w-full h-full transition-transform duration-150 ease-out"
-        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '50% 50%' }}
+        className="absolute inset-0 w-full h-full"
       >
         <defs>
           <pattern id="map-grid" width="80" height="80" patternUnits="userSpaceOnUse">
-            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />
+            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(255,255,255,0.045)" strokeWidth="1.5" />
           </pattern>
         </defs>
-        <rect width="1000" height="1000" fill="url(#map-grid)" />
-        {normalized.groups.map((group, index) => {
-          const points = group.map((point) => `${point.x},${point.y}`).join(' ');
+        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+          <rect width="1000" height="1000" fill="url(#map-grid)" />
+          {normalized.groups.map((group, index) => {
+            const points = group.map((point) => `${point.x},${point.y}`).join(' ');
 
-          if (isPoint) {
-            return group.map((point, pointIndex) => {
+            if (isPoint) {
+              return group.map((point, pointIndex) => {
+                return (
+                  <g key={`${index}-${pointIndex}`}>
+                    <circle cx={point.x} cy={point.y} r="14" fill="rgba(255,69,0,0.14)" />
+                    <circle cx={point.x} cy={point.y} r="5" fill="#FF4500" />
+                  </g>
+                );
+              });
+            }
+
+            if (isPolygon) {
               return (
-                <g key={`${index}-${pointIndex}`}>
-                  <circle cx={point.x} cy={point.y} r="20" fill="rgba(255,69,0,0.2)" />
-                  <circle cx={point.x} cy={point.y} r="8" fill="#FF4500" />
-                </g>
+                <polygon
+                  key={index}
+                  points={points}
+                  fill="rgba(255,69,0,0.14)"
+                  stroke="#FF4500"
+                  strokeWidth="6"
+                  strokeLinejoin="round"
+                />
               );
-            });
-          }
+            }
 
-          if (isPolygon) {
             return (
-              <polygon
+              <polyline
                 key={index}
                 points={points}
-                fill="rgba(255,69,0,0.14)"
+                fill="none"
                 stroke="#FF4500"
-                strokeWidth="12"
+                strokeWidth="4"
+                strokeLinecap="round"
                 strokeLinejoin="round"
               />
             );
-          }
+          })}
+          {firstPoint && <StartMarker x={firstPoint.x} y={firstPoint.y} />}
+          {lastPoint && <FinishMarker x={lastPoint.x} y={lastPoint.y} />}
+          {projectedPilotMarkers.map((marker) => {
+            const auraRadius = getGpsPrecisionRadius(marker, normalized.bounds);
 
-          return (
-            <polyline
-              key={index}
-              points={points}
-              fill="none"
-              stroke="#FF4500"
-              strokeWidth="12"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          );
-        })}
-        {firstPoint && <StartMarker x={firstPoint.x} y={firstPoint.y} />}
-        {lastPoint && <FinishMarker x={lastPoint.x} y={lastPoint.y} />}
+            if (!auraRadius) {
+              return null;
+            }
+
+            return (
+              <circle
+                key={`aura-${marker.id}`}
+                cx={marker.x}
+                cy={marker.y}
+                r={auraRadius}
+                fill="none"
+                stroke="rgba(59,130,246,0.82)"
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+              />
+            );
+          })}
+        </g>
         {projectedPilotMarkers.map((marker) => (
           <PilotPositionMarker
             key={marker.id}
             marker={marker}
-            bounds={normalized.bounds}
             now={markerNow}
+            screenX={getScreenPoint(marker, zoom, pan).x}
+            screenY={getScreenPoint(marker, zoom, pan).y}
             onHover={(nextMarker) => {
               if (!selectedMarkerId) {
                 setHoveredMarkerId(nextMarker.id);
@@ -936,7 +991,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
             }}
           />
         ))}
-        {activeMarker && <PilotMarkerPopover marker={activeMarker} />}
+        {activeMarker && <PilotMarkerPopover marker={{ ...activeMarker, ...getScreenPoint(activeMarker, zoom, pan) }} />}
       </svg>
     </div>
   );

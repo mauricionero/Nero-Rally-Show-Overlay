@@ -561,6 +561,11 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
+                {focusPilot.carNumber && (
+                  <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-sm text-sm font-black text-white bg-[#FF4500] flex-shrink-0" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {focusPilot.carNumber}
+                  </span>
+                )}
                 <h2 className="text-3xl font-bold uppercase text-white truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {focusPilot.name}
                 </h2>
@@ -581,11 +586,6 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
                     tooltipTitle={t('times.jumpStart')}
                     tooltipText={t('times.jumpStartTooltip')}
                   />
-                )}
-                {focusPilot.carNumber && (
-                  <span className="inline-block bg-[#FF4500] text-white text-sm font-bold px-2 py-0.5 rounded">
-                    #{focusPilot.carNumber}
-                  </span>
                 )}
                 {focusPilot.isActive && (
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#FF4500] rounded-full">

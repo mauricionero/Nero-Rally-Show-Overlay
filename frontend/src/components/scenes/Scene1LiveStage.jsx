@@ -19,11 +19,10 @@ import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage
 import { getStageTitle, isLapTimingStageType, isSpecialStageType, SUPER_PRIME_STAGE_TYPE } from '../../utils/stageTypes.js';
 import { usePilotStatusMotion } from '../../hooks/usePilotStatusMotion.js';
 import { usePilotPositionMotion } from '../../hooks/usePilotPositionMotion.js';
-import { useScheduledPilotBuckets } from '../../hooks/useScheduledPilotBuckets.js';
 import { useFastClock } from '../../hooks/useFastClock.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatDurationMs } from '../../utils/timeFormat.js';
-import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { sortPilotsByDisplayOrder, sortPilotsByStageTimingPriority } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
@@ -93,9 +92,12 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   const bottomMetricsRef = useRef({ maxScroll: 0, bottomScroll: 0 });
   
   const currentStage = stages.find(s => s.id === currentStageId);
+  const visiblePilots = useMemo(() => (
+    pilots.filter((pilot) => pilot.isActive !== false)
+  ), [pilots]);
   const activeMedia = externalMedia.filter(m => m.url);
   const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [stages, mapPlacemarks]);
-  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [pilots, categories, pilotTelemetryByPilotId]);
+  const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(visiblePilots, categories, pilotTelemetryByPilotId), [categories, pilotTelemetryByPilotId, visiblePilots]);
   const currentStagePlacemark = useMemo(() => (
     mapPlacemarks.find((placemark) => placemark.id === currentStage?.mapPlacemarkId) || null
   ), [currentStage?.mapPlacemarkId, mapPlacemarks]);
@@ -104,7 +106,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   const isSSStage = isSpecialStageType(currentStage?.type) && !isLapRace;
   const lapFastClockEnabled = Boolean(currentStageId && isLapRace && timeDecimals > 0);
   const currentFastTime = useFastClock(lapFastClockEnabled);
-  const currentSecondAlignedTime = useSecondAlignedClock(Boolean(currentStageId && isLapRace && !lapFastClockEnabled));
+  const currentSecondAlignedTime = useSecondAlignedClock(Boolean(currentStageId && (!isLapRace || (isLapRace && !lapFastClockEnabled))));
   const sceneNow = useMemo(() => (
     rallyHelpers.getReferenceNow(
       debugDate,
@@ -113,8 +115,8 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   ), [currentFastTime, currentSecondAlignedTime, debugDate, lapFastClockEnabled]);
   const activeCameras = cameras.filter(c => c.streamUrl);
   const replayPilotStageSignature = useMemo(() => (
-    pilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
-  ), [pilots]);
+    visiblePilots.map((pilot) => `${pilot.id}:${String(pilot.currentStageId || '').trim()}`).join('|')
+  ), [visiblePilots]);
   const replaySnapshotKey = eventIsOver
     ? `${currentStageId || ''}__${eventReplayStartDate || ''}__${eventReplayStartTime || ''}__${eventReplayStageIntervalSeconds || 0}__${replayPilotStageSignature}`
     : '';
@@ -136,7 +138,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
     replayPlaybackSnapshotRef.current = {
       key: replaySnapshotKey,
       map: buildPilotOverlayPlaybackMap({
-      pilots,
+      pilots: visiblePilots,
       globalCurrentStageId: currentStageId,
       eventIsOver: true,
       stages,
@@ -150,11 +152,11 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   }
   const livePilotPlaybackById = useMemo(() => (
     buildPilotOverlayPlaybackMap({
-      pilots,
+      pilots: visiblePilots,
       globalCurrentStageId: currentStageId,
       eventIsOver: false
     })
-  ), [currentStageId, pilots]);
+  ), [currentStageId, visiblePilots]);
   const pilotPlaybackById = eventIsOver
     ? (replayPlaybackSnapshotRef.current.map || new Map())
     : livePilotPlaybackById;
@@ -172,20 +174,20 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
     }).streamUrl || ''
   ), [currentStageId, debugDate, eventReplayStageIntervalSeconds, eventReplayStartDate, eventReplayStartTime, stages, times]);
   const overlayPilots = useMemo(() => (
-    pilots.map((pilot) => ({
+    visiblePilots.map((pilot) => ({
       ...pilot,
       streamUrl: pilotPlaybackById.get(pilot.id)?.streamUrl || ''
     }))
-  ), [pilotPlaybackById, pilots]);
+  ), [pilotPlaybackById, visiblePilots]);
   const validSlotIds = useMemo(() => new Set([
-    ...overlayPilots.filter((pilot) => pilot.isActive && pilot.streamUrl).map((pilot) => pilot.id),
+    ...overlayPilots.filter((pilot) => pilot.streamUrl).map((pilot) => pilot.id),
     ...activeCameras.map((camera) => camera.id),
     ...activeMedia.map((media) => `media-${media.id}`),
     ...activeStageMaps.map((feed) => feed.value)
   ]), [overlayPilots, activeCameras, activeMedia, activeStageMaps]);
   const displaySortedPilots = useMemo(() => (
-    sortPilotsByDisplayOrder(pilots, categories)
-  ), [pilots, categories]);
+    sortPilotsByDisplayOrder(visiblePilots, categories)
+  ), [visiblePilots, categories]);
   const displayOrderByPilotId = useMemo(() => (
     new Map(displaySortedPilots.map((pilot, index) => [pilot.id, index]))
   ), [displaySortedPilots]);
@@ -196,16 +198,17 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
     new Map(mapPlacemarks.map((placemark) => [placemark.id, placemark]))
   ), [mapPlacemarks]);
   const tickerPilotMetaById = useMemo(() => (
-    new Map(pilots.map((pilot) => [
+    new Map(visiblePilots.map((pilot) => [
       pilot.id,
       {
         category: categoryById.get(pilot.categoryId) || null,
+        carNumber: pilot.carNumber || '',
         abbreviatedName: abbreviateTickerName(pilot.name),
         carName: pilot.car || '',
         teamName: pilot.team || ''
       }
     ]))
-  ), [categoryById, pilots]);
+  ), [categoryById, visiblePilots]);
 
   const layout = LAYOUTS.find(l => l.id === selectedLayout) || LAYOUTS[3];
   const draftLayout = LAYOUTS.find(l => l.id === draftSelectedLayout) || LAYOUTS[3];
@@ -215,7 +218,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
       return [];
     }
 
-    return pilots.map((pilot) => {
+    return visiblePilots.map((pilot) => {
       const startTime = startTimes[pilot.id]?.[currentStageId] || getPilotScheduledStartTime(currentStage, pilot) || '';
       const finishTime = times[pilot.id]?.[currentStageId] || arrivalTimes[pilot.id]?.[currentStageId] || '';
       const retired = !!retiredStages?.[pilot.id]?.[currentStageId];
@@ -235,45 +238,45 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
         replayStageScheduleById
       });
       const hasStageFinished = Boolean(finishTime);
-      const displayOrder = displayOrderByPilotId.get(pilot.id) ?? Number.MAX_SAFE_INTEGER;
+      const preStartAtMs = startDateTime ? startDateTime.getTime() - 10000 : null;
+      const currentStatus = retired
+        ? 'retired'
+        : (hasStageFinished
+          ? 'finished'
+          : (startDateTime && sceneNow >= startDateTime
+            ? 'racing'
+            : (preStartAtMs && sceneNow >= preStartAtMs
+              ? 'pre_start'
+              : 'not_started')));
 
       return {
         id: pilot.id,
         pilot,
+        categoryId: pilot.categoryId,
         startTime,
         finishTime,
         retired,
-        fixedStatus: retired ? 'retired' : (hasStageFinished ? 'finished' : (startDateTime && sceneNow >= startDateTime ? 'racing' : 'not_started')),
-        preStartAtMs: startDateTime ? startDateTime.getTime() - 10000 : null,
+        currentStatus,
+        preStartAtMs,
         startAtMs: startDateTime ? startDateTime.getTime() : null,
-        sortValues: {
-          racing: displayOrder,
-          pre_start: displayOrder,
-          finished: hasStageFinished ? rallyHelpers.parseTime(finishTime) : Number.MAX_SAFE_INTEGER,
-          not_started: displayOrder,
-          retired: displayOrder
-        }
+        finishAtMs: finishDateTime?.getTime() || null
       };
     });
-  }, [arrivalTimes, currentStage, currentStageId, displayOrderByPilotId, eventIsOver, isLapRace, isSSStage, pilots, replayStageScheduleById, retiredStages, sceneNow, startTimes, times]);
+  }, [arrivalTimes, currentStage, currentStageId, eventIsOver, isLapRace, isSSStage, replayStageScheduleById, retiredStages, sceneNow, startTimes, times, visiblePilots]);
 
-  const orderedSpecialStageTickerItems = useScheduledPilotBuckets(specialStageTickerBaseItems, {
-    racing: 0,
-    pre_start: 1,
-    finished: 2,
-    not_started: 3,
-    retired: 4
-  });
+  const orderedSpecialStageTickerItems = useMemo(() => (
+    sortPilotsByStageTimingPriority(specialStageTickerBaseItems, categories)
+  ), [categories, specialStageTickerBaseItems]);
   
   // Calculate sorted pilots based on stage type
   const sortedPilotsWithPositions = useMemo(() => {
     if (!currentStageId || !currentStage) {
-      return pilots.map((p, i) => ({ pilot: p, position: i + 1, completedLaps: 0 }));
+      return visiblePilots.map((p, i) => ({ pilot: p, position: i + 1, completedLaps: 0 }));
     }
     
     if (isLapRace) {
       return rallyHelpers.buildLapRaceLeaderboard({
-        pilots,
+        pilots: visiblePilots,
         stage: currentStage,
         lapTimes,
         stagePilots,
@@ -297,7 +300,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
       finishTime: item.finishTime,
       retired: item.retired
     }));
-  }, [currentStage, currentStageId, displayOrderByPilotId, eventIsOver, isLapRace, isSSStage, lapTimes, orderedSpecialStageTickerItems, pilots, retiredStages, sceneNow, stagePilots, startTimes, timeDecimals, times]);
+  }, [currentStage, currentStageId, displayOrderByPilotId, eventIsOver, isLapRace, isSSStage, lapTimes, orderedSpecialStageTickerItems, retiredStages, sceneNow, stagePilots, startTimes, timeDecimals, times, visiblePilots]);
 
   const pilotStageMetaById = useMemo(() => (
     new Map(sortedPilotsWithPositions.map((data) => [data.pilot.id, data]))
@@ -318,13 +321,13 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   const jumpStartByPilotId = useMemo(() => {
     if (!currentStageId) return new Set();
     const next = new Set();
-    pilots.forEach((pilot) => {
+    visiblePilots.forEach((pilot) => {
       if (rallyHelpers.isJumpStartForStage(pilot.id, currentStageId, startTimes, realStartTimes)) {
         next.add(pilot.id);
       }
     });
     return next;
-  }, [currentStageId, pilots, realStartTimes, startTimes]);
+  }, [currentStageId, realStartTimes, startTimes, visiblePilots]);
 
   // Calculate max scroll based on the actual ticker track width
   useEffect(() => {
@@ -390,7 +393,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
         window.cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [sortedPilotsWithPositions, pilots]);
+  }, [sortedPilotsWithPositions, visiblePilots]);
 
   useEffect(() => {
     bottomMetricsRef.current.bottomScroll = bottomScroll;
@@ -523,12 +526,16 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
 
   const displayItems = selectedSlotIds.map(id => getDisplayItem(id)).filter(Boolean);
   const sceneInset = isExpandedView ? '2px' : '2rem';
+  const occupiedGridRows = Math.max(1, Math.ceil(displayItems.length / layout.cols));
+  const bottomPanelHeight = currentStage && currentStageId
+    ? (isExpandedView ? 136 : 146)
+    : 0;
 
   const gridStyle = {
-    height: currentStage && currentStageId ? 'calc(100% - 230px)' : '100%',
+    height: currentStage && currentStageId ? `calc(100% - ${bottomPanelHeight}px)` : '100%',
     gap: isExpandedView ? '2px' : '1rem',
     gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
-    gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`
+    gridTemplateRows: `repeat(${occupiedGridRows}, minmax(0, 1fr))`
   };
 
   // Get pilot position and lap info for Lap Race
@@ -600,6 +607,10 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
 
     return `${String(stageStartDateTime.getHours()).padStart(2, '0')}:${String(stageStartDateTime.getMinutes()).padStart(2, '0')}`;
   }, [currentStage, eventIsOver, replayStageScheduleById]);
+
+  const bottomPanelReserveClassName = currentStage && currentStageId
+    ? 'lg:pb-[4rem]'
+    : '';
 
   return (
     <div className="relative w-full h-full" style={{ padding: sceneInset }} data-testid="scene-1-live-stage">
@@ -790,7 +801,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
         </div>
       </LeftControls>
 
-      <div className="grid" style={gridStyle}>
+      <div className={`grid ${bottomPanelReserveClassName}`.trim()} style={gridStyle}>
         {displayItems.length === 0 ? (
           <div className="flex items-center justify-center h-full col-span-full">
             <div className="text-center">
@@ -1052,50 +1063,46 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
       {/* Bottom Panel - Current Stage Info */}
       {currentStage && currentStageId && (
         <div className="absolute" style={{ bottom: sceneInset, left: sceneInset, right: sceneInset }}>
-          <div className="bg-black/95 backdrop-blur-sm border-l-4 border-[#FF4500] overflow-hidden mb-4">
-            <div className="p-4 flex items-start justify-between gap-6">
-              <div className="min-w-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  {isLapRace ? (
-                    isSuperPrimeStage
-                      ? <Flag className="w-6 h-6 text-orange-400" />
-                      : <RotateCcw className="w-6 h-6 text-[#FACC15]" />
-                  ) : (
-                    <Flag className="w-6 h-6 text-[#FF4500]" />
-                  )}
-                  <p className="text-zinc-400 text-sm uppercase whitespace-nowrap" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    {isLapRace && !isSuperPrimeStage ? 'Race' : 'Current Stage'}
+          <div className="bg-black/95 backdrop-blur-sm border-l-4 border-[#FF4500] overflow-hidden mb-3">
+            <div className="px-4 py-3 flex items-center justify-between gap-6">
+              <div className="min-w-0 flex items-center gap-3">
+                {isLapRace ? (
+                  isSuperPrimeStage
+                    ? <Flag className="w-6 h-6 text-orange-400 shrink-0" />
+                    : <RotateCcw className="w-6 h-6 text-[#FACC15] shrink-0" />
+                ) : (
+                  <Flag className="w-6 h-6 text-[#FF4500] shrink-0" />
+                )}
+                <p className="text-white text-3xl font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  {getStageDisplayName()}
+                </p>
+                {stageScheduleTime && (
+                  <p className="text-zinc-300 text-2xl font-bold font-mono leading-none shrink-0 whitespace-nowrap">
+                    {stageScheduleTime}
                   </p>
-                  {currentStagePlacemark && (
-                    <PlacemarkWeatherNowNext
-                      placemark={currentStagePlacemark}
-                      title={t('scene5.weather')}
-                      nowLabel={t('common.now')}
-                      nextHourLabel={t('common.in1h')}
-                      layout="split"
-                      compact
-                      frame="bare"
-                      className="min-w-0"
-                    />
-                  )}
-                </div>
-                <div className="mt-1 flex items-end gap-6">
-                  <p className="text-white text-3xl font-bold uppercase" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                    {getStageDisplayName()}
-                  </p>
-                  {stageScheduleTime && (
-                    <p className="text-zinc-300 text-2xl font-bold font-mono leading-none">
-                      {stageScheduleTime}
-                    </p>
-                  )}
-                </div>
+                )}
+                {currentStagePlacemark && (
+                  <PlacemarkWeatherNowNext
+                    placemark={currentStagePlacemark}
+                    nowLabel={t('common.now')}
+                    nextHourLabel={t('common.in1h')}
+                    layout="split"
+                    compact
+                    frame="bare"
+                    showTitle={false}
+                    rowsClassName="space-y-1"
+                    rowLabelWidth="2.2rem"
+                    rowGapClassName="gap-x-1"
+                    className="min-w-0"
+                  />
+                )}
               </div>
               {resolvedLogoUrl && (
                 <img 
                   src={resolvedLogoUrl} 
                   alt="Channel Logo" 
-                className="h-16 max-w-[200px] object-contain"
-              />
+                  className="h-14 max-w-[180px] object-contain shrink-0"
+                />
               )}
             </div>
           </div>
@@ -1188,6 +1195,11 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                         )}
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex items-center gap-2 min-w-0">
+                            {pilotMetaInfo.carNumber && (
+                              <span className="inline-flex items-center justify-center min-w-[1.6rem] rounded-sm text-[0.8rem] font-black text-white bg-[#FF4500] flex-shrink-0" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                {pilotMetaInfo.carNumber}
+                              </span>
+                            )}
                             <p className="text-white text-sm font-bold uppercase truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                               {pilotMetaInfo.abbreviatedName || pilot.name}
                             </p>
