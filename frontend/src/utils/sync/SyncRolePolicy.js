@@ -39,6 +39,7 @@ export const TIMING_SECTION_KEYS = [
   'lapTimes',
   'positions',
   'stagePilots',
+  'stagePilotOffsets',
   'retiredStages',
   'stageAlerts',
   'stageSos'
@@ -58,6 +59,7 @@ export const TIMES_ROLE_TIMING_SECTION_KEYS = [
   'startTimes',
   'realStartTimes',
   'lapTimes',
+  'stagePilotOffsets',
   'stageSos'
 ];
 
@@ -71,6 +73,7 @@ export const MOBILE_TIMING_SNAPSHOT_SECTION_KEYS = [
   ...SNAPSHOT_ONLY_TIMING_SECTION_KEYS,
   'positions',
   'stagePilots',
+  'stagePilotOffsets',
   'retiredStages',
   'stageAlerts',
   'stageSos'

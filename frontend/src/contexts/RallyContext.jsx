@@ -20,6 +20,7 @@ import {
   TIMING_SECTION_SET
 } from '../utils/sync/SyncRolePolicy.js';
 import { getPilotScheduledStartTime } from '../utils/pilotSchedule.js';
+import { setPilotStageOffsetResolver } from '../utils/pilotSchedule.js';
 import { compareStagesBySchedule } from '../utils/stageSchedule.js';
 import { isLapTimingStageType, isManualStartStageType, isSpecialStageType } from '../utils/stageTypes.js';
 import { formatDurationSeconds } from '../utils/timeFormat.js';
@@ -365,6 +366,7 @@ const TIMING_PATCH_DEFAULT_VALUES = {
   lapTimes: [],
   positions: null,
   stagePilots: [],
+  stagePilotOffsets: null,
   retiredStages: false,
   stageAlerts: false,
   stageSos: 0,
@@ -1171,6 +1173,7 @@ export const RallyProvider = ({ children }) => {
   const [arrivalTimes, setArrivalTimes] = useState(() => loadFromStorage('rally_arrival_times', {}));
   const [startTimes, setStartTimes] = useState(() => loadFromStorage('rally_start_times', {}));
   const [realStartTimes, setRealStartTimes] = useState(() => loadFromStorage('rally_real_start_times', {}));
+  const [stagePilotOffsets, setStagePilotOffsets] = useState(() => loadFromStorage('rally_stage_pilot_offsets', {}));
   const [sourceFinishTime, setSourceFinishTime] = useState(() => loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}));
   const [sourceLapTime, setSourceLapTime] = useState(() => loadFromStorage(SOURCE_LAP_TIME_STORAGE_KEY, {}));
   const [retiredStages, setRetiredStages] = useState(() => loadFromStorage('rally_retired_stages', {}));
@@ -1321,6 +1324,7 @@ export const RallyProvider = ({ children }) => {
   const arrivalTimesRef = useRef(arrivalTimes);
   const startTimesRef = useRef(startTimes);
   const realStartTimesRef = useRef(realStartTimes);
+  const stagePilotOffsetsRef = useRef(stagePilotOffsets);
   const sourceFinishTimeRef = useRef(sourceFinishTime);
   const sourceLapTimeRef = useRef(sourceLapTime);
   const lapTimesRef = useRef(lapTimes);
@@ -1353,6 +1357,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    stagePilotOffsets,
     sourceFinishTime,
     sourceLapTime,
     lapTimes,
@@ -2087,6 +2092,7 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
     setStartTimes(loadFromStorage('rally_start_times', {}));
     setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
+    setStagePilotOffsets(loadFromStorage('rally_stage_pilot_offsets', {}));
     setSourceFinishTime(loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}));
     setSourceLapTime(loadFromStorage(SOURCE_LAP_TIME_STORAGE_KEY, {}));
     setRetiredStages(loadFromStorage('rally_retired_stages', {}));
@@ -2172,13 +2178,15 @@ export const RallyProvider = ({ children }) => {
       const shouldReloadArrivalTimes = !shouldPreserveLocalTimingSection('arrivalTimes', reloadAt);
       const shouldReloadStartTimes = !shouldPreserveLocalTimingSection('startTimes', reloadAt);
       const shouldReloadRealStartTimes = !shouldPreserveLocalTimingSection('realStartTimes', reloadAt);
+      const shouldReloadStagePilotOffsets = !shouldPreserveLocalTimingSection('stagePilotOffsets', reloadAt);
 
-      if (shouldReloadTimes || shouldReloadArrivalTimes || shouldReloadStartTimes || shouldReloadRealStartTimes) {
+      if (shouldReloadTimes || shouldReloadArrivalTimes || shouldReloadStartTimes || shouldReloadRealStartTimes || shouldReloadStagePilotOffsets) {
         hydratingDomainsRef.current.add('timingCore');
         if (shouldReloadTimes) setTimes(loadSplitStageTimingMapFromStorage('rally_times_stage_', 'rally_times').map);
         if (shouldReloadArrivalTimes) setArrivalTimes(loadFromStorage('rally_arrival_times', {}));
         if (shouldReloadStartTimes) setStartTimes(loadFromStorage('rally_start_times', {}));
         if (shouldReloadRealStartTimes) setRealStartTimes(loadFromStorage('rally_real_start_times', {}));
+        if (shouldReloadStagePilotOffsets) setStagePilotOffsets(loadFromStorage('rally_stage_pilot_offsets', {}));
         setSourceFinishTime(loadFromStorage(SOURCE_FINISH_TIME_STORAGE_KEY, {}));
       }
     }
@@ -2366,6 +2374,10 @@ export const RallyProvider = ({ children }) => {
   }, [realStartTimes]);
 
   useEffect(() => {
+    stagePilotOffsetsRef.current = stagePilotOffsets;
+  }, [stagePilotOffsets]);
+
+  useEffect(() => {
     lapTimesRef.current = lapTimes;
   }, [lapTimes]);
 
@@ -2388,6 +2400,17 @@ export const RallyProvider = ({ children }) => {
   useEffect(() => {
     stageSosRef.current = stageSos;
   }, [stageSos]);
+
+  useEffect(() => {
+    setPilotStageOffsetResolver(() => ({
+      stagePilotOffsets: stagePilotOffsetsRef.current,
+      stages: stagesRef.current
+    }));
+
+    return () => {
+      setPilotStageOffsetResolver(null);
+    };
+  }, []);
 
   useEffect(() => {
     const nextPendingSections = new Set(
@@ -3311,6 +3334,10 @@ export const RallyProvider = ({ children }) => {
       setRealStartTimes(() => (isSnapshotPackage ? (isPlainObject(normalizedChanges.realStartTimes) ? normalizedChanges.realStartTimes : {}) : mergeNestedPatch(realStartTimesRef.current, normalizedChanges.realStartTimes)));
     }
 
+    if (normalizedChanges.stagePilotOffsets !== undefined) {
+      setStagePilotOffsets(() => (isSnapshotPackage ? (isPlainObject(normalizedChanges.stagePilotOffsets) ? normalizedChanges.stagePilotOffsets : {}) : mergeNestedPatch(stagePilotOffsetsRef.current, normalizedChanges.stagePilotOffsets)));
+    }
+
     if (normalizedChanges.lapTimes !== undefined) {
       setLapTimes(() => (isSnapshotPackage ? (isPlainObject(normalizedChanges.lapTimes) ? normalizedChanges.lapTimes : {}) : mergeNestedPatch(lapTimesRef.current, normalizedChanges.lapTimes)));
     }
@@ -3981,6 +4008,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    stagePilotOffsets,
     sourceFinishTime,
     sourceLapTime,
     retiredStages,
@@ -4018,6 +4046,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    stagePilotOffsets,
     sourceFinishTime,
     sourceLapTime,
     retiredStages,
@@ -5118,6 +5147,16 @@ export const RallyProvider = ({ children }) => {
     captureSetupPatchEntries('realStartTimes', diffTimingLineEntries('realStartTimes', previousRealStartTimes, realStartTimes));
     }
   }, [arrivalTimes, captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, realStartTimes, startTimes, updateDataVersion]);
+
+  useEffect(() => {
+    const previousStagePilotOffsets = previousSetupSyncStateRef.current.stagePilotOffsets;
+    previousSetupSyncStateRef.current.stagePilotOffsets = stagePilotOffsets;
+    if (hydratingDomainsRef.current.has('timingCore')) return;
+    localStorage.setItem('rally_stage_pilot_offsets', JSON.stringify(stagePilotOffsets));
+    updateDataVersion('timingCore');
+    if (consumeSetupTimingCaptureSuppression('stagePilotOffsets')) return;
+    captureSetupPatchEntries('stagePilotOffsets', diffTimingLineEntries('stagePilotOffsets', previousStagePilotOffsets, stagePilotOffsets));
+  }, [captureSetupPatchEntries, consumeSetupTimingCaptureSuppression, stagePilotOffsets, updateDataVersion]);
 
   useEffect(() => {
     previousSetupSyncStateRef.current.sourceFinishTime = sourceFinishTime;
@@ -6387,6 +6426,169 @@ export const RallyProvider = ({ children }) => {
     startTimes[pilotId]?.[stageId] || ''
   ), [startTimes]);
 
+  const getPilotStageOffset = useCallback((pilotId, stageId) => {
+    const normalizedPilotId = normalizePilotId(pilotId);
+    const normalizedStageId = String(stageId || '').trim();
+
+    if (!normalizedPilotId || !normalizedStageId) {
+      return 0;
+    }
+
+    const pilotStages = stagePilotOffsetsRef.current?.[normalizedPilotId] || {};
+    if (Object.prototype.hasOwnProperty.call(pilotStages, normalizedStageId)) {
+      const explicitOffset = Number(pilotStages[normalizedStageId]);
+      if (Number.isFinite(explicitOffset)) {
+        return explicitOffset;
+      }
+    }
+
+    const sortedStages = [...(stagesRef.current || [])].sort(compareStagesBySchedule);
+    const currentIndex = sortedStages.findIndex((stage) => String(stage?.id || '').trim() === normalizedStageId);
+
+    if (currentIndex >= 0) {
+      for (let index = currentIndex - 1; index >= 0; index -= 1) {
+        const previousStageId = String(sortedStages[index]?.id || '').trim();
+        if (!previousStageId || !Object.prototype.hasOwnProperty.call(pilotStages, previousStageId)) {
+          continue;
+        }
+
+        const fallbackOffset = Number(pilotStages[previousStageId]);
+        if (Number.isFinite(fallbackOffset)) {
+          return fallbackOffset;
+        }
+      }
+    }
+
+    const legacyPilot = pilotsRef.current?.find((pilot) => normalizePilotId(pilot?.id) === normalizedPilotId);
+    const legacyOffset = Number(legacyPilot?.timeOffsetMinutes);
+    return Number.isFinite(legacyOffset) ? legacyOffset : 0;
+  }, []);
+
+  const setPilotStageOffset = useCallback((pilotId, stageId, offsetMinutes) => {
+    const normalizedPilotId = normalizePilotId(pilotId);
+    const normalizedStageId = String(stageId || '').trim();
+    const trimmedValue = String(offsetMinutes ?? '').trim();
+
+    if (!normalizedPilotId || !normalizedStageId) {
+      return;
+    }
+
+    const normalizedOffset = trimmedValue === ''
+      ? null
+      : Math.max(0, Math.trunc(Number(trimmedValue)));
+
+    setStagePilotOffsets((prev) => {
+      const next = { ...(isPlainObject(prev) ? prev : {}) };
+      const nextPilotStages = { ...(next[normalizedPilotId] || {}) };
+
+      if (normalizedOffset === null || !Number.isFinite(normalizedOffset)) {
+        delete nextPilotStages[normalizedStageId];
+      } else {
+        nextPilotStages[normalizedStageId] = normalizedOffset;
+      }
+
+      if (Object.keys(nextPilotStages).length > 0) {
+        next[normalizedPilotId] = nextPilotStages;
+      } else {
+        delete next[normalizedPilotId];
+      }
+
+      return next;
+    });
+    markTimingSectionDirty('stagePilotOffsets');
+    markTimingLineDirty('stagePilotOffsets', normalizedPilotId, normalizedStageId);
+  }, [markTimingLineDirty, markTimingSectionDirty, setStagePilotOffsets]);
+
+  const applyStageOffsetAdjustments = useCallback((stageId, adjustments = {}) => {
+    const normalizedStageId = String(stageId || '').trim();
+    if (!normalizedStageId || !isPlainObject(adjustments)) {
+      return;
+    }
+
+    const sortedSpecialStages = [...stages]
+      .filter((stage) => isSpecialStageType(stage.type))
+      .sort(compareStagesBySchedule);
+    const startIndex = sortedSpecialStages.findIndex((stage) => stage.id === normalizedStageId);
+    const affectedStageIds = startIndex === -1
+      ? [normalizedStageId]
+      : sortedSpecialStages.slice(startIndex).map((stage) => stage.id);
+
+    const adjustmentEntries = Object.entries(adjustments)
+      .map(([pilotId, entry]) => [normalizePilotId(pilotId), isPlainObject(entry) ? entry : {}])
+      .filter(([pilotId]) => !!pilotId);
+
+    if (adjustmentEntries.length === 0) {
+      return;
+    }
+
+    const offsetUpdates = adjustmentEntries.filter(([, entry]) => entry.offsetMinutes !== undefined);
+    const retiredUpdates = adjustmentEntries.filter(([, entry]) => entry.retired !== undefined);
+
+    if (offsetUpdates.length > 0) {
+      setStagePilotOffsets((prev) => {
+        const next = { ...(isPlainObject(prev) ? prev : {}) };
+
+        offsetUpdates.forEach(([pilotId, entry]) => {
+          const trimmedValue = String(entry.offsetMinutes ?? '').trim();
+          const normalizedOffset = trimmedValue === ''
+            ? null
+            : Math.max(0, Math.trunc(Number(trimmedValue)));
+          const nextPilotStages = { ...(next[pilotId] || {}) };
+
+          if (normalizedOffset === null || !Number.isFinite(normalizedOffset)) {
+            delete nextPilotStages[normalizedStageId];
+          } else {
+            nextPilotStages[normalizedStageId] = normalizedOffset;
+          }
+
+          if (Object.keys(nextPilotStages).length > 0) {
+            next[pilotId] = nextPilotStages;
+          } else {
+            delete next[pilotId];
+          }
+        });
+
+        return next;
+      });
+      markTimingSectionDirty('stagePilotOffsets');
+      offsetUpdates.forEach(([pilotId]) => {
+        markTimingLineDirty('stagePilotOffsets', pilotId, normalizedStageId);
+      });
+    }
+
+    if (retiredUpdates.length > 0) {
+      setRetiredStages((prev) => {
+        const next = { ...(isPlainObject(prev) ? prev : {}) };
+
+        retiredUpdates.forEach(([pilotId, entry]) => {
+          const nextPilotStages = { ...(next[pilotId] || {}) };
+
+          affectedStageIds.forEach((affectedStageId) => {
+            if (entry.retired === true) {
+              nextPilotStages[affectedStageId] = affectedStageId;
+            } else {
+              delete nextPilotStages[affectedStageId];
+            }
+          });
+
+          if (Object.keys(nextPilotStages).length > 0) {
+            next[pilotId] = nextPilotStages;
+          } else {
+            delete next[pilotId];
+          }
+        });
+
+        return next;
+      });
+      markTimingSectionDirty('retiredStages');
+      retiredUpdates.forEach(([pilotId]) => {
+        affectedStageIds.forEach((affectedStageId) => {
+          markTimingLineDirty('retiredStages', pilotId, affectedStageId);
+        });
+      });
+    }
+  }, [markTimingLineDirty, markTimingSectionDirty, setRetiredStages, setStagePilotOffsets, stages]);
+
   const setRealStartTime = useCallback((pilotId, stageId, realStartTime) => {
     setRealStartTimes(prev => ({
       ...prev,
@@ -6732,6 +6934,7 @@ export const RallyProvider = ({ children }) => {
         setArrivalTimes,
         setStartTimes,
         setRealStartTimes,
+        setStagePilotOffsets,
         setSourceFinishTime,
         setSourceLapTime,
         setRetiredStages,
@@ -6785,6 +6988,7 @@ export const RallyProvider = ({ children }) => {
     setArrivalTimes({});
     setStartTimes({});
     setRealStartTimes({});
+    setStagePilotOffsets({});
     setSourceFinishTime({});
     setSourceLapTime({});
     setRetiredStages({});
@@ -6814,7 +7018,7 @@ export const RallyProvider = ({ children }) => {
     setMetaCurrentSession(null);
     updateDataVersion('pilotTelemetry');
     updateDataVersion(ALL_STORAGE_DOMAINS);
-  }, [applyPilotTelemetryState, setArrivalTimes, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStageIntervalSeconds, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRaceTypes, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
+  }, [applyPilotTelemetryState, setArrivalTimes, setCameras, setCategories, setChromaKey, setCurrentStageId, setEventIsOver, setEventName, setEventReplayStageIntervalSeconds, setEventReplayStartDate, setEventReplayStartTime, setExternalMedia, setGlobalAudio, setLapTimes, setLogoUrl, setMapPlacemarks, setMapUrl, setPilots, setPositions, setRaceTypes, setRealStartTimes, setRetiredStages, setSourceFinishTime, setSourceLapTime, setStageAlerts, setStagePilotOffsets, setStageSos, setStagePilots, setStages, setStartTimes, setStreamConfigs, setTimeDecimals, setTimes, setTransitionImageUrl, updateDataVersion]);
 
   const value = {
     // Event configuration
@@ -6831,6 +7035,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    stagePilotOffsets,
     sourceFinishTime,
     sourceLapTime,
     retiredStages,
@@ -6936,8 +7141,8 @@ export const RallyProvider = ({ children }) => {
     getArrivalTime,
     setStartTime,
     getStartTime,
-    setRealStartTime,
-    getRealStartTime,
+    setPilotStageOffset,
+    getPilotStageOffset,
     setRealStartTime,
     getRealStartTime,
     bulkImportTimingEntries,
@@ -7087,6 +7292,7 @@ export const RallyProvider = ({ children }) => {
     arrivalTimes,
     startTimes,
     realStartTimes,
+    stagePilotOffsets,
     sourceFinishTime,
     sourceLapTime,
     lapTimes,
@@ -7103,6 +7309,8 @@ export const RallyProvider = ({ children }) => {
     getArrivalTime,
     setStartTime,
     getStartTime,
+    setPilotStageOffset,
+    getPilotStageOffset,
     setRealStartTime,
     getRealStartTime,
     setLapTime,
@@ -7118,6 +7326,7 @@ export const RallyProvider = ({ children }) => {
     selectAllPilotsInStage,
     deselectAllPilotsInStage,
     setRetiredFromStage,
+    applyStageOffsetAdjustments,
     isRetiredStage,
     setStageAlert,
     isStageAlert,
@@ -7151,6 +7360,7 @@ export const RallyProvider = ({ children }) => {
     setPosition,
     setRealStartTime,
     setRetiredFromStage,
+    applyStageOffsetAdjustments,
     setStageAlert,
     setStageSos,
     setStagePilotsForStage,

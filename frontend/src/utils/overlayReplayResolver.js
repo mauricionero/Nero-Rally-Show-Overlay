@@ -1,6 +1,6 @@
 import { getStageDateTime } from './rallyHelpers.js';
 import { isReplayDebugEnabled } from './debugFlags.js';
-import { getPilotTimeOffsetMinutes } from './pilotSchedule.js';
+import { getPilotEffectiveStageOffsetMinutes } from './pilotSchedule.js';
 import { buildReplayStageScheduleMap, getFirstCompetitiveStage } from './replaySchedule.js';
 import { getStageNumberLabel, getStageTitle } from './stageTypes.js';
 import { formatDurationSeconds } from './timeFormat.js';
@@ -151,6 +151,7 @@ const logReplayCalculation = ({
   pilot = {},
   effectiveStageId = null,
   currentStage = null,
+  stages = [],
   firstCompetitiveStage = null,
   replayStartDate = '',
   replayStartTime = '',
@@ -186,7 +187,7 @@ const logReplayCalculation = ({
     ? (getStageNumberLabel(currentStage) || getStageTitle(currentStage))
     : 'No stage';
   const firstCompetitiveStageLabel = firstCompetitiveStage ? getStageTitle(firstCompetitiveStage) : 'No first competitive stage';
-  const pilotOffsetSeconds = getPilotTimeOffsetMinutes(pilot) * 60;
+  const pilotOffsetSeconds = getPilotEffectiveStageOffsetMinutes(currentStage, pilot, { stages }) * 60;
   const chapterTime = formatReplayDebugSeconds(currentStageReplaySeconds);
   const stageReplayStartTime = formatReplayDebugDateTime(currentStageReplayDateTime);
   const stageReplayBaseTime = formatReplayDebugDateTime(currentStageReplayBaseDateTime);
@@ -264,7 +265,7 @@ export const getPilotReplaySeekSeconds = ({
   const currentStage = (Array.isArray(stages) ? stages : []).find((stage) => stage.id === effectiveStageId) || null;
   const firstCompetitiveStage = getFirstCompetitiveStage(stages);
   const currentStageReplaySeconds = getPilotReplayStartSeconds(pilot, effectiveStageId);
-  const pilotOffsetSeconds = getPilotTimeOffsetMinutes(pilot) * 60;
+  const pilotOffsetSeconds = getPilotEffectiveStageOffsetMinutes(currentStage, pilot, { stages }) * 60;
   const replayBaselineEventDateTime = getReplayBaselineEventDateTime(replayStartDate, replayStartTime);
   const resolvedReplayStageScheduleById = replayStageScheduleById instanceof Map
     ? replayStageScheduleById
@@ -302,6 +303,7 @@ export const getPilotReplaySeekSeconds = ({
       pilot,
       effectiveStageId,
       currentStage,
+      stages,
       firstCompetitiveStage,
       replayStartDate,
       replayStartTime,
@@ -334,6 +336,7 @@ export const getPilotReplaySeekSeconds = ({
       pilot,
       effectiveStageId,
       currentStage,
+      stages,
       firstCompetitiveStage,
       replayStartDate,
       replayStartTime,
@@ -366,6 +369,7 @@ export const getPilotReplaySeekSeconds = ({
       pilot,
       effectiveStageId,
       currentStage,
+      stages,
       firstCompetitiveStage,
       replayStartDate,
       replayStartTime,
@@ -395,6 +399,7 @@ export const getPilotReplaySeekSeconds = ({
     pilot,
     effectiveStageId,
     currentStage,
+    stages,
     firstCompetitiveStage,
     replayStartDate,
     replayStartTime,

@@ -1187,16 +1187,16 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                       }}
                     >
                       {category && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: category.color }} />
+                        <div className="absolute left-0 top-0 bottom-0 w-2" style={{ backgroundColor: category.color }} />
                       )}
-                      <div className="pl-2 min-w-0">
+                      <div className="pl-0 min-w-0">
                         {isLapRace && (
                           <span className="block text-[#FF4500] font-bold text-sm leading-none mb-1">P{position}</span>
                         )}
                         <div className="min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-1 min-w-0">
                             {pilotMetaInfo.carNumber && (
-                              <span className="inline-flex items-center justify-center min-w-[1.6rem] rounded-sm text-[0.8rem] font-black text-white bg-[#FF4500] flex-shrink-0" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                              <span className="inline-flex items-center justify-center min-w-[1.5rem] rounded-sm text-[0.8rem] font-black text-white bg-[#FF4500] flex-shrink-0" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                                 {pilotMetaInfo.carNumber}
                               </span>
                             )}

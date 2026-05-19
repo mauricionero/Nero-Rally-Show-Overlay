@@ -49,15 +49,6 @@ const normalizeOptionalNumberInput = (value) => {
   return Number.isFinite(numericValue) ? numericValue : '';
 };
 
-const normalizeOffsetMinutesInput = (value) => {
-  const normalized = normalizeOptionalNumberInput(value);
-  if (normalized === '') {
-    return '';
-  }
-
-  return Math.max(0, Math.trunc(Number(normalized)));
-};
-
 const normalizeOptionalTextInput = (value) => String(value ?? '').trim();
 
 const TELEMETRY_PLACEHOLDERS = {
@@ -377,7 +368,6 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     replayVideoUrl: '',
     categoryId: null,
     startOrder: '',
-    timeOffsetMinutes: '',
     isActive: true
   });
   const [editingPilot, setEditingPilot] = useState(null);
@@ -548,8 +538,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     }
     const pilotData = {
       ...newPilot,
-      startOrder: parseInt(newPilot.startOrder) || 999,
-      timeOffsetMinutes: normalizeOffsetMinutesInput(newPilot.timeOffsetMinutes)
+      startOrder: parseInt(newPilot.startOrder) || 999
     };
     addPilot(pilotData);
     setNewPilot({
@@ -563,7 +552,6 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
       replayVideoUrl: '',
       categoryId: null,
       startOrder: '',
-      timeOffsetMinutes: '',
       isActive: true
     });
     toast.success('Pilot added successfully');
@@ -651,8 +639,7 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     const pilotData = {
       ...editingPilot,
       replayStageTimes: normalizeReplayStageTimes(editingPilot.replayStageTimes),
-      startOrder: parseInt(editingPilot.startOrder) || 999,
-      timeOffsetMinutes: normalizeOffsetMinutesInput(editingPilot.timeOffsetMinutes)
+      startOrder: parseInt(editingPilot.startOrder) || 999
     };
     TELEMETRY_FORM_FIELD_KEYS.forEach((fieldKey) => {
       delete pilotData[fieldKey];
@@ -689,7 +676,6 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
     { id: 'lastLatLongUpdatedAt', label: t('pilots.lastLatLongUpdatedAt'), getValue: (pilot) => (getPilotTelemetry(pilot.id)?.lastLatLongUpdatedAt || getPilotTelemetry(pilot.id)?.latlongTimestamp || pilot.lastLatLongUpdatedAt || '') },
     { id: 'category', label: t('pilots.category'), getValue: (pilot) => categoryById.get(pilot.categoryId)?.name || '' },
     { id: 'startOrder', label: t('pilots.startOrder'), getValue: (pilot) => pilot.startOrder ?? '' },
-    { id: 'timeOffsetMinutes', label: t('pilots.timeOffsetMinutes'), getValue: (pilot) => pilot.timeOffsetMinutes ?? '' },
     { id: 'currentStageId', label: t('pilots.currentStage'), getValue: (pilot) => pilot.currentStageId || '' },
     { id: 'picture', label: t('pilots.pictureUrl'), getValue: (pilot) => pilot.picture || '' },
     { id: 'streamUrl', label: t('pilots.streamUrl'), getValue: (pilot) => pilot.streamUrl || '' },
@@ -823,19 +809,6 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                   data-testid="input-pilot-order"
                 />
               </div>
-              <div>
-                <Label htmlFor="pilot-offset" className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
-                <Input
-                  id="pilot-offset"
-                  type="number"
-                  min="0"
-                  value={newPilot.timeOffsetMinutes}
-                  onChange={(e) => setNewPilot({ ...newPilot, timeOffsetMinutes: e.target.value === '' ? '' : String(Math.max(0, Number(e.target.value) || 0)) })}
-                  placeholder={t('pilots.placeholder.timeOffsetMinutes')}
-                  className="bg-[#09090B] border-zinc-700 text-white"
-                  data-testid="input-pilot-offset"
-                />
-              </div>
               <div className="md:col-span-2 lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="pilot-picture" className="text-white">{t('pilots.pictureUrl')}</Label>
@@ -931,7 +904,6 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                   )}
                   <div className="flex flex-col items-start gap-0.5 text-xs">
                     <span className="text-zinc-500 text-sm">#{pilot.startOrder || '?'}</span>
-                    <span className="text-zinc-400 text-xs">+{pilot.timeOffsetMinutes || 0}m</span>
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1114,17 +1086,6 @@ export default function PilotsTab({ hideStreams = false, wsChannelKey = '' }) {
                                     type="number"
                                     value={editingPilot.startOrder || ''}
                                     onChange={(e) => setEditingPilot({ ...editingPilot, startOrder: e.target.value })}
-                                    className="bg-[#09090B] border-zinc-700 text-white"
-                                  />
-                                </div>
-                                <div>
-                                  <Label className="text-white">{t('pilots.timeOffsetMinutes')}</Label>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    value={editingPilot.timeOffsetMinutes ?? ''}
-                                    onChange={(e) => setEditingPilot({ ...editingPilot, timeOffsetMinutes: e.target.value === '' ? '' : String(Math.max(0, Number(e.target.value) || 0)) })}
-                                    placeholder={t('pilots.placeholder.timeOffsetMinutes')}
                                     className="bg-[#09090B] border-zinc-700 text-white"
                                   />
                                 </div>

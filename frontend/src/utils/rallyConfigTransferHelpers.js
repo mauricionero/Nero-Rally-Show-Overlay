@@ -55,6 +55,7 @@ export const buildRallyConfigExportPayload = ({
     arrivalTimes: readStorage('rally_arrival_times', {}),
     startTimes: readStorage('rally_start_times', {}),
     realStartTimes: readStorage('rally_real_start_times', {}),
+    stagePilotOffsets: readStorage('rally_stage_pilot_offsets', {}),
     sourceFinishTime: readStorage('rally_source_finish_time', {}),
     sourceLapTime: readStorage('rally_source_lap_time', {}),
     retiredStages: readStorage('rally_retired_stages', {}),
@@ -115,6 +116,7 @@ export const applyRallyConfigImportPayload = (data, setters = {}) => {
   assignIfDefined(data.arrivalTimes, setters.setArrivalTimes, (value) => (isPlainObject(value) ? value : {}));
   assignIfDefined(data.startTimes, setters.setStartTimes, (value) => (isPlainObject(value) ? value : {}));
   assignIfDefined(data.realStartTimes, setters.setRealStartTimes, (value) => (isPlainObject(value) ? value : {}));
+  assignIfDefined(data.stagePilotOffsets, setters.setStagePilotOffsets, (value) => (isPlainObject(value) ? value : {}));
   assignIfDefined(data.sourceFinishTime, setters.setSourceFinishTime, (value) => (isPlainObject(value) ? value : {}));
   assignIfDefined(data.sourceLapTime, setters.setSourceLapTime, (value) => (isPlainObject(value) ? value : {}));
   assignIfDefined(data.retiredStages, setters.setRetiredStages, (value) => (isPlainObject(value) ? value : {}));

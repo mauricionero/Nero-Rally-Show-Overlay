@@ -159,6 +159,13 @@ theRace:
   noMapPlacemark: "No Placemark"
   scheduledStart: "Scheduled Start"
   endTime: "End Time"
+  startTime: "Start"
+  adjustStartTimes: "Adjust Start Times"
+  stageOffsets: "Stage Offsets"
+  stageOffsetsHint: "Define the start minute for each crew in this stage. Leaving the field empty will use the crew's previous start interval."
+  effectiveOffset: "Effective offset"
+  inheritedOffset: "Inherited"
+  offset: "Offset"
   noStages: "No stages registered. Add your first stage above."
   stageTypes:
     ss: "SS (Special Stage)"
