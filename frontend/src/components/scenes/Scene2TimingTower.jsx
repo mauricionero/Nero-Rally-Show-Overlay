@@ -25,6 +25,7 @@ import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { sortPilotsByDisplayOrder, sortPilotsByStageTimingPriority } from '../../utils/displayOrder.js';
 import { formatDurationMs, formatSecondsValue } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { buildCameraMapMarkers } from '../../utils/cameraMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import { getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
@@ -485,6 +486,9 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
   }, [finished, isLapRace, notStarted, onStageOrdered, retired, sortedLapRacePilotsData]);
   const leader = isLapRace ? sortedLapRacePilotsData[0] : finished[0];
   const selectedFeed = findFeedByValue(availableFeeds, selectedFeedValue);
+  const selectedFeedCameraMarkers = useMemo(() => (
+    selectedFeed?.type === 'stage-map' ? buildCameraMapMarkers(cameras, selectedFeed.placemarkId) : []
+  ), [cameras, selectedFeed]);
   const selectedPilot = selectedFeed?.type === 'pilot' ? pilots.find((pilot) => pilot.id === selectedFeed.id) : null;
   const selectedPilotPlayback = selectedPilot ? pilotPlaybackById.get(selectedPilot.id) : null;
   const selectedPilotData = selectedFeed?.type === 'pilot'
@@ -905,7 +909,12 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
           </>
         ) : selectedFeed?.type === 'stage-map' ? (
           <>
-            <PlacemarkMapFeed placemark={selectedFeed} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+            <PlacemarkMapFeed
+              placemark={selectedFeed}
+              pilotMarkers={pilotMapMarkers}
+              cameraMarkers={selectedFeedCameraMarkers}
+              className="w-full h-full"
+            />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
               <div className="flex items-center gap-4">
                 <MapIcon className="w-8 h-8 text-[#FF4500]" />

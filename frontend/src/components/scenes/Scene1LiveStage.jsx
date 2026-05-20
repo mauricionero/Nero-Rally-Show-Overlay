@@ -25,6 +25,7 @@ import { formatDurationMs } from '../../utils/timeFormat.js';
 import { sortPilotsByDisplayOrder, sortPilotsByStageTimingPriority } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { buildCameraMapMarkers } from '../../utils/cameraMapMarkers.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
@@ -98,6 +99,9 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   const activeMedia = externalMedia.filter(m => m.url);
   const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [stages, mapPlacemarks]);
   const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(visiblePilots, categories, pilotTelemetryByPilotId), [categories, pilotTelemetryByPilotId, visiblePilots]);
+  const getCameraMapMarkers = useCallback((placemarkId) => (
+    buildCameraMapMarkers(cameras, placemarkId)
+  ), [cameras]);
   const currentStagePlacemark = useMemo(() => (
     mapPlacemarks.find((placemark) => placemark.id === currentStage?.mapPlacemarkId) || null
   ), [currentStage?.mapPlacemarkId, mapPlacemarks]);
@@ -838,7 +842,13 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
             if (item.type === 'stage-map') {
               return (
                 <div key={item.id} className="relative rounded overflow-hidden border-2 border-[#FF4500]" style={{ backgroundColor: chromaKey }}>
-                  <PlacemarkMapFeed placemark={item} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+                  <PlacemarkMapFeed
+                    placemark={item}
+                    pilotMarkers={pilotMapMarkers}
+                    cameraMarkers={getCameraMapMarkers(item.placemarkId)}
+                    className="w-full h-full"
+                  />
+
                   <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent p-3">
                     <div className="flex items-center gap-2">
                       <MapIcon className="w-5 h-5 text-[#FF4500]" />

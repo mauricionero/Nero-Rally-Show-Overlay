@@ -8,13 +8,15 @@ import {
   CloudSnow,
   CloudSun,
   Sun,
+  Video,
   Wind
 } from 'lucide-react';
 import { getLedLoadColor } from '../utils/ledLoadColors.js';
+import { StreamPlayer } from './StreamPlayer.jsx';
 
 const WEATHER_REFRESH_MS = 5 * 60 * 1000;
 const POSITION_STATUS_REFRESH_MS = 30 * 1000;
-const MAP_VIEWPORT_MARGIN_RATIO = 0.32;
+const MAP_VIEWPORT_MARGIN_RATIO = 0.38;
 const weatherCache = new Map();
 
 const buildProjectionBounds = (coordinateGroups = []) => {
@@ -41,7 +43,7 @@ const buildProjectionBounds = (coordinateGroups = []) => {
   const expandedMaxLng = maxLng + lngMargin;
   const latSpan = Math.max(expandedMaxLat - expandedMinLat, 0.000001);
   const lngSpan = Math.max(expandedMaxLng - expandedMinLng, 0.000001);
-  const padding = 110;
+  const padding = 150;
   const width = 1000 - (padding * 2);
   const height = 1000 - (padding * 2);
 
@@ -253,10 +255,13 @@ const hexToRgba = (hexColor, alpha = 1) => {
 const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const getMarkerPopoverScale = (zoom) => clampValue(1 / zoom, 0.7, 1.35);
+const getMarkerPopoverDimensions = (scale = 1, sizeMultiplier = 1) => ({
+  width: Math.round(312 * scale * sizeMultiplier),
+  height: Math.round(176 * scale * sizeMultiplier)
+});
 
 const getMarkerPopoverLayout = (marker, scale = 1) => {
-  const width = Math.round(312 * scale);
-  const height = Math.round(176 * scale);
+  const { width, height } = getMarkerPopoverDimensions(scale, 1);
   const offsetX = Math.round(48 * scale);
   const offsetY = Math.round(40 * scale);
   const prefersRight = marker.x < 700;
@@ -270,6 +275,7 @@ const getMarkerPopoverLayout = (marker, scale = 1) => {
     y,
     width,
     height,
+    sizeMultiplier: 1,
     side: prefersRight && x === rawX ? 'right' : 'left'
   };
 };
@@ -279,17 +285,64 @@ const resizeMarkerPopoverLayoutFromCenter = (layout, scale = 1) => {
     return null;
   }
 
-  const width = Math.round(312 * scale);
-  const height = Math.round(176 * scale);
-  const centerX = layout.x + (layout.width / 2);
-  const centerY = layout.y + (layout.height / 2);
+  const { width, height } = getMarkerPopoverDimensions(scale, layout.sizeMultiplier || 1);
 
   return {
     ...layout,
-    x: clampValue(centerX - (width / 2), 20, 1000 - width - 20),
-    y: clampValue(centerY - (height / 2), 20, 1000 - height - 20),
+    x: layout.x,
+    y: layout.y,
     width,
     height
+  };
+};
+
+const getResizedPopoverLayout = (layout, scale = 1, sizeMultiplier = 1, direction = 'se') => {
+  if (!layout) {
+    return null;
+  }
+
+  const { width, height } = getMarkerPopoverDimensions(scale, sizeMultiplier);
+  const startRight = layout.x + layout.width;
+  const startBottom = layout.y + layout.height;
+  const centerX = layout.x + (layout.width / 2);
+  const centerY = layout.y + (layout.height / 2);
+
+  let x = layout.x;
+  let y = layout.y;
+
+  if (direction === 'e') {
+    x = layout.x;
+    y = centerY - (height / 2);
+  } else if (direction === 'w') {
+    x = startRight - width;
+    y = centerY - (height / 2);
+  } else if (direction === 's') {
+    x = centerX - (width / 2);
+    y = layout.y;
+  } else if (direction === 'n') {
+    x = centerX - (width / 2);
+    y = startBottom - height;
+  } else if (direction === 'ne') {
+    x = layout.x;
+    y = startBottom - height;
+  } else if (direction === 'nw') {
+    x = startRight - width;
+    y = startBottom - height;
+  } else if (direction === 'sw') {
+    x = startRight - width;
+    y = layout.y;
+  } else {
+    x = layout.x;
+    y = layout.y;
+  }
+
+  return {
+    ...layout,
+    x,
+    y,
+    width,
+    height,
+    sizeMultiplier
   };
 };
 
@@ -299,8 +352,13 @@ const MapMarkerPopoverShell = ({
   anchorMarker = null,
   locked = false,
   dragging = false,
+  resizing = false,
+  resizable = false,
   scale = 1,
+  title = '',
+  borderColor = '#FFFFFF',
   onDragStart = null,
+  onResizeStart = null,
   children
 }) => {
   if (!marker) {
@@ -312,6 +370,8 @@ const MapMarkerPopoverShell = ({
   const anchorX = anchor.x - layout.x;
   const anchorY = anchor.y - layout.y;
 
+  const resizeHandleSize = 18;
+
   return (
     <g
       transform={`translate(${layout.x}, ${layout.y})`}
@@ -322,6 +382,18 @@ const MapMarkerPopoverShell = ({
       }}
       onClick={(event) => event.stopPropagation()}
     >
+      {title ? (
+        <text
+          x="4"
+          y="-8"
+          fill="#F4F4F5"
+          fontSize="14"
+          fontWeight="800"
+          style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.16em', textTransform: 'uppercase' }}
+        >
+          {String(title || '').toUpperCase()}
+        </text>
+      ) : null}
       {locked ? (
         <line
           x1={layout.width / 2}
@@ -329,7 +401,7 @@ const MapMarkerPopoverShell = ({
           x2={anchorX}
           y2={anchorY}
           stroke="#FFF"
-          strokeWidth="3"
+          strokeWidth="2"
           strokeLinecap="round"
         />
       ) : (
@@ -349,9 +421,37 @@ const MapMarkerPopoverShell = ({
         height={layout.height}
         rx="24"
         fill="rgba(7,7,9,0.94)"
-        stroke="rgba(255,255,255,0.18)"
+        stroke={borderColor}
         strokeWidth="2.5"
       />
+      {resizable ? (
+        <>
+          {[
+            { key: 'n', x: resizeHandleSize, y: -4, width: layout.width - (resizeHandleSize * 2), height: 8, cursor: 'ns-resize' },
+            { key: 's', x: resizeHandleSize, y: layout.height - 4, width: layout.width - (resizeHandleSize * 2), height: 8, cursor: 'ns-resize' },
+            { key: 'e', x: layout.width - 4, y: resizeHandleSize, width: 8, height: layout.height - (resizeHandleSize * 2), cursor: 'ew-resize' },
+            { key: 'w', x: -4, y: resizeHandleSize, width: 8, height: layout.height - (resizeHandleSize * 2), cursor: 'ew-resize' },
+            { key: 'ne', x: layout.width - resizeHandleSize, y: -4, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nesw-resize' },
+            { key: 'nw', x: -4, y: -4, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nwse-resize' },
+            { key: 'se', x: layout.width - resizeHandleSize, y: layout.height - resizeHandleSize, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nwse-resize' },
+            { key: 'sw', x: -4, y: layout.height - resizeHandleSize, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nesw-resize' }
+          ].map((handle) => (
+            <rect
+              key={handle.key}
+              x={handle.x}
+              y={handle.y}
+              width={handle.width}
+              height={handle.height}
+              fill="rgba(255,255,255,0.001)"
+              style={{ cursor: handle.cursor }}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+                onResizeStart?.(event, layout, handle.key);
+              }}
+            />
+          ))}
+        </>
+      ) : null}
       {typeof children === 'function' ? children({ layout, scale }) : children}
     </g>
   );
@@ -501,12 +601,12 @@ const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick, hi
           r={Math.min(auraRadius, 12)}
           fill="rgba(59,130,246,0.16)"
           stroke="rgba(30,58,138,0.92)"
-          strokeWidth="2.5"
+          strokeWidth="2"
         />
       )}
       {!hidden && (
         <>
-          <path d={`M 0 0 L 0 -${poleLength}`} stroke="#FFF" strokeWidth="3" strokeLinecap="round" />
+          <path d={`M 0 0 L 0 -${poleLength}`} stroke="#FFF" strokeWidth="2.5" strokeLinecap="round" />
           <g transform={`translate(0, -${poleLength + badgeRadius})`}>
             {showImage && (
               <defs>
@@ -562,6 +662,79 @@ const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick, hi
         </>
       )}
     </g>
+  );
+};
+
+const CameraPositionMarker = ({ marker, onHover, onBlur, onClick, hidden = false }) => {
+  const poleLength = 30;
+  const iconSize = 18;
+  const hitAreaWidth = 28;
+  const hitAreaHeight = poleLength + iconSize + 10;
+
+  return (
+    <g
+      transform={`translate(${marker.x}, ${marker.y})`}
+      style={{ cursor: 'pointer' }}
+      opacity={marker.isActive === false ? 0.6 : 1}
+      onMouseEnter={() => onHover?.(marker)}
+      onMouseLeave={() => onBlur?.()}
+      onFocus={() => onHover?.(marker)}
+      onBlurCapture={() => onBlur?.()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.(marker);
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label={`Camera ${marker.name || ''}`.trim()}
+    >
+      {!hidden && (
+        <>
+          <rect
+            x={-hitAreaWidth / 2}
+            y={-hitAreaHeight}
+            width={hitAreaWidth}
+            height={hitAreaHeight + 6}
+            fill="rgba(255,255,255,0.001)"
+          />
+          <path d={`M 0 0 L 0 -${poleLength}`} stroke="#FFF" strokeWidth="2" strokeLinecap="round" />
+          <g transform={`translate(${-iconSize / 2 + 2}, -${poleLength + iconSize - 1})`}>
+            <Video
+              width={iconSize}
+              height={iconSize}
+              color={marker.color || '#FF4500'}
+              strokeWidth={2}
+            />
+          </g>
+        </>
+      )}
+    </g>
+  );
+};
+
+const CameraMarkerPopoverContent = ({ marker, layout }) => {
+  if (!marker?.streamUrl) {
+    return null;
+  }
+
+  return (
+    <foreignObject
+      x="0"
+      y="0"
+      width={layout.width}
+      height={layout.height}
+      requiredExtensions="http://www.w3.org/1999/xhtml"
+    >
+      <div xmlns="http://www.w3.org/1999/xhtml" className="h-full w-full overflow-hidden rounded-[24px] bg-black">
+        <StreamPlayer
+          streamUrl={marker.streamUrl}
+          name={marker.name}
+          className="h-full w-full"
+          showControls={false}
+        />
+      </div>
+    </foreignObject>
   );
 };
 
@@ -674,6 +847,7 @@ const PilotMarkerPopover = ({
   layoutOverride = null,
   locked = false,
   dragging = false,
+  resizing = false,
   scale = 1,
   onDragStart = null
 }) => (
@@ -683,12 +857,41 @@ const PilotMarkerPopover = ({
     layoutOverride={layoutOverride}
     locked={locked}
     dragging={dragging}
+    resizing={resizing}
     scale={scale}
     onDragStart={onDragStart}
   >
     {({ layout, scale: popoverScale }) => (
       <PilotMarkerPopoverContent marker={marker} layout={layout} scale={popoverScale} />
     )}
+  </MapMarkerPopoverShell>
+);
+
+const CameraMarkerPopover = ({
+  marker,
+  anchorMarker = null,
+  layoutOverride = null,
+  locked = false,
+  dragging = false,
+  resizing = false,
+  scale = 1,
+  onDragStart = null,
+  onResizeStart = null
+}) => (
+  <MapMarkerPopoverShell
+    marker={marker}
+    anchorMarker={anchorMarker}
+    layoutOverride={layoutOverride}
+    locked={locked}
+    dragging={dragging}
+    resizing={resizing}
+    resizable={locked}
+    scale={scale}
+    title={marker?.name || ''}
+    onDragStart={onDragStart}
+    onResizeStart={onResizeStart}
+  >
+    {({ layout }) => <CameraMarkerPopoverContent marker={marker} layout={layout} />}
   </MapMarkerPopoverShell>
 );
 
@@ -889,18 +1092,23 @@ export function PlacemarkWeatherNowNext({
   );
 }
 
-export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' }) {
+export function PlacemarkMapFeed({ placemark, pilotMarkers = [], cameraMarkers = [], className = '' }) {
+  const getPopoverKey = (type, id) => `${type}:${String(id || '').trim()}`;
   const svgRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [markerNow, setMarkerNow] = useState(() => Date.now());
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
-  const [selectedMarkerId, setSelectedMarkerId] = useState(null);
-  const [selectedPopoverLayout, setSelectedPopoverLayout] = useState(null);
-  const [isDraggingPopover, setIsDraggingPopover] = useState(false);
+  const [hoveredCameraMarkerId, setHoveredCameraMarkerId] = useState(null);
+  const [selectedPilotMarkerIds, setSelectedPilotMarkerIds] = useState([]);
+  const [selectedCameraMarkerIds, setSelectedCameraMarkerIds] = useState([]);
+  const [selectedPopoverLayouts, setSelectedPopoverLayouts] = useState({});
+  const [draggingPopoverKey, setDraggingPopoverKey] = useState(null);
+  const [resizingPopoverKey, setResizingPopoverKey] = useState(null);
   const dragStateRef = useRef(null);
   const popoverDragRef = useRef(null);
-  const selectedPopoverLayoutRef = useRef(null);
+  const popoverResizeRef = useRef(null);
+  const selectedPopoverLayoutsRef = useRef({});
   const popoverCloseBlockedRef = useRef(false);
   const popoverScale = useMemo(() => getMarkerPopoverScale(zoom), [zoom]);
   const projectionBounds = useMemo(
@@ -921,27 +1129,43 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
     },
     [normalized.bounds, pilotMarkers]
   );
+  const projectedCameraMarkers = useMemo(
+    () => (
+      cameraMarkers
+        .map((marker) => projectMarkerToBounds(marker, normalized.bounds))
+        .filter(Boolean)
+    ),
+    [cameraMarkers, normalized.bounds]
+  );
   const hoveredMarker = useMemo(
     () => projectedPilotMarkers.find((marker) => marker.id === hoveredMarkerId) || null,
     [hoveredMarkerId, projectedPilotMarkers]
   );
-  const selectedMarker = useMemo(
-    () => projectedPilotMarkers.find((marker) => marker.id === selectedMarkerId) || null,
-    [projectedPilotMarkers, selectedMarkerId]
+  const hoveredCameraMarker = useMemo(
+    () => projectedCameraMarkers.find((marker) => marker.id === hoveredCameraMarkerId) || null,
+    [hoveredCameraMarkerId, projectedCameraMarkers]
   );
-  const activeMarker = hoveredMarker || selectedMarker;
-
-  const handlePopoverDragStart = (event) => {
-    if (!selectedMarker) {
+  const selectedPilotMarkers = useMemo(
+    () => projectedPilotMarkers.filter((marker) => selectedPilotMarkerIds.includes(marker.id)),
+    [projectedPilotMarkers, selectedPilotMarkerIds]
+  );
+  const selectedCameraMarkers = useMemo(
+    () => projectedCameraMarkers.filter((marker) => selectedCameraMarkerIds.includes(marker.id)),
+    [projectedCameraMarkers, selectedCameraMarkerIds]
+  );
+  const handlePopoverDragStart = (event, marker, type) => {
+    if (!marker) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
-    setIsDraggingPopover(true);
+    const popoverKey = getPopoverKey(type, marker.id);
+    setDraggingPopoverKey(popoverKey);
     popoverCloseBlockedRef.current = false;
-    const fallbackLayout = selectedPopoverLayoutRef.current || getMarkerPopoverLayout(selectedMarker, popoverScale);
+    const fallbackLayout = selectedPopoverLayoutsRef.current[popoverKey] || getMarkerPopoverLayout(marker, popoverScale);
     popoverDragRef.current = {
+      key: popoverKey,
       startClientX: event.clientX,
       startClientY: event.clientY,
       startLayoutX: fallbackLayout.x,
@@ -953,43 +1177,108 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
     };
   };
 
-  useEffect(() => {
-    selectedPopoverLayoutRef.current = selectedPopoverLayout;
-  }, [selectedPopoverLayout]);
+  const handlePopoverResizeStart = (event, marker, type, direction = 'se') => {
+    if (!marker) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const popoverKey = getPopoverKey(type, marker.id);
+    const fallbackLayout = selectedPopoverLayoutsRef.current[popoverKey] || getMarkerPopoverLayout(marker, popoverScale);
+    const svgRect = svgRef.current?.getBoundingClientRect();
+    const renderedMapSize = svgRect ? Math.min(svgRect.width, svgRect.height) : 0;
+    const offsetX = svgRect ? ((svgRect.width - renderedMapSize) / 2) : 0;
+    const offsetY = svgRect ? ((svgRect.height - renderedMapSize) / 2) : 0;
+    const centerClientX = svgRect
+      ? svgRect.left + offsetX + (((fallbackLayout.x + (fallbackLayout.width / 2)) / 1000) * renderedMapSize)
+      : event.clientX;
+    const centerClientY = svgRect
+      ? svgRect.top + offsetY + (((fallbackLayout.y + (fallbackLayout.height / 2)) / 1000) * renderedMapSize)
+      : event.clientY;
+    const startDistance = Math.max(
+      24,
+      Math.hypot(event.clientX - centerClientX, event.clientY - centerClientY)
+    );
+
+    setResizingPopoverKey(popoverKey);
+    popoverCloseBlockedRef.current = false;
+    popoverResizeRef.current = {
+      key: popoverKey,
+      marker,
+      direction,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      centerClientX,
+      centerClientY,
+      startDistance,
+      startDistanceX: Math.max(12, Math.abs(event.clientX - centerClientX)),
+      startDistanceY: Math.max(12, Math.abs(event.clientY - centerClientY)),
+      startLayout: fallbackLayout,
+      startSizeMultiplier: fallbackLayout.sizeMultiplier || 1,
+      moved: false
+    };
+  };
 
   useEffect(() => {
-    if (!selectedMarkerId) {
-      setSelectedPopoverLayout(null);
-      selectedPopoverLayoutRef.current = null;
+    selectedPopoverLayoutsRef.current = selectedPopoverLayouts;
+  }, [selectedPopoverLayouts]);
+
+  useEffect(() => {
+    const selectedKeys = [
+      ...selectedPilotMarkers.map((marker) => getPopoverKey('pilot', marker.id)),
+      ...selectedCameraMarkers.map((marker) => getPopoverKey('camera', marker.id))
+    ];
+
+    if (selectedKeys.length === 0) {
+      setSelectedPopoverLayouts({});
+      selectedPopoverLayoutsRef.current = {};
       popoverDragRef.current = null;
-      setIsDraggingPopover(false);
+      popoverResizeRef.current = null;
+      setDraggingPopoverKey(null);
+      setResizingPopoverKey(null);
       popoverCloseBlockedRef.current = false;
       return;
     }
 
-    const nextLayout = selectedPopoverLayoutRef.current
-      ? resizeMarkerPopoverLayoutFromCenter(selectedPopoverLayoutRef.current, popoverScale)
-      : getMarkerPopoverLayout(selectedMarker, popoverScale);
+    setSelectedPopoverLayouts((prev) => {
+      const nextLayouts = {};
 
-    setSelectedPopoverLayout(nextLayout);
-  }, [popoverScale, selectedMarker, selectedMarkerId]);
+      selectedPilotMarkers.forEach((marker) => {
+        const key = getPopoverKey('pilot', marker.id);
+        nextLayouts[key] = prev[key]
+          ? resizeMarkerPopoverLayoutFromCenter(prev[key], popoverScale)
+          : getMarkerPopoverLayout(marker, popoverScale);
+      });
+
+      selectedCameraMarkers.forEach((marker) => {
+        const key = getPopoverKey('camera', marker.id);
+        nextLayouts[key] = prev[key]
+          ? resizeMarkerPopoverLayoutFromCenter(prev[key], popoverScale)
+          : getMarkerPopoverLayout(marker, popoverScale);
+      });
+
+      return nextLayouts;
+    });
+  }, [popoverScale, selectedPilotMarkers, selectedCameraMarkers]);
 
   useEffect(() => {
-    if (!isDraggingPopover || !popoverDragRef.current) {
+    if (!draggingPopoverKey || !popoverDragRef.current) {
       return undefined;
     }
 
     const handleWindowMouseMove = (event) => {
-      if (!popoverDragRef.current) {
+      const dragState = popoverDragRef.current;
+      if (!dragState) {
         return;
       }
 
-      const deltaX = event.clientX - popoverDragRef.current.startClientX;
-      const deltaY = event.clientY - popoverDragRef.current.startClientY;
+      const deltaX = event.clientX - dragState.startClientX;
+      const deltaY = event.clientY - dragState.startClientY;
       const moved = Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2;
 
       if (moved) {
-        popoverDragRef.current.moved = true;
+        dragState.moved = true;
         popoverCloseBlockedRef.current = true;
       }
 
@@ -997,21 +1286,25 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
       const renderedMapSize = svgRect ? Math.min(svgRect.width, svgRect.height) : 0;
       const unitsPerPixelX = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
       const unitsPerPixelY = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
-      const nextX = popoverDragRef.current.startLayoutX + (deltaX * unitsPerPixelX);
-      const nextY = popoverDragRef.current.startLayoutY + (deltaY * unitsPerPixelY);
+      const nextX = dragState.startLayoutX + (deltaX * unitsPerPixelX);
+      const nextY = dragState.startLayoutY + (deltaY * unitsPerPixelY);
 
-      setSelectedPopoverLayout({
-        x: nextX,
-        y: nextY,
-        width: popoverDragRef.current.width,
-        height: popoverDragRef.current.height,
-        side: popoverDragRef.current.side
-      });
+      setSelectedPopoverLayouts((prev) => ({
+        ...prev,
+        [dragState.key]: {
+          x: nextX,
+          y: nextY,
+          width: dragState.width,
+          height: dragState.height,
+          side: dragState.side,
+          sizeMultiplier: prev[dragState.key]?.sizeMultiplier || 1
+        }
+      }));
     };
 
     const handleWindowMouseUp = () => {
       popoverDragRef.current = null;
-      setIsDraggingPopover(false);
+      setDraggingPopoverKey(null);
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
@@ -1021,7 +1314,85 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [isDraggingPopover, zoom]);
+  }, [draggingPopoverKey, zoom]);
+
+  useEffect(() => {
+    if (!resizingPopoverKey || !popoverResizeRef.current) {
+      return undefined;
+    }
+
+    const handleWindowMouseMove = (event) => {
+      const resizeState = popoverResizeRef.current;
+      if (!resizeState) {
+        return;
+      }
+
+      const svgRect = svgRef.current?.getBoundingClientRect();
+      const renderedMapSize = svgRect ? Math.min(svgRect.width, svgRect.height) : 0;
+      const unitsPerPixelX = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const unitsPerPixelY = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const deltaXUnits = (event.clientX - resizeState.startClientX) * unitsPerPixelX;
+      const deltaYUnits = (event.clientY - resizeState.startClientY) * unitsPerPixelY;
+      const horizontalFactor = resizeState.direction.includes('e') || resizeState.direction.includes('w')
+        ? Math.max(
+            0.2,
+            Math.abs(event.clientX - resizeState.centerClientX) / resizeState.startDistanceX
+          )
+        : null;
+      const verticalFactor = resizeState.direction.includes('n') || resizeState.direction.includes('s')
+        ? Math.max(
+            0.2,
+            Math.abs(event.clientY - resizeState.centerClientY) / resizeState.startDistanceY
+          )
+        : null;
+      const baseFactor = (
+        horizontalFactor !== null && verticalFactor !== null
+          ? (Math.abs(horizontalFactor - 1) >= Math.abs(verticalFactor - 1) ? horizontalFactor : verticalFactor)
+          : horizontalFactor ?? verticalFactor ?? 1
+      );
+      const sizeMultiplier = clampValue(resizeState.startSizeMultiplier * baseFactor, 0.6, 2.4);
+      const moved = Math.abs(deltaXUnits) > 2 || Math.abs(deltaYUnits) > 2;
+
+      if (moved) {
+        resizeState.moved = true;
+        popoverCloseBlockedRef.current = true;
+      }
+
+      setSelectedPopoverLayouts((prev) => {
+        const currentLayout = prev[resizeState.key] || getMarkerPopoverLayout(resizeState.marker, popoverScale);
+        const nextLayout = getResizedPopoverLayout(
+          {
+            ...currentLayout,
+            x: resizeState.startLayout.x,
+            y: resizeState.startLayout.y,
+            width: resizeState.startLayout.width,
+            height: resizeState.startLayout.height
+          },
+          popoverScale,
+          sizeMultiplier,
+          resizeState.direction
+        );
+
+        return {
+          ...prev,
+          [resizeState.key]: nextLayout
+        };
+      });
+    };
+
+    const handleWindowMouseUp = () => {
+      popoverResizeRef.current = null;
+      setResizingPopoverKey(null);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [popoverScale, resizingPopoverKey]);
 
   useEffect(() => {
     if (projectedPilotMarkers.length === 0) {
@@ -1096,24 +1467,31 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
       onMouseLeave={() => {
         dragStateRef.current = null;
         popoverDragRef.current = null;
-        setIsDraggingPopover(false);
+        popoverResizeRef.current = null;
+        setDraggingPopoverKey(null);
+        setResizingPopoverKey(null);
       }}
       onClick={() => {
         const wasPopoverDragging = Boolean(popoverCloseBlockedRef.current);
         const wasDragging = Boolean(dragStateRef.current?.moved);
 
-        if (!selectedMarkerId && !wasDragging && !wasPopoverDragging) {
+        if (selectedPilotMarkerIds.length === 0 && selectedCameraMarkerIds.length === 0 && !wasDragging && !wasPopoverDragging) {
           setHoveredMarkerId(null);
+          setHoveredCameraMarkerId(null);
         } else if (!wasDragging && !wasPopoverDragging) {
-          setSelectedMarkerId(null);
+          setSelectedPilotMarkerIds([]);
+          setSelectedCameraMarkerIds([]);
+          setSelectedPopoverLayouts({});
         }
 
         dragStateRef.current = null;
         popoverDragRef.current = null;
-        setIsDraggingPopover(false);
+        popoverResizeRef.current = null;
+        setDraggingPopoverKey(null);
+        setResizingPopoverKey(null);
         popoverCloseBlockedRef.current = false;
       }}
-      style={{ cursor: dragStateRef.current || isDraggingPopover ? 'grabbing' : 'grab' }}
+      style={{ cursor: dragStateRef.current || draggingPopoverKey ? 'grabbing' : resizingPopoverKey ? 'nwse-resize' : 'grab' }}
     >
       <div className="absolute inset-0 opacity-70" style={{
         backgroundImage: 'radial-gradient(circle at top left, rgba(255,69,0,0.18), transparent 35%), radial-gradient(circle at bottom right, rgba(234,179,8,0.14), transparent 30%)'
@@ -1177,35 +1555,104 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
             marker={marker}
             bounds={normalized.bounds}
             now={markerNow}
-            hidden={selectedMarkerId === marker.id}
+            hidden={selectedPilotMarkerIds.includes(marker.id)}
             onHover={(nextMarker) => {
-              if (!selectedMarkerId) {
+              if (!selectedPilotMarkerIds.includes(nextMarker.id)) {
                 setHoveredMarkerId(nextMarker.id);
               }
             }}
             onBlur={() => {
-              if (!selectedMarkerId) {
+              if (!selectedPilotMarkerIds.includes(marker.id)) {
                 setHoveredMarkerId((current) => (current === marker.id ? null : current));
               }
             }}
             onClick={(nextMarker) => {
-              setSelectedMarkerId((current) => (current === nextMarker.id ? null : nextMarker.id));
+              setSelectedPilotMarkerIds((current) => (
+                current.includes(nextMarker.id)
+                  ? current.filter((id) => id !== nextMarker.id)
+                  : [...current, nextMarker.id]
+              ));
               setHoveredMarkerId(null);
-              setSelectedPopoverLayout(null);
             }}
           />
         ))}
-        {activeMarker && (
+        {projectedCameraMarkers.map((marker) => (
+          <CameraPositionMarker
+            key={marker.id}
+            marker={marker}
+            hidden={selectedCameraMarkerIds.includes(marker.id)}
+            onHover={(nextMarker) => {
+              if (!selectedCameraMarkerIds.includes(nextMarker.id)) {
+                setHoveredCameraMarkerId(nextMarker.id);
+              }
+            }}
+            onBlur={() => {
+              if (!selectedCameraMarkerIds.includes(marker.id)) {
+                setHoveredCameraMarkerId((current) => (current === marker.id ? null : current));
+              }
+            }}
+            onClick={(nextMarker) => {
+              setSelectedCameraMarkerIds((current) => (
+                current.includes(nextMarker.id)
+                  ? current.filter((id) => id !== nextMarker.id)
+                  : [...current, nextMarker.id]
+              ));
+              setHoveredCameraMarkerId(null);
+            }}
+          />
+        ))}
+        {hoveredMarker && !selectedPilotMarkerIds.includes(hoveredMarker.id) && (
           <PilotMarkerPopover
-            marker={activeMarker}
-            anchorMarker={selectedMarker || activeMarker}
-            layoutOverride={selectedMarker ? selectedPopoverLayout : null}
-            locked={Boolean(selectedMarker)}
-            dragging={isDraggingPopover}
+            marker={hoveredMarker}
+            anchorMarker={hoveredMarker}
+            locked={false}
+            dragging={false}
             scale={popoverScale}
-            onDragStart={handlePopoverDragStart}
           />
         )}
+        {hoveredCameraMarker && !selectedCameraMarkerIds.includes(hoveredCameraMarker.id) && (
+          <CameraMarkerPopover
+            marker={hoveredCameraMarker}
+            anchorMarker={hoveredCameraMarker}
+            locked={false}
+            dragging={false}
+            scale={popoverScale}
+          />
+        )}
+        {selectedPilotMarkers.map((marker) => {
+          const popoverKey = getPopoverKey('pilot', marker.id);
+
+          return (
+            <PilotMarkerPopover
+              key={popoverKey}
+              marker={marker}
+              anchorMarker={marker}
+              layoutOverride={selectedPopoverLayouts[popoverKey] || null}
+              locked
+              dragging={draggingPopoverKey === popoverKey}
+              scale={popoverScale}
+              onDragStart={(event) => handlePopoverDragStart(event, marker, 'pilot')}
+            />
+          );
+        })}
+        {selectedCameraMarkers.map((marker) => {
+          const popoverKey = getPopoverKey('camera', marker.id);
+
+          return (
+            <CameraMarkerPopover
+              key={popoverKey}
+              marker={marker}
+              anchorMarker={marker}
+              layoutOverride={selectedPopoverLayouts[popoverKey] || null}
+              locked
+              dragging={draggingPopoverKey === popoverKey}
+              resizing={resizingPopoverKey === popoverKey}
+              scale={popoverScale}
+              onDragStart={(event) => handlePopoverDragStart(event, marker, 'camera')}
+              onResizeStart={(event) => handlePopoverResizeStart(event, marker, 'camera')}
+            />
+          );
+        })}
       </svg>
     </div>
   );

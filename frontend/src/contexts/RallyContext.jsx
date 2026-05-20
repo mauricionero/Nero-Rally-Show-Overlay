@@ -28,6 +28,7 @@ import { arrivalTimeToTotal } from '../utils/timeConversion.js';
 import { getLapRaceStoredTotalTimeSeconds, getLapTimingStartTime } from '../utils/rallyHelpers.js';
 import { compressMapPlacemarkForTransport } from '../utils/mapPlacemarkCompression.js';
 import { normalizeLatLongString, parseLatLongString } from '../utils/pilotMapMarkers.js';
+import { resolveCameraPlacemarkLink } from '../utils/cameraPlacemarkLink.js';
 import { getPilotTelemetryForId, normalizePilotId } from '../utils/pilotIdentity.js';
 import {
   assignPilotTelemetryFields,
@@ -5777,21 +5778,42 @@ export const RallyProvider = ({ children }) => {
     setPilots(prev => prev.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
   };
 
+  const normalizeCameraEntity = useCallback((camera = {}, fallbackCamera = {}) => {
+    const normalizedName = String(camera?.name || fallbackCamera?.name || '').trim();
+    const normalizedStreamUrl = String(camera?.streamUrl || fallbackCamera?.streamUrl || '').trim();
+    const cameraPlacemarkLink = resolveCameraPlacemarkLink({
+      mapPlacemarkId: camera?.mapPlacemarkId ?? fallbackCamera?.mapPlacemarkId ?? '',
+      latLong: camera?.latLong ?? fallbackCamera?.latLong ?? '',
+      mapPlacemarks
+    });
+
+    return {
+      ...camera,
+      name: normalizedName,
+      streamUrl: normalizedStreamUrl,
+      mapPlacemarkId: cameraPlacemarkLink.mapPlacemarkId,
+      latLong: cameraPlacemarkLink.latLong,
+      closestPlacemarkPoint: cameraPlacemarkLink.closestPlacemarkPoint
+    };
+  }, [mapPlacemarks]);
+
   // Camera CRUD operations
-  const addCamera = (camera) => {
-    const newCamera = {
+  const addCamera = useCallback((camera) => {
+    const newCamera = normalizeCameraEntity({
       id: createEntityId('cam'),
-      name: camera.name,
-      streamUrl: camera.streamUrl || '',
       isActive: true,
       ...camera
-    };
+    });
     setCameras(prev => [...prev, newCamera]);
-  };
+  }, [normalizeCameraEntity]);
 
-  const updateCamera = (id, updates) => {
-    setCameras(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-  };
+  const updateCamera = useCallback((id, updates) => {
+    setCameras(prev => prev.map((camera) => (
+      camera.id === id
+        ? normalizeCameraEntity({ ...camera, ...updates }, camera)
+        : camera
+    )));
+  }, [normalizeCameraEntity]);
 
   const deleteCamera = (id) => {
     setCameras(prev => prev.filter(c => c.id !== id));

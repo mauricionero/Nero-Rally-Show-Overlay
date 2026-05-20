@@ -373,6 +373,8 @@ streams:
   additionalCameras: "Câmeras Adicionais"
   addCamera: "Adicionar Câmera"
   cameraName: "Nome da Câmera"
+  mapPlacemark: "Placemark do Mapa"
+  latLong: "Lat / Long"
   noCameras: "Nenhuma câmera adicional. Adicione câmeras para usar no overlay."
   volume: "Volume"
   solo: "Solo"
@@ -385,6 +387,7 @@ streams:
   placeholder:
     cameraName: "Câmera de Chegada"
     streamUrl: "https://vdo.ninja/..."
+    latLong: "-23.550520, -46.633308"
 
 # ===========================================
 # ABA CONFIG

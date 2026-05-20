@@ -18,6 +18,7 @@ import { loadSceneConfig, saveSceneConfig } from '../../utils/sceneConfigStorage
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
 import { buildStageMapFeeds } from '../../utils/feedOptions.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { buildCameraMapMarkers } from '../../utils/cameraMapMarkers.js';
 import { formatClockFromDate, formatDurationSeconds } from '../../utils/timeFormat.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
@@ -536,10 +537,15 @@ function PilotMonitorCard({
   );
 }
 
-function MonitorMapCard({ mapFeed, pilotMarkers = [], t }) {
+function MonitorMapCard({ mapFeed, pilotMarkers = [], cameraMarkers = [], t }) {
   return (
     <div className="relative min-h-0 h-full overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,14,18,0.96),rgba(8,8,10,0.96))] shadow-[0_10px_24px_rgba(0,0,0,0.30)]">
-      <PlacemarkMapFeed placemark={mapFeed} pilotMarkers={pilotMarkers} className="h-full w-full" />
+      <PlacemarkMapFeed
+        placemark={mapFeed}
+        pilotMarkers={pilotMarkers}
+        cameraMarkers={cameraMarkers}
+        className="h-full w-full"
+      />
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/80 to-transparent px-3 pb-1.5 pt-6">
         <div className="flex items-end justify-between gap-3">
@@ -615,6 +621,9 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
   const isLapRace = isLapTimingStageType(currentStage?.type);
   const activeStageMaps = useMemo(() => buildStageMapFeeds({ stages, mapPlacemarks }), [mapPlacemarks, stages]);
   const pilotMapMarkers = useMemo(() => buildPilotMapMarkers(pilots, categories, pilotTelemetryByPilotId), [categories, pilotTelemetryByPilotId, pilots]);
+  const getCameraMapMarkers = useCallback((placemarkId) => (
+    buildCameraMapMarkers(cameras, placemarkId)
+  ), [cameras]);
   const currentStagePlacemark = useMemo(() => (
     mapPlacemarks.find((placemark) => placemark.id === currentStage?.mapPlacemarkId) || null
   ), [currentStage?.mapPlacemarkId, mapPlacemarks]);
@@ -1088,6 +1097,7 @@ export default function Scene5Monitor({ hideStreams = false, hideTelemetry = fal
                           key={item.value}
                           mapFeed={item}
                           pilotMarkers={pilotMapMarkers}
+                          cameraMarkers={getCameraMapMarkers(item.placemarkId)}
                           t={t}
                         />
                       );

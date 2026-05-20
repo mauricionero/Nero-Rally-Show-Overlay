@@ -371,6 +371,8 @@ streams:
   additionalCameras: "Additional Cameras"
   addCamera: "Add Camera"
   cameraName: "Camera Name"
+  mapPlacemark: "Map Placemark"
+  latLong: "Lat / Long"
   noCameras: "No additional cameras. Add cameras to use in the overlay."
   volume: "Volume"
   solo: "Solo"
@@ -383,6 +385,7 @@ streams:
   placeholder:
     cameraName: "Finish Line Camera"
     streamUrl: "https://vdo.ninja/..."
+    latLong: "-23.550520, -46.633308"
 
 # ===========================================
 # CONFIG TAB

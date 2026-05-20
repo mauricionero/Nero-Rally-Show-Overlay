@@ -46,6 +46,7 @@ export default function StreamsTab({ hideStreams = false }) {
     pilots,
     categories,
     cameras,
+    mapPlacemarks,
     externalMedia,
     addExternalMedia,
     updateExternalMedia,
@@ -62,11 +63,23 @@ export default function StreamsTab({ hideStreams = false }) {
     toggleCameraActive
   } = useRally();
 
-  const [newCamera, setNewCamera] = useState({ name: '', streamUrl: '' });
+  const [newCamera, setNewCamera] = useState({ name: '', streamUrl: '', mapPlacemarkId: '', latLong: '' });
   const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
   const [editingCamera, setEditingCamera] = useState(null);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
+  const sortedMapPlacemarks = useMemo(() => (
+    [...mapPlacemarks].sort((left, right) => {
+      const leftPoints = (left?.coordinateGroups || []).reduce((total, group) => total + (group?.length || 0), 0);
+      const rightPoints = (right?.coordinateGroups || []).reduce((total, group) => total + (group?.length || 0), 0);
+
+      if (leftPoints !== rightPoints) {
+        return rightPoints - leftPoints;
+      }
+
+      return String(left?.name || '').localeCompare(String(right?.name || ''));
+    })
+  ), [mapPlacemarks]);
   const mediaOptionByValue = useMemo(() => (
     new Map(EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => [option.value, option]))
   ), []);
@@ -77,7 +90,7 @@ export default function StreamsTab({ hideStreams = false }) {
       return;
     }
     addCamera(newCamera);
-    setNewCamera({ name: '', streamUrl: '' });
+    setNewCamera({ name: '', streamUrl: '', mapPlacemarkId: '', latLong: '' });
     toast.success('Camera added successfully');
   };
 
@@ -205,6 +218,41 @@ export default function StreamsTab({ hideStreams = false }) {
                             <Input
                               value={editingCamera.streamUrl}
                               onChange={(e) => setEditingCamera({ ...editingCamera, streamUrl: e.target.value })}
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('streams.mapPlacemark')}</Label>
+                            <Select
+                              value={editingCamera.mapPlacemarkId || 'none'}
+                              onValueChange={(value) => setEditingCamera({
+                                ...editingCamera,
+                                mapPlacemarkId: value === 'none' ? '' : value
+                              })}
+                            >
+                              <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                <span className="truncate">
+                                  {editingCamera.mapPlacemarkId
+                                    ? (sortedMapPlacemarks.find((placemark) => placemark.id === editingCamera.mapPlacemarkId)?.name || t('theRace.noMapPlacemark'))
+                                    : t('theRace.noMapPlacemark')}
+                                </span>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                                {sortedMapPlacemarks.map((placemark) => (
+                                  <SelectItem key={placemark.id} value={placemark.id}>
+                                    {placemark.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('streams.latLong')}</Label>
+                            <Input
+                              value={editingCamera.latLong || ''}
+                              onChange={(e) => setEditingCamera({ ...editingCamera, latLong: e.target.value })}
+                              placeholder={t('streams.placeholder.latLong')}
                               className="bg-[#09090B] border-zinc-700 text-white"
                             />
                           </div>
@@ -413,6 +461,42 @@ export default function StreamsTab({ hideStreams = false }) {
                 placeholder={t('streams.placeholder.streamUrl')}
                 className="bg-[#18181B] border-zinc-700 text-white"
                 data-testid="input-camera-stream"
+              />
+            </div>
+            <div className="flex-1">
+              <Label className="text-white text-xs">{t('streams.mapPlacemark')}</Label>
+              <Select
+                value={newCamera.mapPlacemarkId || 'none'}
+                onValueChange={(value) => setNewCamera({
+                  ...newCamera,
+                  mapPlacemarkId: value === 'none' ? '' : value
+                })}
+              >
+                <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white">
+                  <span className="truncate">
+                    {newCamera.mapPlacemarkId
+                      ? (sortedMapPlacemarks.find((placemark) => placemark.id === newCamera.mapPlacemarkId)?.name || t('theRace.noMapPlacemark'))
+                      : t('theRace.noMapPlacemark')}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                  {sortedMapPlacemarks.map((placemark) => (
+                    <SelectItem key={placemark.id} value={placemark.id}>
+                      {placemark.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label className="text-white text-xs">{t('streams.latLong')}</Label>
+              <Input
+                value={newCamera.latLong}
+                onChange={(e) => setNewCamera({ ...newCamera, latLong: e.target.value })}
+                placeholder={t('streams.placeholder.latLong')}
+                className="bg-[#18181B] border-zinc-700 text-white"
+                data-testid="input-camera-lat-long"
               />
             </div>
             <div className="flex items-end">

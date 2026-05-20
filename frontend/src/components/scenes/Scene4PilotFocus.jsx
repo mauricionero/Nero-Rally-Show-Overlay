@@ -24,6 +24,7 @@ import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatClockFromDate, formatDurationMs } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { buildCameraMapMarkers } from '../../utils/cameraMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
 import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
@@ -401,6 +402,9 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
   ), [pilotPlaybackById, pilots]);
   const availableFeeds = useMemo(() => buildFeedOptions({ pilots: overlayPilots, cameras, externalMedia, stages, mapPlacemarks }), [overlayPilots, cameras, externalMedia, stages, mapPlacemarks]);
   const selectedMainFeed = selectedMainFeedValue === 'none' ? null : findFeedByValue(availableFeeds, selectedMainFeedValue);
+  const selectedMainFeedCameraMarkers = useMemo(() => (
+    selectedMainFeed?.type === 'stage-map' ? buildCameraMapMarkers(cameras, selectedMainFeed.placemarkId) : []
+  ), [cameras, selectedMainFeed]);
   const selectedMainPilot = selectedMainFeed?.type === 'pilot'
     ? pilots.find((pilot) => pilot.id === selectedMainFeed.id)
     : null;
@@ -672,7 +676,12 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
               </div>
             ) : selectedMainFeed?.type === 'stage-map' ? (
               <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-                <PlacemarkMapFeed placemark={selectedMainFeed} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+                <PlacemarkMapFeed
+                  placemark={selectedMainFeed}
+                  pilotMarkers={pilotMapMarkers}
+                  cameraMarkers={selectedMainFeedCameraMarkers}
+                  className="w-full h-full"
+                />
 
                 <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
                   <MapIcon className="w-4 h-4 text-[#FF4500]" />
