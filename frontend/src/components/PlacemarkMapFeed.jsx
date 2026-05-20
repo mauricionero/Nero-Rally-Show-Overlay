@@ -863,6 +863,7 @@ export function PlacemarkWeatherNowNext({
 }
 
 export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' }) {
+  const svgRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [markerNow, setMarkerNow] = useState(() => Date.now());
@@ -960,8 +961,12 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
         popoverCloseBlockedRef.current = true;
       }
 
-      const nextX = popoverDragRef.current.startLayoutX + (deltaX / zoom);
-      const nextY = popoverDragRef.current.startLayoutY + (deltaY / zoom);
+      const svgRect = svgRef.current?.getBoundingClientRect();
+      const renderedMapSize = svgRect ? Math.min(svgRect.width, svgRect.height) : 0;
+      const unitsPerPixelX = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const unitsPerPixelY = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const nextX = popoverDragRef.current.startLayoutX + (deltaX * unitsPerPixelX);
+      const nextY = popoverDragRef.current.startLayoutY + (deltaY * unitsPerPixelY);
 
       setSelectedPopoverLayout({
         x: nextX,
@@ -1082,6 +1087,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
         backgroundImage: 'radial-gradient(circle at top left, rgba(255,69,0,0.18), transparent 35%), radial-gradient(circle at bottom right, rgba(234,179,8,0.14), transparent 30%)'
       }} />
       <svg
+        ref={svgRef}
         viewBox="0 0 1000 1000"
         className="absolute inset-0 w-full h-full transition-transform duration-150 ease-out"
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '50% 50%' }}
