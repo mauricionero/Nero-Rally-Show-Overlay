@@ -198,6 +198,13 @@ theRace:
   noMapPlacemark: "No Placemark"
   scheduledStart: "Scheduled Start"
   endTime: "End Time"
+  startTime: "Start"
+  adjustStartTimes: "Adjust Start Times"
+  stageOffsets: "Stage Offsets"
+  stageOffsetsHint: "Define the start minute for each crew in this stage. Leaving the field empty will use the crew's previous start interval."
+  effectiveOffset: "Effective offset"
+  inheritedOffset: "Inherited"
+  offset: "Offset"
   lapRaceTotalTimeMode: "Lap Race Total Time"
   noStages: "No stages registered. Add your first stage above."
   stageTypes:
@@ -246,6 +253,7 @@ times:
   jumpStart: "Jump start"
   jumpStartTooltip: "Real time before ideal time (penalty)."
   avg: "AVG"
+  best: "BEST"
   avgAlertWarning: "Above AVG + DEV"
   avgAlertDanger: "Above AVG + 2×DEV"
   avgThreshold: "Threshold"
@@ -363,6 +371,8 @@ streams:
   additionalCameras: "Additional Cameras"
   addCamera: "Add Camera"
   cameraName: "Camera Name"
+  mapPlacemark: "Map Placemark"
+  latLong: "Lat / Long"
   noCameras: "No additional cameras. Add cameras to use in the overlay."
   volume: "Volume"
   solo: "Solo"
@@ -375,6 +385,7 @@ streams:
   placeholder:
     cameraName: "Finish Line Camera"
     streamUrl: "https://vdo.ninja/..."
+    latLong: "-23.550520, -46.633308"
 
 # ===========================================
 # CONFIG TAB

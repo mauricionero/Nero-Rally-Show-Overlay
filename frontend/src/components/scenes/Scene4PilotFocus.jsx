@@ -24,6 +24,7 @@ import { compareStagesBySchedule } from '../../utils/stageSchedule.js';
 import { useSecondAlignedClock } from '../../hooks/useSecondAlignedClock.js';
 import { formatClockFromDate, formatDurationMs } from '../../utils/timeFormat.js';
 import { buildPilotMapMarkers } from '../../utils/pilotMapMarkers.js';
+import { buildCameraMapMarkers } from '../../utils/cameraMapMarkers.js';
 import { getPilotTelemetryForId } from '../../utils/pilotIdentity.js';
 import { buildPilotOverlayPlaybackMap, resolvePilotOverlayPlayback } from '../../utils/overlayReplayResolver.js';
 import { buildReplayStageScheduleMap } from '../../utils/replaySchedule.js';
@@ -401,6 +402,9 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
   ), [pilotPlaybackById, pilots]);
   const availableFeeds = useMemo(() => buildFeedOptions({ pilots: overlayPilots, cameras, externalMedia, stages, mapPlacemarks }), [overlayPilots, cameras, externalMedia, stages, mapPlacemarks]);
   const selectedMainFeed = selectedMainFeedValue === 'none' ? null : findFeedByValue(availableFeeds, selectedMainFeedValue);
+  const selectedMainFeedCameraMarkers = useMemo(() => (
+    selectedMainFeed?.type === 'stage-map' ? buildCameraMapMarkers(cameras, selectedMainFeed.placemarkId) : []
+  ), [cameras, selectedMainFeed]);
   const selectedMainPilot = selectedMainFeed?.type === 'pilot'
     ? pilots.find((pilot) => pilot.id === selectedMainFeed.id)
     : null;
@@ -561,6 +565,11 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
+                {focusPilot.carNumber && (
+                  <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-sm text-sm font-black text-white bg-[#FF4500] flex-shrink-0" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {focusPilot.carNumber}
+                  </span>
+                )}
                 <h2 className="text-3xl font-bold uppercase text-white truncate" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
                   {focusPilot.name}
                 </h2>
@@ -581,11 +590,6 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
                     tooltipTitle={t('times.jumpStart')}
                     tooltipText={t('times.jumpStartTooltip')}
                   />
-                )}
-                {focusPilot.carNumber && (
-                  <span className="inline-block bg-[#FF4500] text-white text-sm font-bold px-2 py-0.5 rounded">
-                    #{focusPilot.carNumber}
-                  </span>
                 )}
                 {focusPilot.isActive && (
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#FF4500] rounded-full">
@@ -672,7 +676,12 @@ export default function Scene4PilotFocus({ hideStreams = false, hideTelemetry = 
               </div>
             ) : selectedMainFeed?.type === 'stage-map' ? (
               <div className="h-full bg-black rounded overflow-hidden border-2 border-[#FF4500] relative">
-                <PlacemarkMapFeed placemark={selectedMainFeed} pilotMarkers={pilotMapMarkers} className="w-full h-full" />
+                <PlacemarkMapFeed
+                  placemark={selectedMainFeed}
+                  pilotMarkers={pilotMapMarkers}
+                  cameraMarkers={selectedMainFeedCameraMarkers}
+                  className="w-full h-full"
+                />
 
                 <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm px-3 py-2 rounded border border-[#FF4500] flex items-center gap-2">
                   <MapIcon className="w-4 h-4 text-[#FF4500]" />

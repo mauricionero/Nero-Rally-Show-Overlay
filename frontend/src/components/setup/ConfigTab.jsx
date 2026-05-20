@@ -5,11 +5,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
 import { toast } from 'sonner';
-import { Upload, Download, Image, Globe, Trash2, Palette, Timer } from 'lucide-react';
+import { Upload, Download, Image, Trash2, Timer } from 'lucide-react';
 import { LanguageSelector } from '../LanguageSelector.jsx';
-import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 import { getResolvedBrandingLogoUrl } from '../../utils/branding.js';
 import { resolvePublicAssetUrl } from '../../utils/overlayUrls.js';
 import { isLapRaceStageType, isSpecialStageType } from '../../utils/stageTypes.js';
@@ -23,28 +21,20 @@ export default function ConfigTab() {
     cameras,
     timeDecimals,
     setTimeDecimals,
-    chromaKey,
-    setChromaKey,
     logoUrl,
     setLogoUrl,
     transitionImageUrl,
     setTransitionImageUrl,
-    externalMedia,
-    addExternalMedia,
-    updateExternalMedia,
-    deleteExternalMedia,
     exportData,
     importData,
     clearAllData,
   } = useRallyConfig();
 
   const fileInputRef = useRef(null);
-  const [customChroma, setCustomChroma] = useState('#000000');
   const [logoUrlDraft, setLogoUrlDraft] = useState(logoUrl || '');
   const [transitionImageUrlDraft, setTransitionImageUrlDraft] = useState(transitionImageUrl || '');
   const [timeDecimalsDraft, setTimeDecimalsDraft] = useState(String(timeDecimals ?? 0));
 
-  const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
   useEffect(() => {
     setLogoUrlDraft(logoUrl || '');
   }, [logoUrl]);
@@ -57,11 +47,6 @@ export default function ConfigTab() {
     setTimeDecimalsDraft(String(timeDecimals ?? 0));
   }, [timeDecimals]);
 
-  const CHROMA_PRESETS = useMemo(() => ([
-    { name: t('config.black'), value: '#000000', label: 'K' },
-    { name: t('config.greenScreen'), value: '#00B140', label: 'G' },
-    { name: t('config.blueScreen'), value: '#0047BB', label: 'B' }
-  ]), [t]);
   const countedStages = useMemo(() => (
     stages.filter((stage) => isSpecialStageType(stage.type) || isLapRaceStageType(stage.type))
   ), [stages]);
@@ -69,37 +54,12 @@ export default function ConfigTab() {
     pilots.filter((pilot) => pilot.streamUrl).length
     + cameras.filter((camera) => camera.streamUrl).length
   ), [cameras, pilots]);
-  const mediaOptionByValue = useMemo(() => (
-    new Map(EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => [option.value, option]))
-  ), []);
   const resolvedLogoUrl = useMemo(() => getResolvedBrandingLogoUrl(logoUrl), [logoUrl]);
   const resolvedTransitionImageUrl = useMemo(() => (
     resolvePublicAssetUrl(
       (typeof transitionImageUrl === 'string' && transitionImageUrl.trim()) || '/transition-default.png'
     )
   ), [transitionImageUrl]);
-
-  const renderMediaIconValue = (iconValue) => {
-    const option = mediaOptionByValue.get(iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
-    const Icon = getExternalMediaIconComponent(option.value);
-
-    return (
-      <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-[#FF4500]" />
-        <span>{option.label}</span>
-      </div>
-    );
-  };
-
-  const handleAddMedia = () => {
-    if (!newMedia.name.trim() || !newMedia.url.trim()) {
-      toast.error(t('config.mediaName') + ' & ' + t('config.mediaUrl') + ' are required');
-      return;
-    }
-    addExternalMedia(newMedia);
-    setNewMedia({ name: '', url: '', icon: 'Map' });
-    toast.success('Media added successfully');
-  };
 
   const handleExport = () => {
     const data = exportData();
@@ -251,97 +211,6 @@ export default function ConfigTab() {
         </CardContent>
       </Card>
 
-      {/* External Media list (replaces Google Maps section) */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            <Globe className="w-5 h-5" />
-            {t('config.externalMedia')}
-          </CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.externalMediaDesc')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {externalMedia.map((m) => (
-              <div key={m.id} className="flex items-center gap-2">
-                <Input
-                  value={m.name}
-                  onChange={(e) => updateExternalMedia(m.id, { ...m, name: e.target.value })}
-                  placeholder={t('config.mediaName')}
-                  className="bg-[#09090B] border-zinc-700 text-white text-sm"
-                />
-                <Input
-                  value={m.url}
-                  onChange={(e) => updateExternalMedia(m.id, { ...m, url: e.target.value })}
-                  placeholder={t('config.mediaUrl')}
-                  className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
-                />
-                <Select
-                  value={m.icon || 'Map'}
-                  onValueChange={(value) => updateExternalMedia(m.id, { ...m, icon: value })}
-                >
-                  <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
-                    {renderMediaIconValue(m.icon || 'Map')}
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {renderMediaIconValue(option.value)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => deleteExternalMedia(m.id)}
-                  className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-
-            <div className="flex items-center gap-2">
-              <Input
-                value={newMedia.name}
-                onChange={(e) => setNewMedia({ ...newMedia, name: e.target.value })}
-                placeholder={t('config.mediaName')}
-                className="bg-[#09090B] border-zinc-700 text-white text-sm"
-              />
-              <Input
-                value={newMedia.url}
-                onChange={(e) => setNewMedia({ ...newMedia, url: e.target.value })}
-                placeholder={t('config.mediaUrl')}
-                className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
-              />
-              <Select
-                value={newMedia.icon}
-                onValueChange={(value) => setNewMedia({ ...newMedia, icon: value })}
-              >
-                <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
-                  {renderMediaIconValue(newMedia.icon)}
-                </SelectTrigger>
-                <SelectContent>
-                  {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {renderMediaIconValue(option.value)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                onClick={handleAddMedia}
-                className="bg-[#FF4500] hover:bg-[#FF4500]/90"
-                data-testid="button-add-media"
-              >
-                {t('config.addMedia')}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Data Management */}
       <Card className="bg-[#18181B] border-zinc-800">
         <CardHeader>
@@ -390,53 +259,6 @@ export default function ConfigTab() {
             >
               {t('config.clearAllData')}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Chroma Key */}
-      <Card className="bg-[#18181B] border-zinc-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-            <Palette className="w-5 h-5" />
-            {t('config.backgroundChromaKey')}
-          </CardTitle>
-          <CardDescription className="text-zinc-400">{t('config.selectBackground')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3">
-            {CHROMA_PRESETS.map((preset) => (
-              <button
-                key={preset.value}
-                onClick={() => setChromaKey(preset.value)}
-                className={`px-4 py-2 rounded border-2 transition-all hover:scale-105 ${
-                  chromaKey === preset.value ? 'border-[#FF4500]' : 'border-zinc-700'
-                }`}
-                style={{ backgroundColor: preset.value }}
-                data-testid={`chroma-${preset.label.toLowerCase()}-button`}
-              >
-                <span className="text-white font-bold" style={{ textShadow: '0 0 4px rgba(0,0,0,0.8)' }}>
-                  {preset.name}
-                </span>
-              </button>
-            ))}
-            <div className="flex gap-2 items-center">
-              <Input
-                type="color"
-                value={customChroma}
-                onChange={(e) => setCustomChroma(e.target.value)}
-                className="w-16 h-10 cursor-pointer"
-                data-testid="custom-chroma-picker"
-              />
-              <Button
-                onClick={() => setChromaKey(customChroma)}
-                variant="outline"
-                className="border-zinc-700 text-white"
-                data-testid="apply-custom-chroma-button"
-              >
-                {t('config.applyCustom')}
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>

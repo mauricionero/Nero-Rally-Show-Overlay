@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRally, useRallyMeta, useRallyTiming, useRallyWs } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog.jsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { TimeInput } from '../TimeInput.jsx';
@@ -16,15 +17,16 @@ import DebugIdText from './DebugIdText.jsx';
 import { CarBrandBadge } from '../CarBrandBadge.jsx';
 import { arrivalTimeToTotal, totalTimeToArrival } from '../../utils/timeConversion';
 import { compareStagesBySchedule, formatStageScheduleRange } from '../../utils/stageSchedule.js';
-import { getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
+import { addMinutesToClockTime, getPilotEffectiveStageOffsetMinutes, getPilotScheduledEndTime, getPilotScheduledStartTime } from '../../utils/pilotSchedule.js';
 import { getCategoryDisplayOrder } from '../../utils/displayOrder.js';
-import { formatClockFromDate, formatMsAsShortTime, getTimePlaceholder } from '../../utils/timeFormat.js';
+import { formatClockFromDate, formatDurationMs, getTimePlaceholder } from '../../utils/timeFormat.js';
 import { getLapRaceVisibleLapCount, getLapRaceStageMetaParts } from '../../utils/rallyHelpers.js';
 import { calculateAverageAndDeviation, parseDurationStringToMs } from '../../utils/timingStats.js';
 import { TriangleAlert, X, Clock, Clock3, Flag, RotateCcw, Car, Timer, ChevronDown, Lock, Unlock, Check, CheckCheck, CircleX, Download } from 'lucide-react';
 import LapRaceStageCard from './LapRaceStageCard.jsx';
 import RollingClockInput from '../RollingClockInput.jsx';
 import {
+  getStageTitle,
   getStageNumberLabel,
   isLapTimingStageType,
   isSpecialStageType,
@@ -185,6 +187,10 @@ const getEffectiveIdealStartTime = (stage, pilot, storedValue = '') => (
   storedValue || getPilotScheduledStartTime(stage, pilot)
 );
 
+const getDisplayedIdealStartTime = (idealStartTimeValue, retired) => (
+  retired ? '' : (idealStartTimeValue || '')
+);
+
 const parseClockTimeToSeconds = (value) => {
   if (!value) return null;
   const parts = value.split(':');
@@ -218,8 +224,8 @@ const getPilotStartOrderForTimes = (pilot) => {
   return numericValue;
 };
 
-const getPilotOffsetMinutesForTimes = (pilot) => {
-  const numericValue = Number(pilot?.timeOffsetMinutes);
+const getPilotOffsetMinutesForTimes = (stage, pilot) => {
+  const numericValue = getPilotEffectiveStageOffsetMinutes(stage, pilot);
 
   if (!Number.isFinite(numericValue)) {
     return null;
@@ -228,9 +234,45 @@ const getPilotOffsetMinutesForTimes = (pilot) => {
   return numericValue;
 };
 
-const comparePilotsForTimes = (a, b, categoryOrderById) => {
-  const offsetA = getPilotOffsetMinutesForTimes(a);
-  const offsetB = getPilotOffsetMinutesForTimes(b);
+const formatOffsetMinutesLabel = (offsetMinutes) => {
+  const numericValue = Number(offsetMinutes);
+
+  if (!Number.isFinite(numericValue)) {
+    return '+0:00';
+  }
+
+  const absoluteMinutes = Math.abs(Math.trunc(numericValue));
+  return `+${absoluteMinutes}:00`;
+};
+
+const formatOffsetMinutes = (value) => {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return '0m';
+  }
+
+  return `${numericValue >= 0 ? '+' : '-'}${Math.abs(numericValue)}m`;
+};
+
+const normalizeStageOffsetInput = (value) => {
+  const trimmedValue = String(value ?? '').trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const numericValue = Number(trimmedValue);
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return Math.max(0, Math.trunc(numericValue));
+};
+
+const comparePilotsForTimes = (a, b, categoryOrderById, stage = null) => {
+  const offsetA = getPilotOffsetMinutesForTimes(stage, a);
+  const offsetB = getPilotOffsetMinutesForTimes(stage, b);
 
   if (offsetA !== null && offsetB !== null && offsetA !== offsetB) {
     return offsetA - offsetB;
@@ -390,8 +432,10 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       const sosDelivery = getSosDeliveryStatus(pilot.id, stage.id);
       const effectiveSosStatus = getEffectiveSosStatus(sosLevel, sosDelivery);
       const totalMs = parseTotalTimeToMs(totalTime);
-      const idealSeconds = parseClockTimeToSeconds(idealStartTimeValue);
+      const displayIdealStartTimeValue = getDisplayedIdealStartTime(idealStartTimeValue, retired);
+      const idealSeconds = parseClockTimeToSeconds(displayIdealStartTimeValue);
       const realSeconds = parseClockTimeToSeconds(realStartTimeValue);
+      const idealStartOffsetLabel = formatOffsetMinutesLabel(getPilotOffsetMinutesForTimes(stage, pilot));
       const lineSync = lineSyncResults?.[`${pilot.id}:${stage.id}`] || null;
 
       return {
@@ -416,6 +460,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
         isJumpStart: Number.isFinite(idealSeconds) && Number.isFinite(realSeconds)
           ? realSeconds < idealSeconds
           : false,
+        displayIdealStartTimeValue,
+        idealStartOffsetLabel,
         lineSync
       };
     })
@@ -463,6 +509,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
             category: entry.category,
             avg: null,
             deviation: null,
+            best: null,
             order: categoryOrderById.get(entry.category.id) ?? Number.MAX_SAFE_INTEGER
           };
         }
@@ -473,6 +520,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
           category: entry.category,
           avg,
           deviation,
+          best: Math.min(...values),
           order: categoryOrderById.get(entry.category.id) ?? Number.MAX_SAFE_INTEGER
         };
       })
@@ -649,19 +697,21 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
       </AlertDialog>
       {categoryStats.length > 0 && (
         <div className="flex items-center gap-3 bg-[#09090B] border border-zinc-700 rounded px-3 py-2">
-          <div className="text-xs font-bold text-white uppercase">{t('times.avg')}</div>
           <div className="flex flex-wrap gap-2">
             {categoryStats.map((stat) => (
               <div
                 key={stat.category.id}
-                className="text-xs text-zinc-200 bg-[#18181B] border border-zinc-700 rounded px-2 py-1"
+                className="text-xs text-zinc-300 bg-[#18181B] border border-zinc-700 rounded px-2 py-1"
               >
-                <span className="font-bold" style={{ color: stat.category.color }}>
+                <div className="font-bold" style={{ color: stat.category.color }}>
                   {stat.category.name}
-                </span>
-                <span className="ml-2 font-mono">
-                  {formatMsAsShortTime(stat.avg)} ± {formatMsAsShortTime(stat.deviation)}
-                </span>
+                </div>
+                <div className="font-mono">
+                  {t('times.avg')}: {formatDurationMs(stat.avg, timeDecimals)} ± {formatDurationMs(stat.deviation, timeDecimals)}
+                </div>
+                <div className="font-mono text-zinc-100">
+                  {t('times.best')}: {formatDurationMs(stat.best, timeDecimals)}
+                </div>
               </div>
             ))}
           </div>
@@ -700,7 +750,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   ⚠️Alert
                 </th>
                 <th className="text-left text-zinc-400 uppercase font-bold p-1 sm:p-2 min-w-[90px]" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-                  🆘 {t('status.sos')}
+                  🆘{t('status.sos')}
                 </th>
               </tr>
             </thead>
@@ -710,6 +760,8 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   pilot,
                   category,
                   idealStartTimeValue,
+                  displayIdealStartTimeValue,
+                  idealStartOffsetLabel,
                   isPersistedIdealStartTime,
                   realStartTimeValue,
               retired,
@@ -786,14 +838,17 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                     </td>
                     <td className="p-1 sm:p-2">
                       <div className="flex items-center gap-1">
+                        <span className="whitespace-nowrap text-[10px] font-semibold tracking-[0.16em] text-zinc-500">
+                          {idealStartOffsetLabel}
+                        </span>
                         {manualStartTime ? (
                           <>
                             <RollingClockInput
-                              value={idealStartTimeValue}
+                              value={displayIdealStartTimeValue}
                               onCommit={(nextValue) => commitStartTimeChange(pilot.id, nextValue)}
                               showSeconds={false}
                               placeholder={t('times.placeholder.shortTime')}
-                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 w-24 ${isPersistedIdealStartTime ? 'text-white' : 'text-zinc-400'}`}
+                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 w-24 ${isPersistedIdealStartTime && !retired ? 'text-white' : 'text-zinc-400'}`}
                               readOnly={isReadOnly}
                             />
                             <button
@@ -817,7 +872,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           </>
                         ) : (
                           <Input
-                            value={idealStartTimeValue}
+                            value={displayIdealStartTimeValue}
                             readOnly
                             placeholder="--:--"
                             className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-zinc-400 h-7 w-24"
@@ -974,6 +1029,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                   pilot,
                   category,
                   idealStartTimeValue,
+                  displayIdealStartTimeValue,
                   isPersistedIdealStartTime,
                   realStartTimeValue,
               retired,
@@ -1054,11 +1110,11 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                           {manualStartTime ? (
                             <>
                             <RollingClockInput
-                              value={idealStartTimeValue}
+                              value={displayIdealStartTimeValue}
                               onCommit={(nextValue) => commitStartTimeChange(pilot.id, nextValue)}
                               showSeconds={false}
                               placeholder={t('times.placeholder.shortTime')}
-                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 flex-1 ${isPersistedIdealStartTime ? 'text-white' : 'text-zinc-400'}`}
+                              className={`bg-[#18181B] border-zinc-700 text-center font-mono text-xs h-7 flex-1 ${isPersistedIdealStartTime && !retired ? 'text-white' : 'text-zinc-400'}`}
                               readOnly={isReadOnly}
                             />
                               <button
@@ -1082,7 +1138,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
                             </>
                           ) : (
                           <Input
-                            value={idealStartTimeValue}
+                            value={displayIdealStartTimeValue}
                             readOnly
                             placeholder="--:--"
                             className="bg-[#18181B] border-zinc-700 text-center font-mono text-xs text-white h-7"
@@ -1242,6 +1298,7 @@ function TimedStageCard({ stage, sortedPilots, categoryMap, categoryOrderById, p
 // Liaison/Service Park Stage Component - Simple start/end per pilot
 function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', isReadOnly = false, firstColumnWidth = 130, showDebugIds = false }) {
   const { t } = useTranslation();
+  const { retiredStages } = useRallyTiming();
   const stageSortedPilots = sortedPilots;
 
   if (layout === 'table') {
@@ -1269,10 +1326,12 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
           </thead>
           <tbody>
             {stageSortedPilots.map((pilot) => {
-              const category = categoryMap.get(pilot.categoryId);
-              const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
-              const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
-              return (
+                const category = categoryMap.get(pilot.categoryId);
+                const retired = !!retiredStages?.[pilot.id]?.[stage.id];
+                const inferredStartTime = retired ? '' : getPilotScheduledStartTime(stage, pilot);
+                const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
+                const inferredOffsetLabel = formatOffsetMinutesLabel(getPilotOffsetMinutesForTimes(stage, pilot));
+                return (
                 <tr key={pilot.id} className="border-b border-zinc-800 hover:bg-white/5">
                   <td
                     className="p-1 sm:p-2 sticky left-0 z-[1] bg-[#0B0B0F] border-r border-zinc-800"
@@ -1322,7 +1381,8 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
     <div className="grid gap-2" style={pilotTimingGridStyle}>
       {stageSortedPilots.map((pilot) => {
         const category = categoryMap.get(pilot.categoryId);
-        const inferredStartTime = getPilotScheduledStartTime(stage, pilot);
+        const retired = !!retiredStages?.[pilot.id]?.[stage.id];
+        const inferredStartTime = retired ? '' : getPilotScheduledStartTime(stage, pilot);
         const inferredEndTime = getPilotScheduledEndTime(stage, pilot);
         return (
           <Card key={pilot.id} className={`bg-[#09090B] border-zinc-700 relative ${isReadOnly ? 'opacity-80' : ''}`}>
@@ -1348,6 +1408,9 @@ function LiaisonStageCard({ stage, sortedPilots, categoryMap, layout = 'cards', 
               <div className="mb-2">
                 <Label className="text-xs text-zinc-400">{t('times.startTime')}</Label>
                 <div className="flex items-center gap-1">
+                  <span className="whitespace-nowrap text-[10px] font-semibold tracking-[0.16em] text-zinc-500">
+                    {inferredOffsetLabel}
+                  </span>
                   <Input
                     value={inferredStartTime}
                     readOnly
@@ -1391,6 +1454,7 @@ export default function TimesTab({
   showDebugIds = false
 }) {
   const { t } = useTranslation();
+  const { timeDecimals } = useRally();
   const { pilots, stages, categories, currentStageId } = useRallyMeta();
   const {
     stageSos,
@@ -1399,18 +1463,80 @@ export default function TimesTab({
     startTimes,
     realStartTimes,
     lapTimes,
-    getStagePilots
+    getStagePilots,
+    retiredStages,
+    stagePilotOffsets,
+    getPilotStageOffset,
+    applyStageOffsetAdjustments,
+    setRetiredFromStage
   } = useRallyTiming();
   const [showCompetitiveStagesOnly, setShowCompetitiveStagesOnly] = useState(true);
   const [showTimesAsCards, setShowTimesAsCards] = useState(false);
+  const [stageOffsetsDialogStage, setStageOffsetsDialogStage] = useState(null);
+  const [stageOffsetsDrafts, setStageOffsetsDrafts] = useState({});
+  const [stageOffsetsRetiredDrafts, setStageOffsetsRetiredDrafts] = useState({});
   const categoryOrderById = useMemo(() => (
     new Map(categories.map((category, index) => [category.id, getCategoryDisplayOrder(category, index + 1)]))
   ), [categories]);
   const stageSosCountByStageId = useMemo(() => buildStageSosCountMap(stageSos), [stageSos]);
+  const currentStage = useMemo(
+    () => stages.find((stage) => stage.id === currentStageId) || null,
+    [currentStageId, stages]
+  );
   const sortedPilots = useMemo(() => (
-    [...pilots].sort((a, b) => comparePilotsForTimes(a, b, categoryOrderById))
-  ), [pilots, categoryOrderById]);
+    [...pilots].sort((a, b) => comparePilotsForTimes(a, b, categoryOrderById, currentStage))
+  ), [currentStage, pilots, categoryOrderById]);
   const categoryMap = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const stageOffsetCategoryGroups = useMemo(() => {
+    if (!stageOffsetsDialogStage) {
+      return [];
+    }
+
+    const stageId = stageOffsetsDialogStage.id;
+    const sortPilots = (left, right) => {
+      const leftStartOrder = Number(left?.startOrder);
+      const rightStartOrder = Number(right?.startOrder);
+
+      if (Number.isFinite(leftStartOrder) && Number.isFinite(rightStartOrder) && leftStartOrder !== rightStartOrder) {
+        return leftStartOrder - rightStartOrder;
+      }
+
+      if (Number.isFinite(leftStartOrder) && !Number.isFinite(rightStartOrder)) return -1;
+      if (!Number.isFinite(leftStartOrder) && Number.isFinite(rightStartOrder)) return 1;
+
+      const leftCategoryOrder = categoryOrderById.get(left?.categoryId) ?? Number.MAX_SAFE_INTEGER;
+      const rightCategoryOrder = categoryOrderById.get(right?.categoryId) ?? Number.MAX_SAFE_INTEGER;
+      if (leftCategoryOrder !== rightCategoryOrder) {
+        return leftCategoryOrder - rightCategoryOrder;
+      }
+
+      return String(left?.name || '').localeCompare(String(right?.name || ''));
+    };
+
+    const orderedPilots = [...pilots].sort(sortPilots);
+    const groups = new Map();
+
+    orderedPilots.forEach((pilot) => {
+      const categoryId = pilot.categoryId || 'uncategorized';
+      const category = categoryMap.get(categoryId) || { id: categoryId, name: t('categories.noCategory'), color: '#6B7280' };
+      const isRetired = !!retiredStages?.[pilot.id]?.[stageId];
+
+      if (!groups.has(categoryId)) {
+        groups.set(categoryId, {
+          category,
+          activePilots: [],
+          retiredPilots: []
+        });
+      }
+
+      const group = groups.get(categoryId);
+      (isRetired ? group.retiredPilots : group.activePilots).push(pilot);
+    });
+
+    return Array.from(groups.values())
+      .filter((group) => group.activePilots.length > 0 || group.retiredPilots.length > 0)
+      .sort((left, right) => (categoryOrderById.get(left.category.id) ?? Number.MAX_SAFE_INTEGER) - (categoryOrderById.get(right.category.id) ?? Number.MAX_SAFE_INTEGER));
+  }, [categoryMap, categoryOrderById, pilots, retiredStages, stageOffsetsDialogStage, t]);
   const pilotById = useMemo(() => new Map(pilots.map((pilot) => [pilot.id, pilot])), [pilots]);
   const getLapRaceMetaText = useCallback((stage) => (
     getLapRaceStageMetaParts({
@@ -1418,7 +1544,7 @@ export default function TimesTab({
       lapsLabel: t('scene3.laps').toLowerCase(),
       passesLabel: t('theRace.finishLinePassesShort'),
       maxTimeLabel: t('theRace.lapRaceMaxTimeMinutes')
-    }).join(' • ')
+    }).join(' â€¢ ')
   ), [t]);
 
   const handleExportStageCsv = useCallback((stage) => {
@@ -1533,6 +1659,66 @@ export default function TimesTab({
     URL.revokeObjectURL(url);
   }, [arrivalTimes, categories, getStagePilots, lapTimes, realStartTimes, sortedPilots, stageSos, startTimes, t, times]);
 
+  const openStageOffsetsDialog = useCallback((stage) => {
+    setStageOffsetsDialogStage(stage);
+    setStageOffsetsDrafts(() => {
+      const next = {};
+      (Array.isArray(pilots) ? pilots : []).forEach((pilot) => {
+        const explicitValue = stagePilotOffsets?.[pilot.id]?.[stage?.id];
+        if (explicitValue !== undefined && explicitValue !== null && explicitValue !== '') {
+          next[pilot.id] = String(explicitValue);
+        }
+      });
+      return next;
+    });
+    setStageOffsetsRetiredDrafts(() => {
+      const next = {};
+      (Array.isArray(pilots) ? pilots : []).forEach((pilot) => {
+        next[pilot.id] = !!retiredStages?.[pilot.id]?.[stage?.id];
+      });
+      return next;
+    });
+  }, [pilots, retiredStages, stagePilotOffsets]);
+
+  const handleSaveStageOffsets = useCallback(() => {
+    const stage = stageOffsetsDialogStage;
+    const stageId = stage?.id;
+
+    if (!stageId) {
+      return;
+    }
+
+    const adjustments = {};
+
+    (Array.isArray(pilots) ? pilots : []).forEach((pilot) => {
+      const draftOffset = stageOffsetsDrafts[pilot.id];
+      const draftRetired = stageOffsetsRetiredDrafts[pilot.id];
+      if (draftOffset === undefined && draftRetired === undefined) {
+        return;
+      }
+
+      if (draftOffset !== undefined) {
+        adjustments[pilot.id] = {
+          ...(adjustments[pilot.id] || {}),
+          offsetMinutes: draftOffset
+        };
+      }
+
+      if (draftRetired !== undefined) {
+        adjustments[pilot.id] = {
+          ...(adjustments[pilot.id] || {}),
+          retired: draftRetired === true
+        };
+      }
+    });
+
+    applyStageOffsetAdjustments(stageId, adjustments);
+
+    setStageOffsetsDialogStage(null);
+    setStageOffsetsDrafts({});
+    setStageOffsetsRetiredDrafts({});
+  }, [applyStageOffsetAdjustments, pilots, stageOffsetsDialogStage, stageOffsetsDrafts, stageOffsetsRetiredDrafts]);
+
   const sortedStages = useMemo(() => {
     const visibleStages = showCompetitiveStagesOnly
       ? stages.filter((stage) => isSpecialStageType(stage.type) || isLapTimingStageType(stage.type))
@@ -1645,6 +1831,16 @@ export default function TimesTab({
                     type="button"
                     size="sm"
                     variant="outline"
+                    onClick={() => openStageOffsetsDialog(stage)}
+                    className="h-8 border-zinc-700 bg-[#09090B] px-2 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                    title={t('theRace.adjustStartTimes')}
+                  >
+                    {t('theRace.adjustStartTimes')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
                     onClick={() => handleExportStageCsv(stage)}
                     className="h-8 border-zinc-700 bg-[#09090B] px-2 text-zinc-200 hover:bg-zinc-800 hover:text-white"
                     title={`${stage.name} CSV`}
@@ -1707,6 +1903,143 @@ export default function TimesTab({
           </Card>
         );
       })}
+
+      <Dialog open={Boolean(stageOffsetsDialogStage)} onOpenChange={(open) => {
+        if (!open) {
+          setStageOffsetsDialogStage(null);
+          setStageOffsetsDrafts({});
+          setStageOffsetsRetiredDrafts({});
+        }
+      }}>
+        <DialogContent className="max-w-5xl border-zinc-800 bg-[#18181B] text-white">
+          <DialogHeader>
+            <DialogTitle className="uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+              {t('theRace.stageOffsets')} - {stageOffsetsDialogStage ? getStageTitle(stageOffsetsDialogStage) : ''}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {t('theRace.stageOffsetsHint')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+            {stageOffsetCategoryGroups.map((group) => (
+              <div key={group.category.id} className="space-y-2">
+                <div className="flex items-center gap-2 rounded border border-zinc-800 bg-black/40 px-3 py-2">
+                  <span
+                    className="h-3 w-3 rounded-sm"
+                    style={{ backgroundColor: group.category.color || '#6B7280' }}
+                    aria-hidden="true"
+                  />
+                  <span className="text-sm font-bold uppercase tracking-[0.18em] text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {group.category.name}
+                  </span>
+                </div>
+
+                {[...group.activePilots, ...group.retiredPilots].map((pilot) => {
+                  const stageId = stageOffsetsDialogStage?.id;
+                  const explicitOffset = stagePilotOffsets?.[pilot.id]?.[stageId];
+                  const effectiveOffset = getPilotStageOffset(pilot.id, stageId);
+                  const stageStartTime = stageOffsetsDialogStage?.startTime || '';
+                  const draftOffset = normalizeStageOffsetInput(stageOffsetsDrafts[pilot.id]);
+                  const previewOffset = draftOffset !== null
+                    ? draftOffset
+                    : effectiveOffset;
+                  const retired = stageOffsetsRetiredDrafts[pilot.id] ?? !!retiredStages?.[pilot.id]?.[stageId];
+                  const previewStartTime = retired
+                    ? ''
+                    : addMinutesToClockTime(stageStartTime, previewOffset);
+                  const currentDraft = stageOffsetsDrafts[pilot.id];
+                  const value = currentDraft !== undefined
+                    ? currentDraft
+                    : (explicitOffset === undefined || explicitOffset === null || explicitOffset === ''
+                      ? ''
+                      : String(explicitOffset));
+
+                  return (
+                    <div
+                      key={pilot.id}
+                      className={`grid gap-3 rounded-lg border border-zinc-800 bg-[#09090B] px-3 py-2 md:grid-cols-[72px_minmax(0,1fr)_minmax(0,1fr)_140px] md:items-end ${retired ? 'opacity-75' : ''}`}
+                      style={{ borderLeftWidth: '4px', borderLeftColor: group.category.color || '#6B7280' }}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="inline-flex min-w-[2.5rem] items-center justify-center rounded bg-[#FF4500] px-2 py-0.5 text-sm font-black text-white" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                          {pilot.carNumber || '#'}
+                        </span>
+                        <span className="text-[10px] text-zinc-500">#{pilot.startOrder || '?'}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-bold uppercase text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {pilot.name}
+                        </p>
+                        <p className="text-[11px] text-zinc-500">
+                          {t('theRace.effectiveOffset')}: {formatOffsetMinutes(effectiveOffset)}
+                          {explicitOffset === undefined && ` (${t('theRace.inheritedOffset')})`}
+                        </p>
+                      </div>
+                      <div className="flex flex-col">
+                        <Label className="mb-0 text-[10px] uppercase tracking-[0.18em] leading-none text-zinc-500">{t('theRace.offset')}</Label>
+                        <div className="grid items-end gap-2 md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,7.5rem)]">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={value}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setStageOffsetsDrafts((prev) => ({
+                                ...prev,
+                                [pilot.id]: nextValue
+                              }));
+                            }}
+                            placeholder={explicitOffset === undefined ? formatOffsetMinutes(effectiveOffset) : ''}
+                            className="h-9 bg-black border-zinc-700 text-white"
+                          />
+                          <div className="flex flex-col gap-0.5">
+                            <Label className="mb-0.5 text-[10px] uppercase tracking-[0.18em] leading-none text-zinc-500">{t('theRace.startTime')}</Label>
+                            <div className="rounded border border-zinc-800 bg-black/30 px-3 py-2 text-right leading-none h-9 flex items-center justify-end">
+                              <p className="font-mono text-sm text-zinc-500">{previewStartTime || '--:--'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 self-end rounded border border-zinc-800 bg-black/30 px-3 py-2">
+                        <Checkbox
+                          checked={retired}
+                          onCheckedChange={(checked) => setStageOffsetsRetiredDrafts((prev) => ({
+                            ...prev,
+                            [pilot.id]: checked === true
+                          }))}
+                        />
+                        <span className="text-sm text-white">{t('status.retired')}</span>
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-2 border-t border-zinc-800 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-zinc-700 bg-[#09090B] text-zinc-200 hover:bg-zinc-800 hover:text-white"
+              onClick={() => {
+                setStageOffsetsDialogStage(null);
+                setStageOffsetsDrafts({});
+                setStageOffsetsRetiredDrafts({});
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#FF4500] text-white hover:bg-[#ff5c1a]"
+              onClick={handleSaveStageOffsets}
+            >
+              {t('common.save')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { getPilotTelemetryForId } from './pilotIdentity.js';
 
+import { getPilotTelemetryGForce } from './pilotTelemetry.js';
+
 export const parseLatLongString = (value) => {
   const trimmed = String(value || '').trim();
   if (!trimmed) {
@@ -47,6 +49,14 @@ export const getPilotMarkerLabel = (pilot) => {
   return initials || '??';
 };
 
+export const getPilotMarkerInitials = (pilot) => {
+  const baseName = String(pilot?.name || '').split('/')[0]?.trim() || '';
+  const words = baseName.split(/\s+/).filter(Boolean);
+  const initials = words.slice(0, 2).map((word) => word[0]?.toUpperCase() || '').join('');
+
+  return initials || '??';
+};
+
 const toFiniteNumber = (value) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : null;
@@ -74,11 +84,14 @@ export const buildPilotMapMarkers = (pilots = [], categories = [], pilotTelemetr
         name: pilot.name,
         carNumber: String(pilot?.carNumber || '').trim(),
         label: getPilotMarkerLabel(pilot),
+        picture: String(pilot?.picture || '').trim(),
+        initials: getPilotMarkerInitials(pilot),
         lat: coordinates.lat,
         lng: coordinates.lng,
         color: category?.color || '#FF4500',
         speed: toFiniteNumber(telemetry.speed),
         heading: toFiniteNumber(telemetry.heading),
+        gForce: getPilotTelemetryGForce(telemetry),
         gpsPrecision: toFiniteNumber(telemetry.gpsPrecision),
         lastUpdatedAt: Number(
           telemetry.lastLatLongUpdatedAt

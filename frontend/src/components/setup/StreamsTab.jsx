@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { Button } from '../ui/button';
@@ -7,11 +7,13 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Slider } from '../ui/slider';
 import { Switch } from '../ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
 import { toast } from 'sonner';
-import { Volume2, VolumeX, Headphones, Plus, Trash2, Edit, Video, VideoOff } from 'lucide-react';
+import { Volume2, VolumeX, Headphones, Plus, Trash2, Edit, Video, VideoOff, Globe } from 'lucide-react';
 import { sortPilotsByDisplayOrder } from '../../utils/displayOrder.js';
+import { EXTERNAL_MEDIA_ICON_OPTIONS, getExternalMediaIconComponent } from '../../utils/mediaIcons.js';
 
 function StreamPreview({ item, hideStreams, t }) {
   return (
@@ -44,6 +46,11 @@ export default function StreamsTab({ hideStreams = false }) {
     pilots,
     categories,
     cameras,
+    mapPlacemarks,
+    externalMedia,
+    addExternalMedia,
+    updateExternalMedia,
+    deleteExternalMedia,
     streamConfigs,
     globalAudio,
     setGlobalAudio,
@@ -56,10 +63,26 @@ export default function StreamsTab({ hideStreams = false }) {
     toggleCameraActive
   } = useRally();
 
-  const [newCamera, setNewCamera] = useState({ name: '', streamUrl: '' });
+  const [newCamera, setNewCamera] = useState({ name: '', streamUrl: '', mapPlacemarkId: '', latLong: '' });
+  const [newMedia, setNewMedia] = useState({ name: '', url: '', icon: 'Map' });
   const [editingCamera, setEditingCamera] = useState(null);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   const sortedPilots = sortPilotsByDisplayOrder(pilots, categories);
+  const sortedMapPlacemarks = useMemo(() => (
+    [...mapPlacemarks].sort((left, right) => {
+      const leftPoints = (left?.coordinateGroups || []).reduce((total, group) => total + (group?.length || 0), 0);
+      const rightPoints = (right?.coordinateGroups || []).reduce((total, group) => total + (group?.length || 0), 0);
+
+      if (leftPoints !== rightPoints) {
+        return rightPoints - leftPoints;
+      }
+
+      return String(left?.name || '').localeCompare(String(right?.name || ''));
+    })
+  ), [mapPlacemarks]);
+  const mediaOptionByValue = useMemo(() => (
+    new Map(EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => [option.value, option]))
+  ), []);
 
   const handleAddCamera = () => {
     if (!newCamera.name.trim()) {
@@ -67,7 +90,7 @@ export default function StreamsTab({ hideStreams = false }) {
       return;
     }
     addCamera(newCamera);
-    setNewCamera({ name: '', streamUrl: '' });
+    setNewCamera({ name: '', streamUrl: '', mapPlacemarkId: '', latLong: '' });
     toast.success('Camera added successfully');
   };
 
@@ -80,6 +103,28 @@ export default function StreamsTab({ hideStreams = false }) {
     setEditingCamera(null);
     setCameraDialogOpen(false);
     toast.success('Camera updated successfully');
+  };
+
+  const renderMediaIconValue = (iconValue) => {
+    const option = mediaOptionByValue.get(iconValue) || EXTERNAL_MEDIA_ICON_OPTIONS[0];
+    const Icon = getExternalMediaIconComponent(option.value);
+
+    return (
+      <div className="flex items-center gap-2">
+        <Icon className="w-4 h-4 text-[#FF4500]" />
+        <span>{option.label}</span>
+      </div>
+    );
+  };
+
+  const handleAddMedia = () => {
+    if (!newMedia.name.trim() || !newMedia.url.trim()) {
+      toast.error(t('config.mediaName') + ' & ' + t('config.mediaUrl') + ' are required');
+      return;
+    }
+    addExternalMedia(newMedia);
+    setNewMedia({ name: '', url: '', icon: 'Map' });
+    toast.success('Media added successfully');
   };
 
   // Render stream card (shared between pilots and cameras)
@@ -173,6 +218,41 @@ export default function StreamsTab({ hideStreams = false }) {
                             <Input
                               value={editingCamera.streamUrl}
                               onChange={(e) => setEditingCamera({ ...editingCamera, streamUrl: e.target.value })}
+                              className="bg-[#09090B] border-zinc-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('streams.mapPlacemark')}</Label>
+                            <Select
+                              value={editingCamera.mapPlacemarkId || 'none'}
+                              onValueChange={(value) => setEditingCamera({
+                                ...editingCamera,
+                                mapPlacemarkId: value === 'none' ? '' : value
+                              })}
+                            >
+                              <SelectTrigger className="bg-[#09090B] border-zinc-700 text-white">
+                                <span className="truncate">
+                                  {editingCamera.mapPlacemarkId
+                                    ? (sortedMapPlacemarks.find((placemark) => placemark.id === editingCamera.mapPlacemarkId)?.name || t('theRace.noMapPlacemark'))
+                                    : t('theRace.noMapPlacemark')}
+                                </span>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                                {sortedMapPlacemarks.map((placemark) => (
+                                  <SelectItem key={placemark.id} value={placemark.id}>
+                                    {placemark.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-white">{t('streams.latLong')}</Label>
+                            <Input
+                              value={editingCamera.latLong || ''}
+                              onChange={(e) => setEditingCamera({ ...editingCamera, latLong: e.target.value })}
+                              placeholder={t('streams.placeholder.latLong')}
                               className="bg-[#09090B] border-zinc-700 text-white"
                             />
                           </div>
@@ -383,6 +463,42 @@ export default function StreamsTab({ hideStreams = false }) {
                 data-testid="input-camera-stream"
               />
             </div>
+            <div className="flex-1">
+              <Label className="text-white text-xs">{t('streams.mapPlacemark')}</Label>
+              <Select
+                value={newCamera.mapPlacemarkId || 'none'}
+                onValueChange={(value) => setNewCamera({
+                  ...newCamera,
+                  mapPlacemarkId: value === 'none' ? '' : value
+                })}
+              >
+                <SelectTrigger className="bg-[#18181B] border-zinc-700 text-white">
+                  <span className="truncate">
+                    {newCamera.mapPlacemarkId
+                      ? (sortedMapPlacemarks.find((placemark) => placemark.id === newCamera.mapPlacemarkId)?.name || t('theRace.noMapPlacemark'))
+                      : t('theRace.noMapPlacemark')}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('theRace.noMapPlacemark')}</SelectItem>
+                  {sortedMapPlacemarks.map((placemark) => (
+                    <SelectItem key={placemark.id} value={placemark.id}>
+                      {placemark.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label className="text-white text-xs">{t('streams.latLong')}</Label>
+              <Input
+                value={newCamera.latLong}
+                onChange={(e) => setNewCamera({ ...newCamera, latLong: e.target.value })}
+                placeholder={t('streams.placeholder.latLong')}
+                className="bg-[#18181B] border-zinc-700 text-white"
+                data-testid="input-camera-lat-long"
+              />
+            </div>
             <div className="flex items-end">
               <Button
                 onClick={handleAddCamera}
@@ -432,6 +548,97 @@ export default function StreamsTab({ hideStreams = false }) {
       <div className="text-xs text-zinc-600 text-center px-4">
         Stream previews stay lightweight here. Use the controls above for mute and volume instead of relying on embedded player UI.
       </div>
+
+      {/* External Media list */}
+      <Card className="bg-[#18181B] border-zinc-800">
+        <CardHeader>
+          <CardTitle className="uppercase text-white flex items-center gap-2" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
+            <Globe className="w-5 h-5" />
+            {t('config.externalMedia')}
+          </CardTitle>
+          <CardDescription className="text-zinc-400">{t('config.externalMediaDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {externalMedia.map((m) => (
+              <div key={m.id} className="flex items-center gap-2">
+                <Input
+                  value={m.name}
+                  onChange={(e) => updateExternalMedia(m.id, { ...m, name: e.target.value })}
+                  placeholder={t('config.mediaName')}
+                  className="bg-[#09090B] border-zinc-700 text-white text-sm"
+                />
+                <Input
+                  value={m.url}
+                  onChange={(e) => updateExternalMedia(m.id, { ...m, url: e.target.value })}
+                  placeholder={t('config.mediaUrl')}
+                  className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
+                />
+                <Select
+                  value={m.icon || 'Map'}
+                  onValueChange={(value) => updateExternalMedia(m.id, { ...m, icon: value })}
+                >
+                  <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
+                    {renderMediaIconValue(m.icon || 'Map')}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {renderMediaIconValue(option.value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => deleteExternalMedia(m.id)}
+                  className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+
+            <div className="flex items-center gap-2">
+              <Input
+                value={newMedia.name}
+                onChange={(e) => setNewMedia({ ...newMedia, name: e.target.value })}
+                placeholder={t('config.mediaName')}
+                className="bg-[#09090B] border-zinc-700 text-white text-sm"
+              />
+              <Input
+                value={newMedia.url}
+                onChange={(e) => setNewMedia({ ...newMedia, url: e.target.value })}
+                placeholder={t('config.mediaUrl')}
+                className="bg-[#09090B] border-zinc-700 text-white text-sm font-mono"
+              />
+              <Select
+                value={newMedia.icon}
+                onValueChange={(value) => setNewMedia({ ...newMedia, icon: value })}
+              >
+                <SelectTrigger className="w-[140px] shrink-0 bg-[#09090B] border-zinc-700 text-white text-sm">
+                  {renderMediaIconValue(newMedia.icon)}
+                </SelectTrigger>
+                <SelectContent>
+                  {EXTERNAL_MEDIA_ICON_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {renderMediaIconValue(option.value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={handleAddMedia}
+                className="bg-[#FF4500] hover:bg-[#FF4500]/90"
+                data-testid="button-add-media"
+              >
+                {t('config.addMedia')}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

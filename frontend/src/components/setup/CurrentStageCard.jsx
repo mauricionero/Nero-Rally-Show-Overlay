@@ -54,6 +54,7 @@ export default function CurrentStageCard({ showDebugIds = false }) {
     eventReplayStageIntervalSeconds,
     setEventReplayStageIntervalSeconds
   } = useRally();
+
   const [eventReplayStageIntervalDraft, setEventReplayStageIntervalDraft] = useState(
     String(eventReplayStageIntervalSeconds ?? 0)
   );
@@ -166,14 +167,17 @@ export default function CurrentStageCard({ showDebugIds = false }) {
             </div>
           </div>
         </div>
+
         {currentStage && (
-          <div className="mt-2 space-y-1">
-            <p className="text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
-              LIVE: {getStageTitle(currentStage)}
-              {showDebugIds && <DebugIdText id={currentStage.id} className="text-zinc-400" />}
-              {isLapTimingStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
-            </p>
+          <div className="mt-2 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[#FACC15] font-bold flex items-center gap-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <span className="w-2 h-2 bg-[#FACC15] rounded-full animate-pulse" />
+                LIVE: {getStageTitle(currentStage)}
+                {showDebugIds && <DebugIdText id={currentStage.id} className="text-zinc-400" />}
+                {isLapTimingStageType(currentStage.type) && getLapRaceMetaText(currentStage) && ` (${getLapRaceMetaText(currentStage)})`}
+              </p>
+            </div>
             {(currentStage.game || currentStage.gameStageName) && (
               <p className="text-xs text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                 {currentStage.game && <span>{t('theRace.game')}: {currentStage.game}</span>}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Cloud,
   CloudDrizzle,
@@ -8,14 +8,29 @@ import {
   CloudSnow,
   CloudSun,
   Sun,
+  Video,
   Wind
 } from 'lucide-react';
 import { getLedLoadColor } from '../utils/ledLoadColors.js';
+import { StreamPlayer } from './StreamPlayer.jsx';
 
 const WEATHER_REFRESH_MS = 5 * 60 * 1000;
 const POSITION_STATUS_REFRESH_MS = 30 * 1000;
-const MAP_VIEWPORT_MARGIN_RATIO = 0.32;
+const MAP_VIEWPORT_MARGIN_RATIO = 0.38;
+const SINGLE_POINT_RADIUS_METERS = 50;
 const weatherCache = new Map();
+
+const metersToLatitudeDegrees = (meters) => meters / 111_320;
+
+const metersToLongitudeDegrees = (meters, latitude) => {
+  const latitudeRadians = latitude * (Math.PI / 180);
+  const denominator = 111_320 * Math.cos(latitudeRadians);
+  if (!Number.isFinite(denominator) || Math.abs(denominator) < 0.000001) {
+    return metersToLatitudeDegrees(meters);
+  }
+
+  return meters / denominator;
+};
 
 const buildProjectionBounds = (coordinateGroups = []) => {
   const points = coordinateGroups.flat().filter((point) => (
@@ -35,13 +50,24 @@ const buildProjectionBounds = (coordinateGroups = []) => {
   const rawLngSpan = Math.max(maxLng - minLng, 0.000001);
   const latMargin = rawLatSpan * MAP_VIEWPORT_MARGIN_RATIO;
   const lngMargin = rawLngSpan * MAP_VIEWPORT_MARGIN_RATIO;
-  const expandedMinLat = minLat - latMargin;
-  const expandedMaxLat = maxLat + latMargin;
-  const expandedMinLng = minLng - lngMargin;
-  const expandedMaxLng = maxLng + lngMargin;
+  const hasSinglePointGeometry = points.length === 1 || (rawLatSpan < 0.00001 && rawLngSpan < 0.00001);
+  const fallbackLatMargin = metersToLatitudeDegrees(SINGLE_POINT_RADIUS_METERS);
+  const fallbackLngMargin = metersToLongitudeDegrees(SINGLE_POINT_RADIUS_METERS, (minLat + maxLat) / 2);
+  const expandedMinLat = hasSinglePointGeometry
+    ? minLat - fallbackLatMargin
+    : minLat - latMargin;
+  const expandedMaxLat = hasSinglePointGeometry
+    ? maxLat + fallbackLatMargin
+    : maxLat + latMargin;
+  const expandedMinLng = hasSinglePointGeometry
+    ? minLng - fallbackLngMargin
+    : minLng - lngMargin;
+  const expandedMaxLng = hasSinglePointGeometry
+    ? maxLng + fallbackLngMargin
+    : maxLng + lngMargin;
   const latSpan = Math.max(expandedMaxLat - expandedMinLat, 0.000001);
   const lngSpan = Math.max(expandedMaxLng - expandedMinLng, 0.000001);
-  const padding = 110;
+  const padding = 150;
   const width = 1000 - (padding * 2);
   const height = 1000 - (padding * 2);
 
@@ -158,22 +184,17 @@ const fetchWeatherSnapshot = async (lat, lng) => {
 
 const StartMarker = ({ x, y }) => (
   <g transform={`translate(${x}, ${y})`}>
-    <circle r="22" fill="rgba(255,69,0,0.22)" />
-    <path d="M -5 -12 L 11 -7 L -5 -2 Z" fill="#FF4500" />
-    <path d="M -7 -14 L -7 14" stroke="#FFF" strokeWidth="3" strokeLinecap="round" />
+    <path d="M 0 -26 H 16 V -12 H 0 Z" fill="#ffcc00" />
+    <path d="M 0 0 L 0 -26" stroke="#FFF" strokeWidth="3" strokeLinecap="round" />
   </g>
 );
 
 const FinishMarker = ({ x, y }) => (
   <g transform={`translate(${x}, ${y})`}>
-    <circle r="22" fill="rgba(255,255,255,0.12)" />
-    <path d="M -8 -14 L -8 14" stroke="#FFF" strokeWidth="3" strokeLinecap="round" />
-    <path
-      d="M -8 -13 L 12 -10 L 12 10 L -8 13 Z"
-      fill="#FFF"
-      opacity="0.95"
-    />
-    <path d="M -2 -12 H 4 V -6 H -2 Z M 4 -6 H 10 V 0 H 4 Z M -2 0 H 4 V 6 H -2 Z M 4 6 H 10 V 12 H 4 Z" fill="#0A0A0A" />
+    <path d="M 0 -26 H 16 V -12 H 0 Z" fill="#ffffff" />
+    <path d="M 9 -25 H 15 V -19 H 9 Z" fill="#0A0A0A" />
+    <path d="M 2 -19 H 8 V -13 H 2 Z" fill="#0A0A0A" />
+    <path d="M 0 0 L 0 -26" stroke="#FFF" strokeWidth="3" strokeLinecap="round" />
   </g>
 );
 
@@ -257,11 +278,94 @@ const hexToRgba = (hexColor, alpha = 1) => {
 
 const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
 
-const getMarkerPopoverLayout = (marker) => {
-  const width = 312;
-  const height = 176;
-  const offsetX = 48;
-  const offsetY = 40;
+const getMetersPerSvgUnit = (bounds) => {
+  if (!bounds) {
+    return null;
+  }
+
+  const centerLatRadians = ((bounds.minLat + bounds.maxLat) / 2) * (Math.PI / 180);
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLng = 111_320 * Math.cos(centerLatRadians);
+  const metersPerSvgX = metersPerDegreeLng / (bounds.width / Math.max(bounds.lngSpan, 0.000001));
+  const metersPerSvgY = metersPerDegreeLat / (bounds.height / Math.max(bounds.latSpan, 0.000001));
+  const metersPerSvgUnit = (metersPerSvgX + metersPerSvgY) / 2;
+
+  if (!Number.isFinite(metersPerSvgUnit) || metersPerSvgUnit <= 0) {
+    return null;
+  }
+
+  return metersPerSvgUnit;
+};
+
+const formatMapScaleLabel = (meters) => {
+  if (!Number.isFinite(meters) || meters <= 0) {
+    return '';
+  }
+
+  if (meters >= 1000) {
+    const kilometers = meters / 1000;
+    return `${Number.isInteger(kilometers) ? kilometers : kilometers.toFixed(1)} km`;
+  }
+
+  return `${Math.round(meters)} m`;
+};
+
+const pickMapScaleStep = (metersPerSvgUnit, renderedMapSizePx, zoom) => {
+  if (!Number.isFinite(metersPerSvgUnit) || metersPerSvgUnit <= 0 || !Number.isFinite(renderedMapSizePx) || renderedMapSizePx <= 0) {
+    return { stepMeters: 100, stepSvgUnits: 80, stepPixels: 80 };
+  }
+
+  const pxPerSvgUnit = (renderedMapSizePx / 1000) * zoom;
+  if (!Number.isFinite(pxPerSvgUnit) || pxPerSvgUnit <= 0) {
+    return { stepMeters: 100, stepSvgUnits: 80, stepPixels: 80 };
+  }
+
+  const targetPixels = 88;
+  const minPixels = 52;
+  const maxPixels = 144;
+  const targetMeters = (targetPixels / pxPerSvgUnit) * metersPerSvgUnit;
+  const baseExponent = Math.floor(Math.log10(Math.max(targetMeters, 1)));
+  const candidates = [];
+
+  for (let exponent = baseExponent - 2; exponent <= baseExponent + 3; exponent += 1) {
+    const unit = 10 ** exponent;
+    [1, 2, 5].forEach((multiplier) => {
+      const stepMeters = multiplier * unit;
+      const stepSvgUnits = stepMeters / metersPerSvgUnit;
+      const stepPixels = stepSvgUnits * pxPerSvgUnit;
+
+      if (!Number.isFinite(stepPixels) || stepPixels <= 0) {
+        return;
+      }
+
+      const outsidePenalty = stepPixels < minPixels
+        ? (minPixels - stepPixels) * 4
+        : stepPixels > maxPixels
+          ? (stepPixels - maxPixels) * 4
+          : 0;
+
+      candidates.push({
+        stepMeters,
+        stepSvgUnits,
+        stepPixels,
+        score: Math.abs(stepPixels - targetPixels) + outsidePenalty
+      });
+    });
+  }
+
+  return candidates.sort((left, right) => left.score - right.score)[0] || { stepMeters: 100, stepSvgUnits: 80, stepPixels: 80 };
+};
+
+const getMarkerPopoverScale = (zoom) => clampValue(1 / zoom, 0.7, 1.35);
+const getMarkerPopoverDimensions = (scale = 1, sizeMultiplier = 1) => ({
+  width: Math.round(312 * scale * sizeMultiplier),
+  height: Math.round(176 * scale * sizeMultiplier)
+});
+
+const getMarkerPopoverLayout = (marker, scale = 1) => {
+  const { width, height } = getMarkerPopoverDimensions(scale, 1);
+  const offsetX = Math.round(48 * scale);
+  const offsetY = Math.round(40 * scale);
   const prefersRight = marker.x < 700;
   const rawX = prefersRight ? marker.x + offsetX : marker.x - width - offsetX;
   const rawY = marker.y - (height / 2);
@@ -273,8 +377,186 @@ const getMarkerPopoverLayout = (marker) => {
     y,
     width,
     height,
+    sizeMultiplier: 1,
     side: prefersRight && x === rawX ? 'right' : 'left'
   };
+};
+
+const resizeMarkerPopoverLayoutFromCenter = (layout, scale = 1) => {
+  if (!layout) {
+    return null;
+  }
+
+  const { width, height } = getMarkerPopoverDimensions(scale, layout.sizeMultiplier || 1);
+
+  return {
+    ...layout,
+    x: layout.x,
+    y: layout.y,
+    width,
+    height
+  };
+};
+
+const getResizedPopoverLayout = (layout, scale = 1, sizeMultiplier = 1, direction = 'se') => {
+  if (!layout) {
+    return null;
+  }
+
+  const { width, height } = getMarkerPopoverDimensions(scale, sizeMultiplier);
+  const startRight = layout.x + layout.width;
+  const startBottom = layout.y + layout.height;
+  const centerX = layout.x + (layout.width / 2);
+  const centerY = layout.y + (layout.height / 2);
+
+  let x = layout.x;
+  let y = layout.y;
+
+  if (direction === 'e') {
+    x = layout.x;
+    y = centerY - (height / 2);
+  } else if (direction === 'w') {
+    x = startRight - width;
+    y = centerY - (height / 2);
+  } else if (direction === 's') {
+    x = centerX - (width / 2);
+    y = layout.y;
+  } else if (direction === 'n') {
+    x = centerX - (width / 2);
+    y = startBottom - height;
+  } else if (direction === 'ne') {
+    x = layout.x;
+    y = startBottom - height;
+  } else if (direction === 'nw') {
+    x = startRight - width;
+    y = startBottom - height;
+  } else if (direction === 'sw') {
+    x = startRight - width;
+    y = layout.y;
+  } else {
+    x = layout.x;
+    y = layout.y;
+  }
+
+  return {
+    ...layout,
+    x,
+    y,
+    width,
+    height,
+    sizeMultiplier
+  };
+};
+
+const MapMarkerPopoverShell = ({
+  marker,
+  layoutOverride = null,
+  anchorMarker = null,
+  locked = false,
+  dragging = false,
+  resizing = false,
+  resizable = false,
+  scale = 1,
+  title = '',
+  borderColor = '#FFFFFF',
+  onDragStart = null,
+  onResizeStart = null,
+  children
+}) => {
+  if (!marker) {
+    return null;
+  }
+
+  const layout = layoutOverride || getMarkerPopoverLayout(marker, scale);
+  const anchor = anchorMarker || marker;
+  const anchorX = anchor.x - layout.x;
+  const anchorY = anchor.y - layout.y;
+
+  const resizeHandleSize = 18;
+
+  return (
+    <g
+      transform={`translate(${layout.x}, ${layout.y})`}
+      style={{ cursor: locked ? (dragging ? 'grabbing' : 'grab') : 'default', pointerEvents: 'all' }}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+        onDragStart?.(event, layout);
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {title ? (
+        <text
+          x="4"
+          y="-8"
+          fill="#F4F4F5"
+          fontSize="14"
+          fontWeight="800"
+          style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.16em', textTransform: 'uppercase' }}
+        >
+          {String(title || '').toUpperCase()}
+        </text>
+      ) : null}
+      {locked ? (
+        <line
+          x1={layout.width / 2}
+          y1={layout.height / 2}
+          x2={anchorX}
+          y2={anchorY}
+          stroke="#FFF"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ) : (
+        <path
+          d={layout.side === 'right'
+            ? 'M 26 94 L 0 106 L 26 118'
+            : `M ${layout.width - 26} 94 L ${layout.width} 106 L ${layout.width - 26} 118`}
+          fill="rgba(9,9,11,0.92)"
+          stroke="rgba(255,255,255,0.14)"
+          strokeWidth="2"
+        />
+      )}
+      <rect
+        x="0"
+        y="0"
+        width={layout.width}
+        height={layout.height}
+        rx="24"
+        fill="rgba(7,7,9,0.94)"
+        stroke={borderColor}
+        strokeWidth="2.5"
+      />
+      {resizable ? (
+        <>
+          {[
+            { key: 'n', x: resizeHandleSize, y: -4, width: layout.width - (resizeHandleSize * 2), height: 8, cursor: 'ns-resize' },
+            { key: 's', x: resizeHandleSize, y: layout.height - 4, width: layout.width - (resizeHandleSize * 2), height: 8, cursor: 'ns-resize' },
+            { key: 'e', x: layout.width - 4, y: resizeHandleSize, width: 8, height: layout.height - (resizeHandleSize * 2), cursor: 'ew-resize' },
+            { key: 'w', x: -4, y: resizeHandleSize, width: 8, height: layout.height - (resizeHandleSize * 2), cursor: 'ew-resize' },
+            { key: 'ne', x: layout.width - resizeHandleSize, y: -4, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nesw-resize' },
+            { key: 'nw', x: -4, y: -4, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nwse-resize' },
+            { key: 'se', x: layout.width - resizeHandleSize, y: layout.height - resizeHandleSize, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nwse-resize' },
+            { key: 'sw', x: -4, y: layout.height - resizeHandleSize, width: resizeHandleSize, height: resizeHandleSize, cursor: 'nesw-resize' }
+          ].map((handle) => (
+            <rect
+              key={handle.key}
+              x={handle.x}
+              y={handle.y}
+              width={handle.width}
+              height={handle.height}
+              fill="rgba(255,255,255,0.001)"
+              style={{ cursor: handle.cursor }}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+                onResizeStart?.(event, layout, handle.key);
+              }}
+            />
+          ))}
+        </>
+      ) : null}
+      {typeof children === 'function' ? children({ layout, scale }) : children}
+    </g>
+  );
 };
 
 const getProjectedPoint = (lat, lng, bounds) => {
@@ -368,6 +650,8 @@ const getGpsPrecisionRadius = (marker, bounds) => {
     return 0;
   }
 
+  const cappedPrecisionMeters = Math.min(precisionMeters, 50);
+
   const latRadians = (Number(marker.lat) || 0) * (Math.PI / 180);
   const metersPerDegreeLat = 111_320;
   const metersPerDegreeLng = 111_320 * Math.cos(latRadians);
@@ -379,16 +663,22 @@ const getGpsPrecisionRadius = (marker, bounds) => {
     return 0;
   }
 
-  return Math.max(0, precisionMeters / metersPerSvgUnit);
+  return Math.max(0, cappedPrecisionMeters / metersPerSvgUnit);
 };
 
-const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick }) => {
+const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick, hidden = false }) => {
   const freshness = getMarkerFreshness(marker.lastUpdatedAt, now);
   const style = getMarkerStyle(freshness, marker.color, marker.lastUpdatedAt, now);
-  const labelLength = String(marker.label || '').trim().length;
-  const fontSize = labelLength <= 2 ? 22 : 18;
   const auraRadius = getGpsPrecisionRadius(marker, bounds);
   const auraVisible = auraRadius > 0;
+  const badgeRadius = 18;
+  const poleLength = 28;
+  const displayCarNumber = String(marker.carNumber || '').trim();
+  const displayInitials = String(marker.initials || '').trim();
+  const displayPicture = String(marker.picture || '').trim();
+  const showImage = !displayCarNumber && Boolean(displayPicture);
+  const showInitials = !displayCarNumber && !displayPicture;
+  const clipId = `pilot-marker-avatar-${String(marker.id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
   return (
     <g
@@ -407,42 +697,154 @@ const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick }) 
       tabIndex={0}
       role="button"
       aria-label={`Pilot ${marker.carNumber || marker.label || ''}`.trim()}
-    >
-      {auraVisible && (
+      >
+      {!hidden && auraVisible && (
         <circle
-          r={Math.max(auraRadius, 12)}
+          r={Math.min(auraRadius, 12)}
           fill="rgba(59,130,246,0.16)"
           stroke="rgba(30,58,138,0.92)"
-          strokeWidth="2.5"
+          strokeWidth="2"
         />
       )}
-      <circle
-        r="24"
-        fill={style.fillColor}
-        stroke={style.borderColor}
-        strokeWidth="5"
-      />
-      <text
-        x="0"
-        y="7"
-        textAnchor="middle"
-        fontSize={fontSize}
-        fontWeight="700"
-        fill={style.textColor}
-        style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.02em' }}
-      >
-        {marker.label}
-      </text>
+      {!hidden && (
+        <>
+          <path d={`M 0 0 L 0 -${poleLength}`} stroke="#FFF" strokeWidth="2.5" strokeLinecap="round" />
+          <g transform={`translate(0, -${poleLength + badgeRadius})`}>
+            {showImage && (
+              <defs>
+                <clipPath id={clipId} clipPathUnits="objectBoundingBox">
+                  <circle cx="0.5" cy="0.5" r="0.5" />
+                </clipPath>
+              </defs>
+            )}
+            <circle
+              r={badgeRadius}
+              fill="rgba(7,7,9,0.98)"
+              stroke={style.borderColor}
+              strokeWidth="3"
+            />
+            {showImage && (
+              <image
+                href={displayPicture}
+                x={-badgeRadius + 2}
+                y={-badgeRadius + 2}
+                width={(badgeRadius - 2) * 2}
+                height={(badgeRadius - 2) * 2}
+                preserveAspectRatio="xMidYMid slice"
+                clipPath={`url(#${clipId})`}
+              />
+            )}
+            {displayCarNumber && (
+              <text
+                x="0"
+                y="8"
+                textAnchor="middle"
+                fontSize={displayCarNumber.length <= 2 ? 22 : 18}
+                fontWeight="800"
+                fill={style.textColor}
+                style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.02em' }}
+              >
+                {displayCarNumber}
+              </text>
+            )}
+            {showInitials && (
+              <text
+                x="0"
+                y="6"
+                textAnchor="middle"
+                fontSize={displayInitials.length <= 2 ? 16 : 14}
+                fontWeight="800"
+                fill={style.textColor}
+                style={{ fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.04em' }}
+              >
+                {displayInitials}
+              </text>
+            )}
+          </g>
+        </>
+      )}
     </g>
   );
 };
 
-const PilotMarkerPopover = ({ marker }) => {
+const CameraPositionMarker = ({ marker, onHover, onBlur, onClick, hidden = false }) => {
+  const poleLength = 30;
+  const iconSize = 18;
+  const hitAreaWidth = 28;
+  const hitAreaHeight = poleLength + iconSize + 10;
+
+  return (
+    <g
+      transform={`translate(${marker.x}, ${marker.y})`}
+      style={{ cursor: 'pointer' }}
+      opacity={marker.isActive === false ? 0.6 : 1}
+      onMouseEnter={() => onHover?.(marker)}
+      onMouseLeave={() => onBlur?.()}
+      onFocus={() => onHover?.(marker)}
+      onBlurCapture={() => onBlur?.()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.(marker);
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label={`Camera ${marker.name || ''}`.trim()}
+    >
+      {!hidden && (
+        <>
+          <rect
+            x={-hitAreaWidth / 2}
+            y={-hitAreaHeight}
+            width={hitAreaWidth}
+            height={hitAreaHeight + 6}
+            fill="rgba(255,255,255,0.001)"
+          />
+          <path d={`M 0 0 L 0 -${poleLength}`} stroke="#FFF" strokeWidth="2" strokeLinecap="round" />
+          <g transform={`translate(${-iconSize / 2 + 2}, -${poleLength + iconSize - 1})`}>
+            <Video
+              width={iconSize}
+              height={iconSize}
+              color={marker.color || '#FF4500'}
+              strokeWidth={2}
+            />
+          </g>
+        </>
+      )}
+    </g>
+  );
+};
+
+const CameraMarkerPopoverContent = ({ marker, layout }) => {
+  if (!marker?.streamUrl) {
+    return null;
+  }
+
+  return (
+    <foreignObject
+      x="0"
+      y="0"
+      width={layout.width}
+      height={layout.height}
+      requiredExtensions="http://www.w3.org/1999/xhtml"
+    >
+      <div xmlns="http://www.w3.org/1999/xhtml" className="h-full w-full overflow-hidden rounded-[24px] bg-black">
+        <StreamPlayer
+          streamUrl={marker.streamUrl}
+          name={marker.name}
+          className="h-full w-full"
+          showControls={false}
+        />
+      </div>
+    </foreignObject>
+  );
+};
+
+const PilotMarkerPopoverContent = ({ marker, layout, scale = 1 }) => {
   if (!marker) {
     return null;
   }
 
-  const layout = getMarkerPopoverLayout(marker);
   const displayCarNumber = String(marker.carNumber || marker.label || '??').trim();
   const displaySpeed = Number.isFinite(marker.speed) ? Math.round(marker.speed) : null;
   const heading = Number.isFinite(marker.heading) ? marker.heading : null;
@@ -454,27 +856,10 @@ const PilotMarkerPopover = ({ marker }) => {
   const hasTelemetry = displaySpeed !== null || heading !== null;
   const badgeRadius = 34;
   const badgeFontSize = 32;
+  const contentScale = scale;
 
   return (
-    <g transform={`translate(${layout.x}, ${layout.y})`} pointerEvents="none">
-      <path
-        d={layout.side === 'right'
-          ? 'M 26 94 L 0 106 L 26 118'
-          : `M ${layout.width - 26} 94 L ${layout.width} 106 L ${layout.width - 26} 118`}
-        fill="rgba(9,9,11,0.92)"
-        stroke="rgba(255,255,255,0.14)"
-        strokeWidth="2"
-      />
-      <rect
-        x="0"
-        y="0"
-        width={layout.width}
-        height={layout.height}
-        rx="24"
-        fill="rgba(7,7,9,0.94)"
-        stroke="rgba(255,255,255,0.18)"
-        strokeWidth="2.5"
-      />
+    <g transform={`scale(${contentScale})`}>
       <g transform={`translate(${badgeRadius - 10} ${badgeRadius - 10})`}>
         <circle
           cx="0"
@@ -482,7 +867,7 @@ const PilotMarkerPopover = ({ marker }) => {
           r={badgeRadius}
           fill={badgeFill}
           stroke="rgba(0,0,0,0.3)"
-            strokeWidth="2"
+          strokeWidth="2"
         />
         <text
           x="0"
@@ -497,7 +882,7 @@ const PilotMarkerPopover = ({ marker }) => {
         </text>
       </g>
 
-      <g transform={`translate(${layout.width / 2} ${layout.height / 2 + 2})`}>
+      <g transform={`translate(${(layout.width / contentScale) / 2} ${((layout.height / contentScale) / 2) + 2})`}>
         <circle r="68" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.16)" strokeWidth="2.5" />
         <circle r="50" fill="rgba(255,255,255,0.015)" stroke="rgba(255,255,255,0.08)" strokeWidth="1.5" />
         <g stroke={needleColor} strokeLinecap="round" opacity={hasTelemetry ? 0.8 : 0.42}>
@@ -557,6 +942,60 @@ const PilotMarkerPopover = ({ marker }) => {
     </g>
   );
 };
+
+const PilotMarkerPopover = ({
+  marker,
+  anchorMarker = null,
+  layoutOverride = null,
+  locked = false,
+  dragging = false,
+  resizing = false,
+  scale = 1,
+  onDragStart = null
+}) => (
+  <MapMarkerPopoverShell
+    marker={marker}
+    anchorMarker={anchorMarker}
+    layoutOverride={layoutOverride}
+    locked={locked}
+    dragging={dragging}
+    resizing={resizing}
+    scale={scale}
+    onDragStart={onDragStart}
+  >
+    {({ layout, scale: popoverScale }) => (
+      <PilotMarkerPopoverContent marker={marker} layout={layout} scale={popoverScale} />
+    )}
+  </MapMarkerPopoverShell>
+);
+
+const CameraMarkerPopover = ({
+  marker,
+  anchorMarker = null,
+  layoutOverride = null,
+  locked = false,
+  dragging = false,
+  resizing = false,
+  scale = 1,
+  onDragStart = null,
+  onResizeStart = null
+}) => (
+  <MapMarkerPopoverShell
+    marker={marker}
+    anchorMarker={anchorMarker}
+    layoutOverride={layoutOverride}
+    locked={locked}
+    dragging={dragging}
+    resizing={resizing}
+    resizable={locked}
+    scale={scale}
+    title={marker?.name || ''}
+    onDragStart={onDragStart}
+    onResizeStart={onResizeStart}
+  >
+    {({ layout }) => <CameraMarkerPopoverContent marker={marker} layout={layout} />}
+  </MapMarkerPopoverShell>
+);
 
 export const usePlacemarkWeather = (placemark) => {
   const [weather, setWeather] = useState(null);
@@ -621,11 +1060,28 @@ export function MapWeatherBadges({ placemark, className = '' }) {
   );
 }
 
+export function MapGridScaleBadge({ label = '', className = '' }) {
+  if (!label) {
+    return null;
+  }
+
+  return (
+    <div className={`flex items-center rounded bg-black/75 gap-1 px-3 py-2 text-sm font-bold text-white ${className}`.trim()}>
+      <div className="grid h-4 w-4">
+        <span className="bg-white/95" />
+      </div>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 const WeatherReadingRow = ({
   label,
   reading,
   className = '',
-  compact = false
+  compact = false,
+  labelWidth = '3.2rem',
+  gapClassName = 'gap-x-2'
 }) => {
   if (!reading) {
     return null;
@@ -634,7 +1090,10 @@ const WeatherReadingRow = ({
   const WeatherIcon = getWeatherIconComponent(reading.weatherCode);
 
   return (
-    <div className={`grid grid-cols-[3.2rem_minmax(0,1fr)] items-center gap-x-2 ${className}`.trim()}>
+    <div
+      className={`grid items-center ${gapClassName} ${className}`.trim()}
+      style={{ gridTemplateColumns: `${labelWidth} minmax(0,1fr)` }}
+    >
       <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
         {label}
       </span>
@@ -661,10 +1120,14 @@ export function PlacemarkWeatherNowNext({
   nowLabel = 'Now',
   nextHourLabel = 'In 1h',
   title = 'Weather',
+  showTitle = true,
   className = '',
   layout = 'stacked',
   compact = false,
-  frame = 'card'
+  frame = 'card',
+  rowsClassName = 'space-y-2',
+  rowLabelWidth = '3.2rem',
+  rowGapClassName = 'gap-x-2'
 }) {
   const weather = usePlacemarkWeather(placemark);
   const WeatherIcon = getWeatherIconComponent(weather?.weatherCode);
@@ -679,12 +1142,16 @@ export function PlacemarkWeatherNowNext({
         label={nowLabel}
         reading={weather}
         compact={compact}
+        labelWidth={rowLabelWidth}
+        gapClassName={rowGapClassName}
       />
       {weather.nextHour && (
         <WeatherReadingRow
           label={nextHourLabel}
           reading={weather.nextHour}
           compact={compact}
+          labelWidth={rowLabelWidth}
+          gapClassName={rowGapClassName}
         />
       )}
     </>
@@ -694,13 +1161,15 @@ export function PlacemarkWeatherNowNext({
     if (frame === 'bare') {
       return (
         <div className={`flex items-start gap-3 ${className}`.trim()}>
-          <div className="flex flex-none items-center gap-2 text-zinc-300">
-            <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-              {title}
-            </span>
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
+          {showTitle ? (
+            <div className="flex flex-none items-center gap-2 text-zinc-300">
+              <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+                {title}
+              </span>
+            </div>
+          ) : null}
+          <div className={`min-w-0 flex-1 ${rowsClassName}`.trim()}>
             {sharedRows}
           </div>
         </div>
@@ -709,13 +1178,15 @@ export function PlacemarkWeatherNowNext({
 
     return (
       <div className={`flex items-start gap-3 rounded border border-white/10 bg-black/35 px-2.5 py-2 ${className}`.trim()}>
-        <div className="flex flex-none items-center gap-2 text-zinc-300">
-          <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-            {title}
-          </span>
-        </div>
-        <div className="min-w-0 flex-1 space-y-2">
+        {showTitle ? (
+          <div className="flex flex-none items-center gap-2 text-zinc-300">
+            <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+              {title}
+            </span>
+          </div>
+        ) : null}
+        <div className={`min-w-0 flex-1 ${rowsClassName}`.trim()}>
           {sharedRows}
         </div>
       </div>
@@ -755,13 +1226,28 @@ export function PlacemarkWeatherNowNext({
   );
 }
 
-export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' }) {
+export function PlacemarkMapFeed({ placemark, pilotMarkers = [], cameraMarkers = [], className = '', onScaleChange = null }) {
+  const getPopoverKey = (type, id) => `${type}:${String(id || '').trim()}`;
+  const containerRef = useRef(null);
+  const svgRef = useRef(null);
+  const gridPatternId = useId().replace(/:/g, '');
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [markerNow, setMarkerNow] = useState(() => Date.now());
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
-  const [selectedMarkerId, setSelectedMarkerId] = useState(null);
+  const [hoveredCameraMarkerId, setHoveredCameraMarkerId] = useState(null);
+  const [selectedPilotMarkerIds, setSelectedPilotMarkerIds] = useState([]);
+  const [selectedCameraMarkerIds, setSelectedCameraMarkerIds] = useState([]);
+  const [selectedPopoverLayouts, setSelectedPopoverLayouts] = useState({});
+  const [draggingPopoverKey, setDraggingPopoverKey] = useState(null);
+  const [resizingPopoverKey, setResizingPopoverKey] = useState(null);
   const dragStateRef = useRef(null);
+  const popoverDragRef = useRef(null);
+  const popoverResizeRef = useRef(null);
+  const selectedPopoverLayoutsRef = useRef({});
+  const popoverCloseBlockedRef = useRef(false);
+  const popoverScale = useMemo(() => getMarkerPopoverScale(zoom), [zoom]);
   const projectionBounds = useMemo(
     () => buildProjectionBounds(placemark?.coordinateGroups || []),
     [placemark]
@@ -780,15 +1266,321 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
     },
     [normalized.bounds, pilotMarkers]
   );
+  const projectedCameraMarkers = useMemo(
+    () => (
+      cameraMarkers
+        .map((marker) => projectMarkerToBounds(marker, normalized.bounds))
+        .filter(Boolean)
+    ),
+    [cameraMarkers, normalized.bounds]
+  );
   const hoveredMarker = useMemo(
     () => projectedPilotMarkers.find((marker) => marker.id === hoveredMarkerId) || null,
     [hoveredMarkerId, projectedPilotMarkers]
   );
-  const selectedMarker = useMemo(
-    () => projectedPilotMarkers.find((marker) => marker.id === selectedMarkerId) || null,
-    [projectedPilotMarkers, selectedMarkerId]
+  const hoveredCameraMarker = useMemo(
+    () => projectedCameraMarkers.find((marker) => marker.id === hoveredCameraMarkerId) || null,
+    [hoveredCameraMarkerId, projectedCameraMarkers]
   );
-  const activeMarker = selectedMarker || hoveredMarker;
+  const selectedPilotMarkers = useMemo(
+    () => projectedPilotMarkers.filter((marker) => selectedPilotMarkerIds.includes(marker.id)),
+    [projectedPilotMarkers, selectedPilotMarkerIds]
+  );
+  const selectedCameraMarkers = useMemo(
+    () => projectedCameraMarkers.filter((marker) => selectedCameraMarkerIds.includes(marker.id)),
+    [projectedCameraMarkers, selectedCameraMarkerIds]
+  );
+  const renderedMapSize = useMemo(
+    () => Math.min(containerSize.width || 0, containerSize.height || 0),
+    [containerSize.height, containerSize.width]
+  );
+  const metersPerSvgUnit = useMemo(
+    () => getMetersPerSvgUnit(normalized.bounds),
+    [normalized.bounds]
+  );
+  const mapScale = useMemo(
+    () => pickMapScaleStep(metersPerSvgUnit, renderedMapSize, zoom),
+    [metersPerSvgUnit, renderedMapSize, zoom]
+  );
+  const mapScaleLabel = useMemo(
+    () => formatMapScaleLabel(mapScale.stepMeters),
+    [mapScale.stepMeters]
+  );
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) {
+      return undefined;
+    }
+
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      setContainerSize({
+        width: rect.width,
+        height: rect.height
+      });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateSize);
+      return () => window.removeEventListener('resize', updateSize);
+    }
+
+    const observer = new ResizeObserver(() => updateSize());
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    onScaleChange?.({
+      meters: mapScale.stepMeters,
+      label: mapScaleLabel
+    });
+  }, [mapScale.stepMeters, mapScaleLabel, onScaleChange]);
+
+  const handlePopoverDragStart = (event, marker, type) => {
+    if (!marker) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const popoverKey = getPopoverKey(type, marker.id);
+    setDraggingPopoverKey(popoverKey);
+    popoverCloseBlockedRef.current = false;
+    const fallbackLayout = selectedPopoverLayoutsRef.current[popoverKey] || getMarkerPopoverLayout(marker, popoverScale);
+    popoverDragRef.current = {
+      key: popoverKey,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startLayoutX: fallbackLayout.x,
+      startLayoutY: fallbackLayout.y,
+      width: fallbackLayout.width,
+      height: fallbackLayout.height,
+      side: fallbackLayout.side,
+      moved: false
+    };
+  };
+
+  const handlePopoverResizeStart = (event, marker, type, direction = 'se') => {
+    if (!marker) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const popoverKey = getPopoverKey(type, marker.id);
+    const fallbackLayout = selectedPopoverLayoutsRef.current[popoverKey] || getMarkerPopoverLayout(marker, popoverScale);
+    const svgRect = svgRef.current?.getBoundingClientRect();
+    const renderedMapSize = svgRect ? Math.min(svgRect.width, svgRect.height) : 0;
+    const offsetX = svgRect ? ((svgRect.width - renderedMapSize) / 2) : 0;
+    const offsetY = svgRect ? ((svgRect.height - renderedMapSize) / 2) : 0;
+    const centerClientX = svgRect
+      ? svgRect.left + offsetX + (((fallbackLayout.x + (fallbackLayout.width / 2)) / 1000) * renderedMapSize)
+      : event.clientX;
+    const centerClientY = svgRect
+      ? svgRect.top + offsetY + (((fallbackLayout.y + (fallbackLayout.height / 2)) / 1000) * renderedMapSize)
+      : event.clientY;
+    const startDistance = Math.max(
+      24,
+      Math.hypot(event.clientX - centerClientX, event.clientY - centerClientY)
+    );
+
+    setResizingPopoverKey(popoverKey);
+    popoverCloseBlockedRef.current = false;
+    popoverResizeRef.current = {
+      key: popoverKey,
+      marker,
+      direction,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      centerClientX,
+      centerClientY,
+      startDistance,
+      startDistanceX: Math.max(12, Math.abs(event.clientX - centerClientX)),
+      startDistanceY: Math.max(12, Math.abs(event.clientY - centerClientY)),
+      startLayout: fallbackLayout,
+      startSizeMultiplier: fallbackLayout.sizeMultiplier || 1,
+      moved: false
+    };
+  };
+
+  useEffect(() => {
+    selectedPopoverLayoutsRef.current = selectedPopoverLayouts;
+  }, [selectedPopoverLayouts]);
+
+  useEffect(() => {
+    const selectedKeys = [
+      ...selectedPilotMarkers.map((marker) => getPopoverKey('pilot', marker.id)),
+      ...selectedCameraMarkers.map((marker) => getPopoverKey('camera', marker.id))
+    ];
+
+    if (selectedKeys.length === 0) {
+      setSelectedPopoverLayouts({});
+      selectedPopoverLayoutsRef.current = {};
+      popoverDragRef.current = null;
+      popoverResizeRef.current = null;
+      setDraggingPopoverKey(null);
+      setResizingPopoverKey(null);
+      popoverCloseBlockedRef.current = false;
+      return;
+    }
+
+    setSelectedPopoverLayouts((prev) => {
+      const nextLayouts = {};
+
+      selectedPilotMarkers.forEach((marker) => {
+        const key = getPopoverKey('pilot', marker.id);
+        nextLayouts[key] = prev[key]
+          ? resizeMarkerPopoverLayoutFromCenter(prev[key], popoverScale)
+          : getMarkerPopoverLayout(marker, popoverScale);
+      });
+
+      selectedCameraMarkers.forEach((marker) => {
+        const key = getPopoverKey('camera', marker.id);
+        nextLayouts[key] = prev[key]
+          ? resizeMarkerPopoverLayoutFromCenter(prev[key], popoverScale)
+          : getMarkerPopoverLayout(marker, popoverScale);
+      });
+
+      return nextLayouts;
+    });
+  }, [popoverScale, selectedPilotMarkers, selectedCameraMarkers]);
+
+  useEffect(() => {
+    if (!draggingPopoverKey || !popoverDragRef.current) {
+      return undefined;
+    }
+
+    const handleWindowMouseMove = (event) => {
+      const dragState = popoverDragRef.current;
+      if (!dragState) {
+        return;
+      }
+
+      const deltaX = event.clientX - dragState.startClientX;
+      const deltaY = event.clientY - dragState.startClientY;
+      const moved = Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2;
+
+      if (moved) {
+        dragState.moved = true;
+        popoverCloseBlockedRef.current = true;
+      }
+
+      const svgRect = svgRef.current?.getBoundingClientRect();
+      const renderedMapSize = svgRect ? Math.min(svgRect.width, svgRect.height) : 0;
+      const unitsPerPixelX = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const unitsPerPixelY = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const nextX = dragState.startLayoutX + (deltaX * unitsPerPixelX);
+      const nextY = dragState.startLayoutY + (deltaY * unitsPerPixelY);
+
+      setSelectedPopoverLayouts((prev) => ({
+        ...prev,
+        [dragState.key]: {
+          x: nextX,
+          y: nextY,
+          width: dragState.width,
+          height: dragState.height,
+          side: dragState.side,
+          sizeMultiplier: prev[dragState.key]?.sizeMultiplier || 1
+        }
+      }));
+    };
+
+    const handleWindowMouseUp = () => {
+      popoverDragRef.current = null;
+      setDraggingPopoverKey(null);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [draggingPopoverKey, zoom]);
+
+  useEffect(() => {
+    if (!resizingPopoverKey || !popoverResizeRef.current) {
+      return undefined;
+    }
+
+    const handleWindowMouseMove = (event) => {
+      const resizeState = popoverResizeRef.current;
+      if (!resizeState) {
+        return;
+      }
+
+      const svgRect = svgRef.current?.getBoundingClientRect();
+      const renderedMapSize = svgRect ? Math.min(svgRect.width, svgRect.height) : 0;
+      const unitsPerPixelX = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const unitsPerPixelY = renderedMapSize ? (1000 / renderedMapSize) : (1 / zoom);
+      const deltaXUnits = (event.clientX - resizeState.startClientX) * unitsPerPixelX;
+      const deltaYUnits = (event.clientY - resizeState.startClientY) * unitsPerPixelY;
+      const horizontalFactor = resizeState.direction.includes('e') || resizeState.direction.includes('w')
+        ? Math.max(
+            0.2,
+            Math.abs(event.clientX - resizeState.centerClientX) / resizeState.startDistanceX
+          )
+        : null;
+      const verticalFactor = resizeState.direction.includes('n') || resizeState.direction.includes('s')
+        ? Math.max(
+            0.2,
+            Math.abs(event.clientY - resizeState.centerClientY) / resizeState.startDistanceY
+          )
+        : null;
+      const baseFactor = (
+        horizontalFactor !== null && verticalFactor !== null
+          ? (Math.abs(horizontalFactor - 1) >= Math.abs(verticalFactor - 1) ? horizontalFactor : verticalFactor)
+          : horizontalFactor ?? verticalFactor ?? 1
+      );
+      const sizeMultiplier = clampValue(resizeState.startSizeMultiplier * baseFactor, 0.6, 2.4);
+      const moved = Math.abs(deltaXUnits) > 2 || Math.abs(deltaYUnits) > 2;
+
+      if (moved) {
+        resizeState.moved = true;
+        popoverCloseBlockedRef.current = true;
+      }
+
+      setSelectedPopoverLayouts((prev) => {
+        const currentLayout = prev[resizeState.key] || getMarkerPopoverLayout(resizeState.marker, popoverScale);
+        const nextLayout = getResizedPopoverLayout(
+          {
+            ...currentLayout,
+            x: resizeState.startLayout.x,
+            y: resizeState.startLayout.y,
+            width: resizeState.startLayout.width,
+            height: resizeState.startLayout.height
+          },
+          popoverScale,
+          sizeMultiplier,
+          resizeState.direction
+        );
+
+        return {
+          ...prev,
+          [resizeState.key]: nextLayout
+        };
+      });
+    };
+
+    const handleWindowMouseUp = () => {
+      popoverResizeRef.current = null;
+      setResizingPopoverKey(null);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [popoverScale, resizingPopoverKey]);
 
   useEffect(() => {
     if (projectedPilotMarkers.length === 0) {
@@ -820,6 +1612,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
 
   return (
     <div
+      ref={containerRef}
       className={`relative overflow-hidden bg-[#05070B] ${className}`}
       onWheel={(event) => {
         event.preventDefault();
@@ -827,11 +1620,16 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
         setZoom((prev) => clampZoom(prev + zoomDelta));
       }}
       onMouseDown={(event) => {
+        if (popoverDragRef.current) {
+          return;
+        }
+
         dragStateRef.current = {
           startClientX: event.clientX,
           startClientY: event.clientY,
           startPanX: pan.x,
-          startPanY: pan.y
+          startPanY: pan.y,
+          moved: false
         };
       }}
       onMouseMove={(event) => {
@@ -841,38 +1639,74 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
 
         const deltaX = event.clientX - dragStateRef.current.startClientX;
         const deltaY = event.clientY - dragStateRef.current.startClientY;
+        const moved = Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4;
+        if (moved) {
+          dragStateRef.current.moved = true;
+        }
         setPan({
           x: dragStateRef.current.startPanX + deltaX,
           y: dragStateRef.current.startPanY + deltaY
         });
       }}
       onMouseUp={() => {
-        dragStateRef.current = null;
+        if (dragStateRef.current) {
+          dragStateRef.current.released = true;
+        }
       }}
       onMouseLeave={() => {
         dragStateRef.current = null;
+        popoverDragRef.current = null;
+        popoverResizeRef.current = null;
+        setDraggingPopoverKey(null);
+        setResizingPopoverKey(null);
       }}
       onClick={() => {
-        if (!selectedMarkerId) {
+        const wasPopoverDragging = Boolean(popoverCloseBlockedRef.current);
+        const wasDragging = Boolean(dragStateRef.current?.moved);
+
+        if (selectedPilotMarkerIds.length === 0 && selectedCameraMarkerIds.length === 0 && !wasDragging && !wasPopoverDragging) {
           setHoveredMarkerId(null);
+          setHoveredCameraMarkerId(null);
+        } else if (!wasDragging && !wasPopoverDragging) {
+          setSelectedPilotMarkerIds([]);
+          setSelectedCameraMarkerIds([]);
+          setSelectedPopoverLayouts({});
         }
+
+        dragStateRef.current = null;
+        popoverDragRef.current = null;
+        popoverResizeRef.current = null;
+        setDraggingPopoverKey(null);
+        setResizingPopoverKey(null);
+        popoverCloseBlockedRef.current = false;
       }}
-      style={{ cursor: dragStateRef.current ? 'grabbing' : 'grab' }}
+      style={{ cursor: dragStateRef.current || draggingPopoverKey ? 'grabbing' : resizingPopoverKey ? 'nwse-resize' : 'grab' }}
     >
       <div className="absolute inset-0 opacity-70" style={{
         backgroundImage: 'radial-gradient(circle at top left, rgba(255,69,0,0.18), transparent 35%), radial-gradient(circle at bottom right, rgba(234,179,8,0.14), transparent 30%)'
       }} />
       <svg
+        ref={svgRef}
         viewBox="0 0 1000 1000"
         className="absolute inset-0 w-full h-full transition-transform duration-150 ease-out"
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '50% 50%' }}
       >
         <defs>
-          <pattern id="map-grid" width="80" height="80" patternUnits="userSpaceOnUse">
-            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />
+          <pattern
+            id={gridPatternId}
+            width={mapScale.stepSvgUnits}
+            height={mapScale.stepSvgUnits}
+            patternUnits="userSpaceOnUse"
+          >
+            <path
+              d={`M ${mapScale.stepSvgUnits} 0 L 0 0 0 ${mapScale.stepSvgUnits}`}
+              fill="none"
+              stroke="rgba(255,255,255,0.06)"
+              strokeWidth="2"
+            />
           </pattern>
         </defs>
-        <rect width="1000" height="1000" fill="url(#map-grid)" />
+        <rect width="1000" height="1000" fill={`url(#${gridPatternId})`} />
         {normalized.groups.map((group, index) => {
           const points = group.map((point) => `${point.x},${point.y}`).join(' ');
 
@@ -888,17 +1722,17 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
           }
 
           if (isPolygon) {
-            return (
-              <polygon
-                key={index}
-                points={points}
-                fill="rgba(255,69,0,0.14)"
-                stroke="#FF4500"
-                strokeWidth="12"
-                strokeLinejoin="round"
-              />
-            );
-          }
+          return (
+            <polygon
+              key={index}
+              points={points}
+              fill="rgba(255,69,0,0.14)"
+              stroke="#FF4500"
+              strokeWidth="4"
+              strokeLinejoin="round"
+            />
+          );
+        }
 
           return (
             <polyline
@@ -906,7 +1740,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
               points={points}
               fill="none"
               stroke="#FF4500"
-              strokeWidth="12"
+              strokeWidth="4"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -920,23 +1754,104 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
             marker={marker}
             bounds={normalized.bounds}
             now={markerNow}
+            hidden={selectedPilotMarkerIds.includes(marker.id)}
             onHover={(nextMarker) => {
-              if (!selectedMarkerId) {
+              if (!selectedPilotMarkerIds.includes(nextMarker.id)) {
                 setHoveredMarkerId(nextMarker.id);
               }
             }}
             onBlur={() => {
-              if (!selectedMarkerId) {
+              if (!selectedPilotMarkerIds.includes(marker.id)) {
                 setHoveredMarkerId((current) => (current === marker.id ? null : current));
               }
             }}
             onClick={(nextMarker) => {
-              setSelectedMarkerId((current) => (current === nextMarker.id ? null : nextMarker.id));
+              setSelectedPilotMarkerIds((current) => (
+                current.includes(nextMarker.id)
+                  ? current.filter((id) => id !== nextMarker.id)
+                  : [...current, nextMarker.id]
+              ));
               setHoveredMarkerId(null);
             }}
           />
         ))}
-        {activeMarker && <PilotMarkerPopover marker={activeMarker} />}
+        {projectedCameraMarkers.map((marker) => (
+          <CameraPositionMarker
+            key={marker.id}
+            marker={marker}
+            hidden={selectedCameraMarkerIds.includes(marker.id)}
+            onHover={(nextMarker) => {
+              if (!selectedCameraMarkerIds.includes(nextMarker.id)) {
+                setHoveredCameraMarkerId(nextMarker.id);
+              }
+            }}
+            onBlur={() => {
+              if (!selectedCameraMarkerIds.includes(marker.id)) {
+                setHoveredCameraMarkerId((current) => (current === marker.id ? null : current));
+              }
+            }}
+            onClick={(nextMarker) => {
+              setSelectedCameraMarkerIds((current) => (
+                current.includes(nextMarker.id)
+                  ? current.filter((id) => id !== nextMarker.id)
+                  : [...current, nextMarker.id]
+              ));
+              setHoveredCameraMarkerId(null);
+            }}
+          />
+        ))}
+        {hoveredMarker && !selectedPilotMarkerIds.includes(hoveredMarker.id) && (
+          <PilotMarkerPopover
+            marker={hoveredMarker}
+            anchorMarker={hoveredMarker}
+            locked={false}
+            dragging={false}
+            scale={popoverScale}
+          />
+        )}
+        {hoveredCameraMarker && !selectedCameraMarkerIds.includes(hoveredCameraMarker.id) && (
+          <CameraMarkerPopover
+            marker={hoveredCameraMarker}
+            anchorMarker={hoveredCameraMarker}
+            locked={false}
+            dragging={false}
+            scale={popoverScale}
+          />
+        )}
+        {selectedPilotMarkers.map((marker) => {
+          const popoverKey = getPopoverKey('pilot', marker.id);
+
+          return (
+            <PilotMarkerPopover
+              key={popoverKey}
+              marker={marker}
+              anchorMarker={marker}
+              layoutOverride={selectedPopoverLayouts[popoverKey] || null}
+              locked
+              dragging={draggingPopoverKey === popoverKey}
+              scale={popoverScale}
+              onDragStart={(event) => handlePopoverDragStart(event, marker, 'pilot')}
+            />
+          );
+        })}
+        {selectedCameraMarkers.map((marker) => {
+          const popoverKey = getPopoverKey('camera', marker.id);
+
+          return (
+            <CameraMarkerPopover
+              key={popoverKey}
+              marker={marker}
+              anchorMarker={marker}
+              layoutOverride={selectedPopoverLayouts[popoverKey] || null}
+              locked
+              dragging={draggingPopoverKey === popoverKey}
+              resizing={resizingPopoverKey === popoverKey}
+              scale={popoverScale}
+              onDragStart={(event) => handlePopoverDragStart(event, marker, 'camera')}
+              onResizeStart={(event) => handlePopoverResizeStart(event, marker, 'camera')}
+            />
+          );
+        })}
       </svg>
     </div>
   );
