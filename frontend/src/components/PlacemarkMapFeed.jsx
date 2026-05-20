@@ -252,11 +252,13 @@ const hexToRgba = (hexColor, alpha = 1) => {
 
 const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
 
-const getMarkerPopoverLayout = (marker) => {
-  const width = 312;
-  const height = 176;
-  const offsetX = 48;
-  const offsetY = 40;
+const getMarkerPopoverScale = (zoom) => clampValue(1 / zoom, 0.7, 1.35);
+
+const getMarkerPopoverLayout = (marker, scale = 1) => {
+  const width = Math.round(312 * scale);
+  const height = Math.round(176 * scale);
+  const offsetX = Math.round(48 * scale);
+  const offsetY = Math.round(40 * scale);
   const prefersRight = marker.x < 700;
   const rawX = prefersRight ? marker.x + offsetX : marker.x - width - offsetX;
   const rawY = marker.y - (height / 2);
@@ -272,12 +274,32 @@ const getMarkerPopoverLayout = (marker) => {
   };
 };
 
+const resizeMarkerPopoverLayoutFromCenter = (layout, scale = 1) => {
+  if (!layout) {
+    return null;
+  }
+
+  const width = Math.round(312 * scale);
+  const height = Math.round(176 * scale);
+  const centerX = layout.x + (layout.width / 2);
+  const centerY = layout.y + (layout.height / 2);
+
+  return {
+    ...layout,
+    x: clampValue(centerX - (width / 2), 20, 1000 - width - 20),
+    y: clampValue(centerY - (height / 2), 20, 1000 - height - 20),
+    width,
+    height
+  };
+};
+
 const MapMarkerPopoverShell = ({
   marker,
   layoutOverride = null,
   anchorMarker = null,
   locked = false,
   dragging = false,
+  scale = 1,
   onDragStart = null,
   children
 }) => {
@@ -285,7 +307,7 @@ const MapMarkerPopoverShell = ({
     return null;
   }
 
-  const layout = layoutOverride || getMarkerPopoverLayout(marker);
+  const layout = layoutOverride || getMarkerPopoverLayout(marker, scale);
   const anchor = anchorMarker || marker;
   const anchorX = anchor.x - layout.x;
   const anchorY = anchor.y - layout.y;
@@ -330,7 +352,7 @@ const MapMarkerPopoverShell = ({
         stroke="rgba(255,255,255,0.18)"
         strokeWidth="2.5"
       />
-      {typeof children === 'function' ? children({ layout }) : children}
+      {typeof children === 'function' ? children({ layout, scale }) : children}
     </g>
   );
 };
@@ -543,7 +565,7 @@ const PilotPositionMarker = ({ marker, bounds, now, onHover, onBlur, onClick, hi
   );
 };
 
-const PilotMarkerPopoverContent = ({ marker, layout }) => {
+const PilotMarkerPopoverContent = ({ marker, layout, scale = 1 }) => {
   if (!marker) {
     return null;
   }
@@ -559,9 +581,10 @@ const PilotMarkerPopoverContent = ({ marker, layout }) => {
   const hasTelemetry = displaySpeed !== null || heading !== null;
   const badgeRadius = 34;
   const badgeFontSize = 32;
+  const contentScale = scale;
 
   return (
-    <>
+    <g transform={`scale(${contentScale})`}>
       <g transform={`translate(${badgeRadius - 10} ${badgeRadius - 10})`}>
         <circle
           cx="0"
@@ -584,7 +607,7 @@ const PilotMarkerPopoverContent = ({ marker, layout }) => {
         </text>
       </g>
 
-      <g transform={`translate(${layout.width / 2} ${layout.height / 2 + 2})`}>
+      <g transform={`translate(${(layout.width / contentScale) / 2} ${((layout.height / contentScale) / 2) + 2})`}>
         <circle r="68" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.16)" strokeWidth="2.5" />
         <circle r="50" fill="rgba(255,255,255,0.015)" stroke="rgba(255,255,255,0.08)" strokeWidth="1.5" />
         <g stroke={needleColor} strokeLinecap="round" opacity={hasTelemetry ? 0.8 : 0.42}>
@@ -641,7 +664,7 @@ const PilotMarkerPopoverContent = ({ marker, layout }) => {
           </text>
         )}
       </g>
-    </>
+    </g>
   );
 };
 
@@ -651,6 +674,7 @@ const PilotMarkerPopover = ({
   layoutOverride = null,
   locked = false,
   dragging = false,
+  scale = 1,
   onDragStart = null
 }) => (
   <MapMarkerPopoverShell
@@ -659,9 +683,12 @@ const PilotMarkerPopover = ({
     layoutOverride={layoutOverride}
     locked={locked}
     dragging={dragging}
+    scale={scale}
     onDragStart={onDragStart}
   >
-    {({ layout }) => <PilotMarkerPopoverContent marker={marker} layout={layout} />}
+    {({ layout, scale: popoverScale }) => (
+      <PilotMarkerPopoverContent marker={marker} layout={layout} scale={popoverScale} />
+    )}
   </MapMarkerPopoverShell>
 );
 
@@ -875,6 +902,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
   const popoverDragRef = useRef(null);
   const selectedPopoverLayoutRef = useRef(null);
   const popoverCloseBlockedRef = useRef(false);
+  const popoverScale = useMemo(() => getMarkerPopoverScale(zoom), [zoom]);
   const projectionBounds = useMemo(
     () => buildProjectionBounds(placemark?.coordinateGroups || []),
     [placemark]
@@ -912,7 +940,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
     event.stopPropagation();
     setIsDraggingPopover(true);
     popoverCloseBlockedRef.current = false;
-    const fallbackLayout = selectedPopoverLayoutRef.current || getMarkerPopoverLayout(selectedMarker);
+    const fallbackLayout = selectedPopoverLayoutRef.current || getMarkerPopoverLayout(selectedMarker, popoverScale);
     popoverDragRef.current = {
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -939,8 +967,12 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
       return;
     }
 
-    setSelectedPopoverLayout(getMarkerPopoverLayout(selectedMarker));
-  }, [selectedMarker, selectedMarkerId]);
+    const nextLayout = selectedPopoverLayoutRef.current
+      ? resizeMarkerPopoverLayoutFromCenter(selectedPopoverLayoutRef.current, popoverScale)
+      : getMarkerPopoverLayout(selectedMarker, popoverScale);
+
+    setSelectedPopoverLayout(nextLayout);
+  }, [popoverScale, selectedMarker, selectedMarkerId]);
 
   useEffect(() => {
     if (!isDraggingPopover || !popoverDragRef.current) {
@@ -1170,6 +1202,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], className = '' 
             layoutOverride={selectedMarker ? selectedPopoverLayout : null}
             locked={Boolean(selectedMarker)}
             dragging={isDraggingPopover}
+            scale={popoverScale}
             onDragStart={handlePopoverDragStart}
           />
         )}
