@@ -7,7 +7,7 @@ import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import TelemetryMetricTile from '../TelemetryMetricTile.jsx';
 import CurrentStageBadge from '../CurrentStageBadge.jsx';
 import { LiveStartInformationValue } from '../LiveStartInformationValue.jsx';
-import { PlacemarkMapFeed, MapWeatherBadges, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
+import { PlacemarkMapFeed, MapGridScaleBadge, MapWeatherBadges, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
 import StatusPill from '../StatusPill.jsx';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
@@ -538,12 +538,17 @@ function PilotMonitorCard({
 }
 
 function MonitorMapCard({ mapFeed, pilotMarkers = [], cameraMarkers = [], t }) {
+  const [scaleLabel, setScaleLabel] = useState('');
+
   return (
     <div className="relative min-h-0 h-full overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,14,18,0.96),rgba(8,8,10,0.96))] shadow-[0_10px_24px_rgba(0,0,0,0.30)]">
       <PlacemarkMapFeed
         placemark={mapFeed}
         pilotMarkers={pilotMarkers}
         cameraMarkers={cameraMarkers}
+        onScaleChange={({ label }) => {
+          setScaleLabel((current) => (current === label ? current : label));
+        }}
         className="h-full w-full"
       />
 
@@ -563,7 +568,10 @@ function MonitorMapCard({ mapFeed, pilotMarkers = [], cameraMarkers = [], t }) {
             )}
           </div>
 
-          <MapWeatherBadges placemark={mapFeed} className="shrink-0" />
+          <div className="flex items-center gap-2">
+            <MapWeatherBadges placemark={mapFeed} className="shrink-0" />
+            <MapGridScaleBadge label={scaleLabel} className="shrink-0" />
+          </div>
         </div>
       </div>
     </div>

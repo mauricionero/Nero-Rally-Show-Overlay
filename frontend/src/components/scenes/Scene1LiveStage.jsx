@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
-import { PlacemarkMapFeed, MapWeatherBadges, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
+import { PlacemarkMapFeed, MapGridScaleBadge, MapWeatherBadges, PlacemarkWeatherNowNext } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import CurrentStageBadge from '../CurrentStageBadge.jsx';
@@ -86,6 +86,7 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
   };
   const [selectedSlotIds, setSelectedSlotIds] = useState(initialSceneConfig.selectedSlotIds);
   const [draftSelectedSlotIds, setDraftSelectedSlotIds] = useState(initialSceneConfig.selectedSlotIds);
+  const [mapScaleLabelsById, setMapScaleLabelsById] = useState({});
   const [bottomScroll, setBottomScroll] = useState(0);
   const [maxScroll, setMaxScroll] = useState(0);
   const bottomContainerRef = useRef(null);
@@ -846,6 +847,13 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                     placemark={item}
                     pilotMarkers={pilotMapMarkers}
                     cameraMarkers={getCameraMapMarkers(item.placemarkId)}
+                    onScaleChange={({ label }) => {
+                      setMapScaleLabelsById((current) => (
+                        current[item.id] === label
+                          ? current
+                          : { ...current, [item.id]: label }
+                      ));
+                    }}
                     className="w-full h-full"
                   />
 
@@ -861,7 +869,10 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                             {item.placemarkName}
                           </p>
                         )}
-                        <MapWeatherBadges placemark={item} className="absolute right-0 bottom-0" />
+                        <div className="absolute right-0 bottom-0 flex items-center gap-2">
+                          <MapWeatherBadges placemark={item} className="shrink-0" />
+                          <MapGridScaleBadge label={mapScaleLabelsById[item.id] || ''} className="shrink-0" />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1025,12 +1036,12 @@ export default function Scene1LiveStage({ hideStreams = false, hideTelemetry = f
                       <div className="min-w-0 max-w-[58%]">
                         <PlacemarkWeatherNowNext
                           placemark={pilotCurrentStagePlacemark}
-                          title={t('common.weather')}
                           nowLabel={t('common.now')}
                           nextHourLabel={t('common.in1h')}
                           layout="split"
                           compact
                           frame="bare"
+                          showTitle={false}
                           className="justify-end"
                         />
                       </div>

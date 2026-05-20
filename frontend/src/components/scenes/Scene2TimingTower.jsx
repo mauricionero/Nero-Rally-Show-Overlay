@@ -3,7 +3,7 @@ import { useRally } from '../../contexts/RallyContext.jsx';
 import { useTranslation } from '../../contexts/TranslationContext.jsx';
 import { LeftControls } from '../LeftControls.jsx';
 import { FeedSelect } from '../FeedSelect.jsx';
-import { PlacemarkMapFeed, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
+import { PlacemarkMapFeed, MapGridScaleBadge, MapWeatherBadges } from '../PlacemarkMapFeed.jsx';
 import { StreamPlayer } from '../StreamPlayer.jsx';
 import { PilotTelemetryHud } from '../PilotTelemetryHud.jsx';
 import CurrentStageBadge from '../CurrentStageBadge.jsx';
@@ -74,6 +74,7 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
   const [finishedDisplayMode, setFinishedDisplayMode] = useState(() => (
     loadSceneConfig(SCENE_2_CONFIG_KEY, { finishedDisplayMode: 'time' }).finishedDisplayMode || 'time'
   ));
+  const [selectedFeedScaleLabel, setSelectedFeedScaleLabel] = useState('');
   const [towerWidth, setTowerWidth] = useState(() => {
     if (typeof window === 'undefined') {
       return DEFAULT_TOWER_WIDTH;
@@ -913,6 +914,9 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
               placemark={selectedFeed}
               pilotMarkers={pilotMapMarkers}
               cameraMarkers={selectedFeedCameraMarkers}
+              onScaleChange={({ label }) => {
+                setSelectedFeedScaleLabel((current) => (current === label ? current : label));
+              }}
               className="w-full h-full"
             />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
@@ -927,7 +931,10 @@ export default function Scene2TimingTower({ hideStreams = false, hideTelemetry =
                       {selectedFeed.placemarkName}
                     </p>
                   )}
-                  <MapWeatherBadges placemark={selectedFeed} className="absolute right-0 bottom-0" />
+                  <div className="absolute right-0 bottom-0 flex items-center gap-2">
+                    <MapWeatherBadges placemark={selectedFeed} className="shrink-0" />
+                    <MapGridScaleBadge label={selectedFeedScaleLabel} className="shrink-0" />
+                  </div>
                 </div>
               </div>
             </div>

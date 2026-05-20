@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Cloud,
   CloudDrizzle,
@@ -17,7 +17,20 @@ import { StreamPlayer } from './StreamPlayer.jsx';
 const WEATHER_REFRESH_MS = 5 * 60 * 1000;
 const POSITION_STATUS_REFRESH_MS = 30 * 1000;
 const MAP_VIEWPORT_MARGIN_RATIO = 0.38;
+const SINGLE_POINT_RADIUS_METERS = 50;
 const weatherCache = new Map();
+
+const metersToLatitudeDegrees = (meters) => meters / 111_320;
+
+const metersToLongitudeDegrees = (meters, latitude) => {
+  const latitudeRadians = latitude * (Math.PI / 180);
+  const denominator = 111_320 * Math.cos(latitudeRadians);
+  if (!Number.isFinite(denominator) || Math.abs(denominator) < 0.000001) {
+    return metersToLatitudeDegrees(meters);
+  }
+
+  return meters / denominator;
+};
 
 const buildProjectionBounds = (coordinateGroups = []) => {
   const points = coordinateGroups.flat().filter((point) => (
@@ -37,10 +50,21 @@ const buildProjectionBounds = (coordinateGroups = []) => {
   const rawLngSpan = Math.max(maxLng - minLng, 0.000001);
   const latMargin = rawLatSpan * MAP_VIEWPORT_MARGIN_RATIO;
   const lngMargin = rawLngSpan * MAP_VIEWPORT_MARGIN_RATIO;
-  const expandedMinLat = minLat - latMargin;
-  const expandedMaxLat = maxLat + latMargin;
-  const expandedMinLng = minLng - lngMargin;
-  const expandedMaxLng = maxLng + lngMargin;
+  const hasSinglePointGeometry = points.length === 1 || (rawLatSpan < 0.00001 && rawLngSpan < 0.00001);
+  const fallbackLatMargin = metersToLatitudeDegrees(SINGLE_POINT_RADIUS_METERS);
+  const fallbackLngMargin = metersToLongitudeDegrees(SINGLE_POINT_RADIUS_METERS, (minLat + maxLat) / 2);
+  const expandedMinLat = hasSinglePointGeometry
+    ? minLat - fallbackLatMargin
+    : minLat - latMargin;
+  const expandedMaxLat = hasSinglePointGeometry
+    ? maxLat + fallbackLatMargin
+    : maxLat + latMargin;
+  const expandedMinLng = hasSinglePointGeometry
+    ? minLng - fallbackLngMargin
+    : minLng - lngMargin;
+  const expandedMaxLng = hasSinglePointGeometry
+    ? maxLng + fallbackLngMargin
+    : maxLng + lngMargin;
   const latSpan = Math.max(expandedMaxLat - expandedMinLat, 0.000001);
   const lngSpan = Math.max(expandedMaxLng - expandedMinLng, 0.000001);
   const padding = 150;
@@ -253,6 +277,84 @@ const hexToRgba = (hexColor, alpha = 1) => {
 };
 
 const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const getMetersPerSvgUnit = (bounds) => {
+  if (!bounds) {
+    return null;
+  }
+
+  const centerLatRadians = ((bounds.minLat + bounds.maxLat) / 2) * (Math.PI / 180);
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLng = 111_320 * Math.cos(centerLatRadians);
+  const metersPerSvgX = metersPerDegreeLng / (bounds.width / Math.max(bounds.lngSpan, 0.000001));
+  const metersPerSvgY = metersPerDegreeLat / (bounds.height / Math.max(bounds.latSpan, 0.000001));
+  const metersPerSvgUnit = (metersPerSvgX + metersPerSvgY) / 2;
+
+  if (!Number.isFinite(metersPerSvgUnit) || metersPerSvgUnit <= 0) {
+    return null;
+  }
+
+  return metersPerSvgUnit;
+};
+
+const formatMapScaleLabel = (meters) => {
+  if (!Number.isFinite(meters) || meters <= 0) {
+    return '';
+  }
+
+  if (meters >= 1000) {
+    const kilometers = meters / 1000;
+    return `${Number.isInteger(kilometers) ? kilometers : kilometers.toFixed(1)} km`;
+  }
+
+  return `${Math.round(meters)} m`;
+};
+
+const pickMapScaleStep = (metersPerSvgUnit, renderedMapSizePx, zoom) => {
+  if (!Number.isFinite(metersPerSvgUnit) || metersPerSvgUnit <= 0 || !Number.isFinite(renderedMapSizePx) || renderedMapSizePx <= 0) {
+    return { stepMeters: 100, stepSvgUnits: 80, stepPixels: 80 };
+  }
+
+  const pxPerSvgUnit = (renderedMapSizePx / 1000) * zoom;
+  if (!Number.isFinite(pxPerSvgUnit) || pxPerSvgUnit <= 0) {
+    return { stepMeters: 100, stepSvgUnits: 80, stepPixels: 80 };
+  }
+
+  const targetPixels = 88;
+  const minPixels = 52;
+  const maxPixels = 144;
+  const targetMeters = (targetPixels / pxPerSvgUnit) * metersPerSvgUnit;
+  const baseExponent = Math.floor(Math.log10(Math.max(targetMeters, 1)));
+  const candidates = [];
+
+  for (let exponent = baseExponent - 2; exponent <= baseExponent + 3; exponent += 1) {
+    const unit = 10 ** exponent;
+    [1, 2, 5].forEach((multiplier) => {
+      const stepMeters = multiplier * unit;
+      const stepSvgUnits = stepMeters / metersPerSvgUnit;
+      const stepPixels = stepSvgUnits * pxPerSvgUnit;
+
+      if (!Number.isFinite(stepPixels) || stepPixels <= 0) {
+        return;
+      }
+
+      const outsidePenalty = stepPixels < minPixels
+        ? (minPixels - stepPixels) * 4
+        : stepPixels > maxPixels
+          ? (stepPixels - maxPixels) * 4
+          : 0;
+
+      candidates.push({
+        stepMeters,
+        stepSvgUnits,
+        stepPixels,
+        score: Math.abs(stepPixels - targetPixels) + outsidePenalty
+      });
+    });
+  }
+
+  return candidates.sort((left, right) => left.score - right.score)[0] || { stepMeters: 100, stepSvgUnits: 80, stepPixels: 80 };
+};
 
 const getMarkerPopoverScale = (zoom) => clampValue(1 / zoom, 0.7, 1.35);
 const getMarkerPopoverDimensions = (scale = 1, sizeMultiplier = 1) => ({
@@ -958,11 +1060,28 @@ export function MapWeatherBadges({ placemark, className = '' }) {
   );
 }
 
+export function MapGridScaleBadge({ label = '', className = '' }) {
+  if (!label) {
+    return null;
+  }
+
+  return (
+    <div className={`flex items-center rounded bg-black/75 gap-1 px-3 py-2 text-sm font-bold text-white ${className}`.trim()}>
+      <div className="grid h-4 w-4">
+        <span className="bg-white/95" />
+      </div>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 const WeatherReadingRow = ({
   label,
   reading,
   className = '',
-  compact = false
+  compact = false,
+  labelWidth = '3.2rem',
+  gapClassName = 'gap-x-2'
 }) => {
   if (!reading) {
     return null;
@@ -971,7 +1090,10 @@ const WeatherReadingRow = ({
   const WeatherIcon = getWeatherIconComponent(reading.weatherCode);
 
   return (
-    <div className={`grid grid-cols-[3.2rem_minmax(0,1fr)] items-center gap-x-2 ${className}`.trim()}>
+    <div
+      className={`grid items-center ${gapClassName} ${className}`.trim()}
+      style={{ gridTemplateColumns: `${labelWidth} minmax(0,1fr)` }}
+    >
       <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
         {label}
       </span>
@@ -998,10 +1120,14 @@ export function PlacemarkWeatherNowNext({
   nowLabel = 'Now',
   nextHourLabel = 'In 1h',
   title = 'Weather',
+  showTitle = true,
   className = '',
   layout = 'stacked',
   compact = false,
-  frame = 'card'
+  frame = 'card',
+  rowsClassName = 'space-y-2',
+  rowLabelWidth = '3.2rem',
+  rowGapClassName = 'gap-x-2'
 }) {
   const weather = usePlacemarkWeather(placemark);
   const WeatherIcon = getWeatherIconComponent(weather?.weatherCode);
@@ -1016,12 +1142,16 @@ export function PlacemarkWeatherNowNext({
         label={nowLabel}
         reading={weather}
         compact={compact}
+        labelWidth={rowLabelWidth}
+        gapClassName={rowGapClassName}
       />
       {weather.nextHour && (
         <WeatherReadingRow
           label={nextHourLabel}
           reading={weather.nextHour}
           compact={compact}
+          labelWidth={rowLabelWidth}
+          gapClassName={rowGapClassName}
         />
       )}
     </>
@@ -1031,13 +1161,15 @@ export function PlacemarkWeatherNowNext({
     if (frame === 'bare') {
       return (
         <div className={`flex items-start gap-3 ${className}`.trim()}>
-          <div className="flex flex-none items-center gap-2 text-zinc-300">
-            <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-              {title}
-            </span>
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
+          {showTitle ? (
+            <div className="flex flex-none items-center gap-2 text-zinc-300">
+              <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+                {title}
+              </span>
+            </div>
+          ) : null}
+          <div className={`min-w-0 flex-1 ${rowsClassName}`.trim()}>
             {sharedRows}
           </div>
         </div>
@@ -1046,13 +1178,15 @@ export function PlacemarkWeatherNowNext({
 
     return (
       <div className={`flex items-start gap-3 rounded border border-white/10 bg-black/35 px-2.5 py-2 ${className}`.trim()}>
-        <div className="flex flex-none items-center gap-2 text-zinc-300">
-          <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-            {title}
-          </span>
-        </div>
-        <div className="min-w-0 flex-1 space-y-2">
+        {showTitle ? (
+          <div className="flex flex-none items-center gap-2 text-zinc-300">
+            <WeatherIcon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-[#FACC15]`} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+              {title}
+            </span>
+          </div>
+        ) : null}
+        <div className={`min-w-0 flex-1 ${rowsClassName}`.trim()}>
           {sharedRows}
         </div>
       </div>
@@ -1092,11 +1226,14 @@ export function PlacemarkWeatherNowNext({
   );
 }
 
-export function PlacemarkMapFeed({ placemark, pilotMarkers = [], cameraMarkers = [], className = '' }) {
+export function PlacemarkMapFeed({ placemark, pilotMarkers = [], cameraMarkers = [], className = '', onScaleChange = null }) {
   const getPopoverKey = (type, id) => `${type}:${String(id || '').trim()}`;
+  const containerRef = useRef(null);
   const svgRef = useRef(null);
+  const gridPatternId = useId().replace(/:/g, '');
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [markerNow, setMarkerNow] = useState(() => Date.now());
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
   const [hoveredCameraMarkerId, setHoveredCameraMarkerId] = useState(null);
@@ -1153,6 +1290,57 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], cameraMarkers =
     () => projectedCameraMarkers.filter((marker) => selectedCameraMarkerIds.includes(marker.id)),
     [projectedCameraMarkers, selectedCameraMarkerIds]
   );
+  const renderedMapSize = useMemo(
+    () => Math.min(containerSize.width || 0, containerSize.height || 0),
+    [containerSize.height, containerSize.width]
+  );
+  const metersPerSvgUnit = useMemo(
+    () => getMetersPerSvgUnit(normalized.bounds),
+    [normalized.bounds]
+  );
+  const mapScale = useMemo(
+    () => pickMapScaleStep(metersPerSvgUnit, renderedMapSize, zoom),
+    [metersPerSvgUnit, renderedMapSize, zoom]
+  );
+  const mapScaleLabel = useMemo(
+    () => formatMapScaleLabel(mapScale.stepMeters),
+    [mapScale.stepMeters]
+  );
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) {
+      return undefined;
+    }
+
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      setContainerSize({
+        width: rect.width,
+        height: rect.height
+      });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateSize);
+      return () => window.removeEventListener('resize', updateSize);
+    }
+
+    const observer = new ResizeObserver(() => updateSize());
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    onScaleChange?.({
+      meters: mapScale.stepMeters,
+      label: mapScaleLabel
+    });
+  }, [mapScale.stepMeters, mapScaleLabel, onScaleChange]);
+
   const handlePopoverDragStart = (event, marker, type) => {
     if (!marker) {
       return;
@@ -1424,6 +1612,7 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], cameraMarkers =
 
   return (
     <div
+      ref={containerRef}
       className={`relative overflow-hidden bg-[#05070B] ${className}`}
       onWheel={(event) => {
         event.preventDefault();
@@ -1503,11 +1692,21 @@ export function PlacemarkMapFeed({ placemark, pilotMarkers = [], cameraMarkers =
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '50% 50%' }}
       >
         <defs>
-          <pattern id="map-grid" width="80" height="80" patternUnits="userSpaceOnUse">
-            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />
+          <pattern
+            id={gridPatternId}
+            width={mapScale.stepSvgUnits}
+            height={mapScale.stepSvgUnits}
+            patternUnits="userSpaceOnUse"
+          >
+            <path
+              d={`M ${mapScale.stepSvgUnits} 0 L 0 0 0 ${mapScale.stepSvgUnits}`}
+              fill="none"
+              stroke="rgba(255,255,255,0.06)"
+              strokeWidth="2"
+            />
           </pattern>
         </defs>
-        <rect width="1000" height="1000" fill="url(#map-grid)" />
+        <rect width="1000" height="1000" fill={`url(#${gridPatternId})`} />
         {normalized.groups.map((group, index) => {
           const points = group.map((point) => `${point.x},${point.y}`).join(' ');
 
